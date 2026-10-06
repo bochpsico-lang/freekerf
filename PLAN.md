@@ -49,7 +49,7 @@ freekerf/
 │   │   └── freekerf-session     app state as data: document + view state (mode, panels, selection, viewport, dialogs),
 │   │                            action registry and dispatcher, undo/redo, state snapshots and change events
 │   ├── config/                ── CONFIG: persistent data and schemas
-│   │   ├── freekerf-settings    app and machine settings (serde, versioned schema, migrations)
+│   │   ├── freekerf-settings    app and machine settings in TOML (serde, versioned schema, migrations)
 │   │   ├── freekerf-materials   material library access (wraps `library`'s `freekerf-library`)
 │   │   └── freekerf-migrate     LaserGRBL import: Settings.bin, .zbn buttons, materials, usage counters
 │   ├── native/                ── NATIVE: everything that depends on the OS or hardware
@@ -392,9 +392,13 @@ Updated by every PR that delivers a milestone item (empty until M0).
 | --- | --- | --- | --- |
 | — | — | — | — |
 
-## 14. Open questions
+## 14. Decisions already taken
 
-- Settings format: TOML (readable, consistent with `library`) or JSON (simpler for the web UI)?
+- **Settings format: TOML** (readable in diffs, consistent with `library`). The schema is generated from the Rust model and checked in CI; the web UI reads and writes settings only through actions, never the file.
+- **`conformance` is public**, so CI in this repository checks it out without a token.
+
+## 15. Open questions
+
 - Auto-update: own channel or package managers only?
 - MCP: expose MCP *prompts* (e.g. "prepare a cut job from this SVG") or a library of example scripts as resources?
 - MCP: should `allow_laser` exist at all, or should agents be limited to `machine` forever? (current plan: exists, off by default, and always needs a human confirmation on screen)
