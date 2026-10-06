@@ -228,7 +228,7 @@ Agents do not get one MCP tool per action. They get a **small fixed set of tools
 | `search_api(query)` | `read` | Find actions and their signatures without loading the whole `api.d.ts` |
 | `stop()` | always allowed | **STOP never depends on a script**: it must work even while a script is stuck |
 
-New actions never add MCP tools: they appear in the script API, in `search_api` and in `api.d.ts` automatically. The server exposes **no MCP prompts and no library of example scripts** (§14): agents work from the tools, the state resources and `api.d.ts`.
+New actions never add MCP tools: they appear in the script API, in `search_api` and in `api.d.ts` automatically. MCP *prompts* are not needed for now (§14).
 
 ### 9.4 Attach or launch
 
@@ -397,7 +397,7 @@ Updated by every PR that delivers a milestone item (empty until M0).
 - **Settings format: TOML** (readable in diffs, consistent with `library`). The schema is generated from the Rust model and checked in CI; the web UI reads and writes settings only through actions, never the file.
 - **`conformance` is public**, so CI in this repository checks it out without a token.
 - **No auto-update for now.** Releases ship as installers and through package managers (M5); the app does not check for or download updates. Revisit later through `doc/roadmap.md`.
-- **MCP surface is tools only.** No MCP *prompts* (e.g. "prepare a cut job from this SVG") and no library of example scripts published as resources; the fixed tool set of §9.3 is the agent's interface.
+- **No MCP prompts for now.** The MCP server exposes the tools of §9.3 and the state resources; MCP *prompts* (e.g. "prepare a cut job from this SVG") and example scripts as resources are not needed now. Listed in `doc/roadmap.md` to revisit later.
 
 ## 15. Open questions
 
