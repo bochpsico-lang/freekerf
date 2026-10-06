@@ -1,0 +1,7 @@
+/target/
+**/node_modules/
+/ui/web/dist/
+*.swp
+.DS_Store
+.idea/
+.vscode/

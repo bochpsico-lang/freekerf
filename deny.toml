@@ -1,0 +1,68 @@
+# cargo-deny: https://embarkstudios.github.io/cargo-deny/
+# Run with `cargo deny check`. CI fails on any violation.
+#
+# FreeKerf is GPL-3.0-or-later. Every dependency must be compatible with
+# distributing the combined work under GPL-3.0. The list below is an ALLOW-list:
+# any license not listed is rejected, including (non-exhaustive):
+#   GPL-2.0-only, LGPL-2.0-only*, AGPL-*, SSPL-1.0, BUSL-1.1, EPL-*, CDDL-*,
+#   CC-BY-NC-*, Commons Clause, proprietary / no license.
+# (*) LGPL-2.0/2.1-only are technically GPLv3-compatible but are kept out on
+#     purpose: add them here only after a review, with a comment.
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = []
+
+[licenses]
+version = 2
+confidence-threshold = 0.93
+# the list is a policy, not an inventory: allowed-but-unused is fine
+unused-allowed-license = "allow"
+allow = [
+    # permissive
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "0BSD",
+    "BSL-1.0",
+    "CC0-1.0",
+    "Unlicense",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "OFL-1.1",          # fonts bundled by crates
+    # weak copyleft, GPLv3-compatible
+    "MPL-2.0",
+    "LGPL-2.1-or-later",
+    "LGPL-3.0-only",
+    "LGPL-3.0-or-later",
+    # strong copyleft, GPLv3-compatible
+    "GPL-2.0-or-later",  # e.g. Potrace: combined work becomes GPL-3.0
+    "GPL-3.0-only",      # compatible, but the combined work is then GPL-3.0-only: avoid if possible
+    "GPL-3.0-or-later",
+]
+exceptions = []
+
+[licenses.private]
+# workspace crates are checked too (they must declare GPL-3.0-or-later)
+ignore = false
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
