@@ -2,7 +2,7 @@
 
 FreeKerf is free software (**GPL-3.0-or-later**) for designing jobs and driving laser machines (Grbl, grblHAL, Smoothie, Marlin…). It is the successor of LaserGRBL (© 2016 Diego Settimi), rewritten in Rust, cross-platform (Linux, Windows, macOS; tablets later), and designed for mouse, keyboard **and** touch.
 
-> **Status: planning.** There is no code yet. This document defines **what to build, in which order, and under which rules** (architecture, tests, documentation). Once code lands, the maintenance guide is [`AGENTS.md`](AGENTS.md) (created in M0) and this file tracks progress in §12 *Where each item lives*.
+> **Status: planning.** There is no code yet. This document defines **what to build, in which order, and under which rules** (architecture, tests, documentation). Once code lands, the maintenance guide is [`AGENTS.md`](AGENTS.md) (created in M0) and this file tracks progress in §13 *Where each item lives*.
 
 Related repositories in the [`freekerf`](https://github.com/freekerf) organization:
 
@@ -21,8 +21,9 @@ Related repositories in the [`freekerf`](https://github.com/freekerf) organizati
 2. **Sans-IO protocol.** The Grbl state machine takes bytes, lines and time, and returns bytes to send and events. It is tested without threads, real clocks or serial ports.
 3. **One service API for every front end.** The CLI, the desktop app and the remote (tablet) client all use the same command/event API (`freekerf-service`).
 4. **Observable behaviour is checked by the `conformance` suite.** LaserGRBL bugs do not have to be reproduced (§8), but every difference is documented.
-5. **Operator safety over convenience.** STOP is always available, nothing fires the laser without confirmation, and machine states are explicit (§10).
+5. **Operator safety over convenience.** STOP is always available, nothing fires the laser without confirmation, and machine states are explicit (§11).
 6. **Code, tests and documentation ship together.** A change is not done until its tests and docs are updated in the same PR (§6, §7).
+7. **Every action is a registered command.** Anything a user can do (edit the document, select, open a panel, jog, run a job) is an *action* in one registry, with a generated JSON schema. The web UI, the CLI and AI agents through MCP all go through the same `dispatch(action)`; the UI has no private shortcuts (§9).
 
 ## 2. Repository layout
 
@@ -44,7 +45,9 @@ freekerf/
 │   │   ├── freekerf-import      SVG / DXF / image / G-code → document (reads bytes, not files)
 │   │   ├── freekerf-planner     document → job: ordering, path optimization, generators (material test, Hershey), G-code
 │   │   ├── freekerf-protocol    sans-IO state machine: Grbl/grblHAL, Smoothie, Marlin, VigoWork
-│   │   └── freekerf-emulator    model of a Grbl 1.1 device (tests and simulator mode)
+│   │   ├── freekerf-emulator    model of a Grbl 1.1 device (tests and simulator mode)
+│   │   └── freekerf-session     app state as data: document + view state (mode, panels, selection, viewport, dialogs),
+│   │                            action registry and dispatcher, undo/redo, state snapshots and change events
 │   ├── config/                ── CONFIG: persistent data and schemas
 │   │   ├── freekerf-settings    app and machine settings (serde, versioned schema, migrations)
 │   │   ├── freekerf-materials   material library access (wraps `library`'s `freekerf-library`)
@@ -52,10 +55,13 @@ freekerf/
 │   ├── native/                ── NATIVE: everything that depends on the OS or hardware
 │   │   ├── freekerf-transport   Transport trait + serial, Telnet, WebSocket (ESP8266), emulator; Android USB later
 │   │   ├── freekerf-discovery   machine discovery on the network (mDNS/scan)
+│   │   ├── freekerf-ipc         local single-instance endpoint (Unix socket / Windows named pipe) + auth token
 │   │   └── freekerf-platform    directories, atomic writes, sounds, notifications, OS info
 │   ├── runtime/               ── RUNTIME: orchestration
 │   │   ├── freekerf-machine     driver: protocol + transport + clock on an I/O thread; job lifecycle
-│   │   ├── freekerf-service     application facade: commands → events/snapshots; sessions; API used by every UI
+│   │   ├── freekerf-service     application facade: session + machine behind one action registry; events/snapshots;
+│   │   │                        the API used by every front end
+│   │   ├── freekerf-mcp         MCP server (official `rmcp` SDK) over the service: actions → tools, state → resources
 │   │   └── freekerf-remote      WebSocket server for the remote (tablet) client — M6
 │   └── testing/               ── TEST SUPPORT (dev-dependencies only, never shipped)
 │       └── freekerf-testkit     fixtures, fake devices, simulated Clock, PTY helpers, golden/snapshot helpers
@@ -64,7 +70,7 @@ freekerf/
 │   ├── tokens/                  `fk-` tokens generated from `design/tokens.json`
 │   └── i18n/                    Fluent (.ftl) translations shared by Rust and web
 ├── apps/                      ── APPS: final binaries (thin shells)
-│   ├── cli/                     `freekerf` binary (headless)
+│   ├── cli/                     `freekerf` binary (headless), including `freekerf mcp` (attach-or-launch, §9)
 │   └── desktop/                 Tauri 2 app (`src-tauri` = crate `freekerf-desktop`)
 ├── tests/                     cross-crate integration tests (workspace member `freekerf-it`)
 ├── tools/xtask/               automation: check-layers, resx2ftl, sync-tokens, release
@@ -83,7 +89,7 @@ Crate names are always `freekerf-<name>`; every crate inherits `license = "GPL-3
 | **runtime** | core, config, native | apps, UI |
 | **apps** | runtime (through `freekerf-service`), config, ui | `protocol`/`transport` directly |
 | **testing** | anything | being a normal (non-dev) dependency of any crate |
-| **ui/web** | only the API exposed by `freekerf-service` (Tauri IPC or remote WebSocket) | its own machine or G-code logic |
+| **ui/web** | only the API exposed by `freekerf-service` (Tauri IPC or remote WebSocket) | its own machine or G-code logic; changing app state other than through `dispatch(action)` (purely visual state such as hover or animation stays local) |
 
 Automatic checks:
 - `cargo xtask check-layers` reads `cargo metadata` and fails on any edge that breaks the table. It runs in CI.
@@ -128,13 +134,14 @@ New code comes with tests. CI fails when a gate below fails.
 | **Cross-crate integration** | `tests/` (`freekerf-it`) | real compositions: service + machine + transport + emulator; settings migration; import → plan → stream | `cargo test` |
 | **CLI end to end** | `apps/cli/tests/` | the `freekerf` binary: `analyze --json`, `send`, `host --stdio`, `emulate --pty`, exit codes and errors | `assert_cmd`, `predicates` |
 | **Conformance** | external repo `conformance` | observable behaviour vs. LaserGRBL (protocol + golden; importers from M2) with `LASERGRBL_HOST=rust` | `make test-rust` in CI (checkout of `conformance`) |
+| **MCP integration** | `crates/runtime/freekerf-mcp/tests/`, `tests/` | an MCP client (`rmcp` client) against a headless app + emulator: tool list == action registry, every tool runs, resources and change notifications, permission tiers, disabled-by-default, attach vs. launch (§9) | `cargo test`, `rmcp` client |
 | **Fuzzing** | `fuzz/` | G-code, SVG, DXF and host-protocol parsers (from M2; scheduled CI job) | `cargo-fuzz` |
 | **UI end to end** | `ui/web/tests/`, `apps/desktop/tests/` | the 8 flows of `design/ux.md` against the emulator (from M4) | Playwright + Tauri WebDriver |
 | **Benchmarks** | `benches/` | load/analyze/plan large files; results in `doc/benchmarks.md` | `criterion` |
 
 Rules:
 - **Coverage** with `cargo llvm-cov`: CI fails below **90 % lines for the workspace** (same bar as `library`), and below **95 %** for `freekerf-gcode` and `freekerf-protocol`. Excluded code is listed in `doc/coverage.md` with a reason.
-- **No real hardware** in automated tests (§10). Serial tests use PTYs, the emulator or the `conformance` fake Grbl.
+- **No real hardware** in automated tests (§11). Serial tests use PTYs, the emulator or the `conformance` fake Grbl.
 - **No sleeps** in tests: waits on conditions with timeouts, or the simulated `Clock`. A flaky test is a bug: fix it or quarantine it with an issue link, never retry blindly.
 - **Test data** lives in `crates/<crate>/tests/fixtures/` or in `freekerf-testkit`; large generated inputs are created at test time.
 
@@ -162,11 +169,12 @@ Structure (created in M0, maintained afterwards):
 | a public API (any crate) | rustdoc (`missing_docs` is on), the feature page |
 | protocol / streaming / firmware behaviour | `doc/features/<feature>.md`, `doc/divergences.md` if it differs from LaserGRBL |
 | the `host --stdio` protocol | `doc/features/host-protocol.md` and `conformance`'s `RustHost` |
+| an action (added, renamed, new parameter, new permission tier) | regenerate `doc/features/actions.md` (generated catalogue, checked in CI); `doc/features/mcp.md` if MCP behaviour changes |
 | settings format | `doc/features/settings.md`, a migration and its test |
 | crates, traits, data flow, layers | `doc/architecture.md`, `AGENTS.md`, `xtask check-layers` |
 | a decision | a new ADR |
 | something postponed | `doc/roadmap.md` |
-| a milestone item | §12 of this file |
+| a milestone item | §13 of this file |
 
 Generated documentation (JSON schemas of settings and the host protocol, CLI `--help` captured in docs) is checked in CI: committed == generated.
 
@@ -176,7 +184,76 @@ Generated documentation (JSON schemas of settings and the host protocol, CLI `--
 - Every relevant FINDINGS item gets an entry `DIV-NNN` in `doc/divergences.md`: *kept* / *fixed* / *not applicable*, with the reason and the affected test.
 - When a `conformance` test fails because of an intentional divergence, mark it **for the Rust host only** (`rust_divergence("DIV-NNN")` marker in `conformance`). Never delete the test or loosen the assertion for the C# host.
 
-## 9. Milestones
+## 9. Automation and AI agents (MCP)
+
+FreeKerf can be driven by an AI agent through the [Model Context Protocol](https://modelcontextprotocol.io). The agent can read everything the app knows (including what is on screen) and trigger **every action a user can trigger in the UI**: select objects, open or close panels, edit the document, import files, connect, jog, plan and run jobs. **MCP is disabled by default.**
+
+### 9.1 Where it lives
+
+| Piece | Crate / layer | Responsibility |
+| --- | --- | --- |
+| Action registry | `freekerf-session` (core) + `freekerf-service` (runtime) | Every action is a typed command with a name (`view.open_panel`, `document.select`, `machine.jog`…), a JSON schema (schemars), a description, a **permission tier** and undo support where it applies. The session registers document/view actions; the service registers machine actions into the same registry. |
+| App state as data | `freekerf-session` | Document, selection, mode (Design/Produce), open panels, viewport, dialogs, toasts and the machine snapshot are Rust state. The web UI renders it and only changes it through `dispatch(action)`. |
+| Single instance + local endpoint | `freekerf-ipc` (native) | One running instance per user. A Unix domain socket (`$XDG_RUNTIME_DIR/freekerf/ipc.sock`, mode `0600`) or a Windows named pipe restricted to the current user; a per-run token in a user-only file. Used by `freekerf mcp`, by "open file in the running app", and by tests. |
+| MCP server | `freekerf-mcp` (runtime) | Maps the registry to MCP **tools** (one tool per action, schema from the registry) and app state to MCP **resources** (`freekerf://state/view`, `…/document`, `…/machine`, `…/console`, `…/screenshot`), with change notifications through resource subscriptions. No logic of its own. |
+| Entry point | `apps/cli` (`freekerf mcp`) | stdio MCP server that an agent configures as a command. **Attach or launch**, see 9.2. |
+| Screen capture | `apps/desktop` (+ `freekerf-platform`) | A screenshot of the app window as an MCP image resource. The **semantic snapshot** (`freekerf://state/view`) is the primary way to "see the screen"; the screenshot is a complement. |
+
+`freekerf mcp` and the `host --stdio` test protocol are both thin adapters over `freekerf-service`; neither adds behaviour.
+
+### 9.2 Attach or launch
+
+```mermaid
+sequenceDiagram
+  participant A as AI agent (MCP client)
+  participant C as freekerf mcp (stdio)
+  participant I as freekerf-ipc endpoint
+  participant App as FreeKerf (desktop or headless)
+  A->>C: start process, MCP initialize
+  C->>I: connect to the running instance?
+  alt app already running
+    I-->>C: connected (token OK, MCP enabled)
+  else not running
+    C->>App: launch (desktop; --headless when no display or when requested)
+    App->>I: listen
+    C->>I: connect (bounded retry)
+  end
+  C-->>A: tools + resources (proxied to the app)
+  A->>C: tools/call view.open_panel {panel: "layers"}
+  C->>App: dispatch(action)
+  App-->>A: result + resource change notification
+```
+
+- **Disabled by default.** Setting `automation.mcp.enabled = false`. When it is off, `freekerf mcp` exits with a clear error telling the user where to enable it; a running app refuses MCP connections on the IPC endpoint. The setting is changed **by the user** in the app settings or with `freekerf config set`; it is **not** an action exposed to MCP and is not overridable by a launch flag.
+- If the app is running, the agent attaches to it and sees the same session the user sees. If not, `freekerf mcp` starts it (desktop when a display is available, otherwise headless) and attaches.
+- Optional second transport (off by default): MCP Streamable HTTP on `127.0.0.1` only, with the token and an `Origin` check (DNS-rebinding protection, as the MCP spec requires). Never bound to other interfaces.
+
+### 9.3 Permission tiers and laser safety
+
+Each action declares one tier. Settings choose the highest tier an agent may use:
+
+| Tier | Examples | Default when MCP is enabled |
+| --- | --- | --- |
+| `read` | read state, document, console, screenshot | allowed |
+| `ui` | select, open/close panels, change mode, zoom/pan, open dialogs | allowed |
+| `edit` | change the document, import files, change layer settings, save | allowed |
+| `machine` | connect, home, jog, unlock, `$$` changes, overrides | **off** (`automation.mcp.allow_machine`) |
+| `laser` | frame with laser on, test fire, run/resume a job | **off** (`automation.mcp.allow_laser`) |
+
+- **STOP / feed hold are always allowed** to agents (they only make things safer).
+- A `laser` action from an agent never skips the fire confirmation of the UI: the job goes to *awaiting confirmation* and a **human confirms on the machine's screen**. In headless mode with no human present, `laser` actions are refused. Dropping the human confirmation is out of scope.
+- The app shows a persistent **"Agent connected"** indicator with the client name, a one-click disconnect, and an **action log** (who did what, when) in the console. Every agent action is logged and undoable when the action supports undo.
+- Materials flagged `block` by `library` stay blocked for agents too.
+
+### 9.4 Tests and docs
+
+- Unit: registry invariants (unique names, every action has a schema, a description and a tier).
+- MCP integration (§6): tool list == registry; each tool callable against a headless app + emulator; resources and notifications; tiers enforced; disabled-by-default; attach to a running instance vs. launch; stale socket and wrong-token cases.
+- UI end to end (from M4): a test agent opens a panel, selects an object and changes a layer through MCP, and Playwright checks the UI reflects it; and the opposite (a UI click shows up in the MCP state resource).
+- **No UI-only actions:** a lint test fails if the web UI mutates app state outside `dispatch`, and the generated `doc/features/actions.md` must match the registry.
+- Docs: `doc/features/mcp.md` (setup for common agents, tiers, safety, attach/launch), `doc/features/actions.md` (generated catalogue), ADR for the action registry and ADR for the MCP transport/security model.
+
+## 10. Milestones
 
 Each milestone has objective acceptance criteria, **including tests and docs**. Do not start a milestone until the previous one is green in CI.
 
@@ -184,7 +261,7 @@ Each milestone has objective acceptance criteria, **including tests and docs**. 
 - Virtual workspace, `rust-toolchain.toml` (current stable + pinned MSRV), `rustfmt.toml`, workspace lints (`missing_docs`, `unsafe_code = "forbid"`, selected `clippy::pedantic`).
 - `freekerf-testkit` skeleton; `tools/xtask` with `check-layers`.
 - CI (skeleton in `.github/workflows/ci.yml`): fmt, clippy `-D warnings`, tests with `cargo llvm-cov` and the thresholds of §6, `cargo deny check`, `check-layers`, wasm build of the core, `cargo check` for Windows (`x86_64-pc-windows-gnu`) and macOS (`aarch64-apple-darwin`). Tests run on Linux.
-- Docs: `AGENTS.md`, `CLAUDE.md`, `doc/architecture.md`, `doc/features/README.md`, `doc/roadmap.md`, ADRs 0001–0003 (threads + `crossbeam-channel` vs. `tokio`; numeric representation — LaserGRBL uses `decimal`, so `rust_decimal` where wire formatting requires it; injectable `Clock`).
+- Docs: `AGENTS.md`, `CLAUDE.md`, `doc/architecture.md`, `doc/features/README.md`, `doc/roadmap.md`, ADRs 0001–0004 (threads + `crossbeam-channel` vs. `tokio`; numeric representation — LaserGRBL uses `decimal`, so `rust_decimal` where wire formatting requires it; injectable `Clock`; the action registry of §9).
 
 **Acceptance:** CI green with one minimal crate per layer; a test PR that breaks a layer rule fails `check-layers`; docs skeleton in place.
 
@@ -199,6 +276,7 @@ Crates: `gcode`, `protocol`, `emulator`, `transport` (serial + emulator), `machi
   - `host --stdio`: JSON Lines protocol (`doc/features/host-protocol.md`) implementing `conformance`'s `HostAdapter`.
 - In `conformance`: a PR adding `RustHost`, the Rust analyzer, the `rust_divergence` marker and a `make test-rust` target that needs neither Mono nor `LASERGRBL_REPO`.
 - Large files: streaming load and parallel analysis (`rayon`); benchmark with a synthetic ~1M-line raster.
+- `freekerf-service` is built on the action registry from day one: every machine operation is a registered action with a schema and a permission tier (§9.1), even before MCP exists.
 
 **Acceptance:**
 - `conformance` *protocol* and *golden (G-code)* layers green with `LASERGRBL_HOST=rust`, 3 consecutive runs without flakiness (or the divergence recorded, §8);
@@ -212,8 +290,9 @@ Crates: `geometry`, `raster`, `document`, `import`, `planner`, `materials`, `mig
 - `freekerf-materials` on top of `library`'s `freekerf-library` (`read_archive` of a release package).
 - `freekerf-migrate`: LaserGRBL Settings.bin (BinaryFormatter, read-only), `.zbn` buttons, materials and counters.
 - Versioned `.fkproj` project format with a JSON schema generated from the model (same approach as `library`).
+- **MCP, headless (§9):** `freekerf-session` (document actions), `freekerf-ipc`, `freekerf-mcp` and `freekerf mcp` with attach-or-launch of a **headless** instance; tiers `read`, `edit`, `machine`; `laser` refused headless; disabled by default.
 
-**Acceptance:** `conformance` *golden (importers)* green with `LASERGRBL_HOST=rust`; `platform_dependent` (GDI+) cases compared with a documented tolerance. Fuzz targets for SVG/DXF/G-code running in a scheduled CI job. Integration test import → plan → stream to the emulator. Feature pages for every importer and generator.
+**Acceptance:** `conformance` *golden (importers)* green with `LASERGRBL_HOST=rust`; `platform_dependent` (GDI+) cases compared with a documented tolerance. MCP integration tests of §9.4 green for the headless scope; `doc/features/mcp.md` and the generated `doc/features/actions.md`. Fuzz targets for SVG/DXF/G-code running in a scheduled CI job. Integration test import → plan → stream to the emulator. Feature pages for every importer and generator.
 
 ### M3 — UI spike (2–3 weeks)
 Run the "What the spike must validate" table of `design/tech-notes.md` (canvas with 20,000 paths + an 8000×6000 image, gestures, 60 Hz geometry IPC, serial, remote client, accessibility, packaging) for **Tauri 2** and, for tests 1, 2 and 5, for **Flutter + flutter_rust_bridge**.
@@ -225,8 +304,9 @@ Run the "What the spike must validate" table of `design/tech-notes.md` (canvas w
 - All **MVP** items of the matrix in `design/research.md` §6.
 - i18n: `cargo xtask resx2ftl` converts the LaserGRBL `.resx` translations that still apply.
 - Automatic density by input type; light, dark and high-contrast themes from the `fk-` tokens.
+- **MCP in the desktop app (§9):** all view actions (mode, panels, selection, viewport, dialogs) in the registry; the UI dispatches only through it; attach-or-launch of the desktop app; semantic view snapshot + window screenshot resources; "Agent connected" indicator, action log and disconnect; `laser` tier with human confirmation on screen; MCP settings page (off by default).
 
-**Acceptance:** the 8 flows of `design/ux.md` pass as UI end-to-end tests against the emulator in CI on Linux; front-end unit tests (component logic) with coverage reported; user-facing docs drafted for `website`.
+**Acceptance:** the 8 flows of `design/ux.md` pass as UI end-to-end tests against the emulator in CI on Linux, and the same flows can be driven end to end by a test MCP client; the no-UI-only-actions lint passes; front-end unit tests (component logic) with coverage reported; user-facing docs drafted for `website`.
 
 ### M5 — v1 and distribution (8–12 weeks)
 - **v1** items of the matrix: node editing, booleans, offset, array, trace, material library UI, material test, `$$` editor, Smoothie/Marlin in the UI, Telnet/WebSocket + discovery, notifications.
@@ -244,20 +324,21 @@ Run the "What the spike must validate" table of `design/tech-notes.md` (canvas w
 
 **Acceptance:** latency tests (jog step < 100 ms, STOP < 50 ms) in an integration test over loopback and on a real LAN (manual, documented); the heartbeat stops continuous jog when the client disappears (integration test).
 
-## 10. Safety
+## 11. Safety
 
 - No automated test opens real serial devices (`/dev/ttyUSB*`, `/dev/ttyACM*`, `/dev/ttyS*`, `COMx`). Use PTYs, the emulator or `conformance`'s fake Grbl. Real-machine tests are manual and documented in the PR.
 - STOP (soft reset + laser off) bypasses every queue and works in every state; covered by unit and integration tests.
 - No command that turns the laser on is sent without an explicit user action. Continuous jog by touch requires a heartbeat (dead-man switch).
 - Materials flagged `block` by `library`'s hazard list cannot be used in a job; `warn` shows an alert.
+- AI agents (MCP) are off by default, limited by permission tiers, and can never fire the laser without a human confirming on screen (§9.3).
 
-## 11. How to start
+## 12. How to start
 
 1. Read `conformance/README.md`, `SCOPE.md` and `FINDINGS.md`; `design/README.md`, `ux.md` and `tech-notes.md`; and `library/AGENTS.md` as the reference for documentation and testing style.
 2. Do M0 and open a PR with the skeleton.
 3. M1 in small PRs, one crate at a time: `gcode` → `analyze --json` + golden → `protocol` → `transport`/`machine` → `host --stdio` + `RustHost` → variants, emulator, settings. Each PR brings its tests and its feature page.
 
-## 12. Where each item lives
+## 13. Where each item lives
 
 Updated by every PR that delivers a milestone item (empty until M0).
 
@@ -265,7 +346,9 @@ Updated by every PR that delivers a milestone item (empty until M0).
 | --- | --- | --- | --- |
 | — | — | — | — |
 
-## 13. Open questions
+## 14. Open questions
 
 - Settings format: TOML (readable, consistent with `library`) or JSON (simpler for the web UI)?
 - Auto-update: own channel or package managers only?
+- MCP: expose MCP *prompts* (e.g. "prepare a cut job from this SVG") in addition to tools and resources?
+- MCP: should `allow_laser` exist at all, or should agents be limited to `machine` forever? (current plan: exists, off by default, and always needs a human confirmation on screen)
