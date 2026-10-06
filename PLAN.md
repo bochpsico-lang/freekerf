@@ -228,7 +228,7 @@ Agents do not get one MCP tool per action. They get a **small fixed set of tools
 | `search_api(query)` | `read` | Find actions and their signatures without loading the whole `api.d.ts` |
 | `stop()` | always allowed | **STOP never depends on a script**: it must work even while a script is stuck |
 
-New actions never add MCP tools: they appear in the script API, in `search_api` and in `api.d.ts` automatically.
+New actions never add MCP tools: they appear in the script API, in `search_api` and in `api.d.ts` automatically. MCP *prompts* are not needed for now (§14).
 
 ### 9.4 Attach or launch
 
@@ -360,7 +360,7 @@ Run the "What the spike must validate" table of `design/tech-notes.md` (canvas w
   - Linux: `.deb`, AppImage, Flatpak;
   - Windows: signed MSI;
   - macOS: signed and notarized DMG;
-  - optional, opt-out auto-update.
+  - no auto-update (§14): new versions reach users through the installers and package managers; listed in `doc/roadmap.md`.
 - CI matrix on real runners (Linux, Windows, macOS): unit + integration tests on all three; UI E2E on Linux and Windows.
 
 **Acceptance:** installers built by the release workflow; smoke test of each installer in CI; `CHANGELOG.md`; user docs published on `website`.
@@ -396,9 +396,9 @@ Updated by every PR that delivers a milestone item (empty until M0).
 
 - **Settings format: TOML** (readable in diffs, consistent with `library`). The schema is generated from the Rust model and checked in CI; the web UI reads and writes settings only through actions, never the file.
 - **`conformance` is public**, so CI in this repository checks it out without a token.
+- **No auto-update for now.** Releases ship as installers and through package managers (M5); the app does not check for or download updates. Revisit later through `doc/roadmap.md`.
+- **No MCP prompts for now.** The MCP server exposes the tools of §9.3 and the state resources; MCP *prompts* (e.g. "prepare a cut job from this SVG") and example scripts as resources are not needed now. Listed in `doc/roadmap.md` to revisit later.
 
 ## 15. Open questions
 
-- Auto-update: own channel or package managers only?
-- MCP: expose MCP *prompts* (e.g. "prepare a cut job from this SVG") or a library of example scripts as resources?
 - MCP: should `allow_laser` exist at all, or should agents be limited to `machine` forever? (current plan: exists, off by default, and always needs a human confirmation on screen)
