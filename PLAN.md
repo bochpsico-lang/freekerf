@@ -259,7 +259,7 @@ sequenceDiagram
 
 ### 9.5 Permission tiers and laser safety
 
-Each action declares one tier. **Tiers are checked on every `dispatch`, including each call made inside a script**, so a script cannot do more than its caller is allowed to. Settings choose the highest tier per caller (agent via MCP, user macro, Python client):
+Each action declares one tier. **Tiers are checked on every `dispatch`, including each call made inside a script**, so a script cannot do more than its caller is allowed to. Settings choose the baseline (highest tier allowed without asking) per caller kind (agent via MCP, user macro, Python client); above it, the human can grant more (see *Permission grants* below):
 
 | Tier | Examples | Default for agents when MCP is enabled |
 | --- | --- | --- |
@@ -274,11 +274,26 @@ Each action declares one tier. **Tiers are checked on every `dispatch`, includin
 - The app shows a persistent **"Agent connected"** indicator with the client name, a one-click disconnect, a **running-script indicator with a cancel button**, and an **action log** (who did what, when, from which script) in the console.
 - Materials flagged `block` by `library` stay blocked for scripts and agents too.
 
+**Permission grants.** The tiers above are the baseline from settings. When a caller (a user macro, an agent through MCP, the Python client) needs a tier above its baseline, the call pauses and the app asks the human, naming the caller, the tier and the action. The human chooses the **scope** of the grant:
+
+| Scope | Lasts | Stored |
+| --- | --- | --- |
+| **This run** | until the current script / MCP call finishes | nowhere |
+| **This session** | until the app is closed | in memory |
+| **Always** | until revoked in settings | in `freekerf-settings`, per caller |
+
+- Callers are identified by kind and name; a user macro also by a hash of its code, so **editing a macro invalidates its grants**. Agent names come from the MCP client and can be spoofed, so "always" grants to agents show that warning in the dialog.
+- Denying (or closing the dialog) fails the call with a permission error that the script or agent can read; nothing is retried automatically.
+- Grants are listed in the automation settings page and in the action log, with one-click revoke. Changing grants is a user-only setting, never an action available to scripts or MCP.
+- With no human present (headless), there is no dialog: only baseline tiers and **always** grants apply; anything else is refused.
+- A grant never removes the human fire confirmation of §9.5 for `laser` actions, whatever its scope.
+
 ### 9.6 Tests and docs
 
 - Unit: registry invariants (unique names, every action has a schema, a description and a tier); generated script API == registry; `api.d.ts` committed == generated.
 - Script engine: sandbox escape attempts (no `fs`, network, `eval` of host objects, prototype tampering), timeout, memory cap and instruction interrupt, STOP cancels a running script, one undo step per script, rollback on error, dry run applies nothing, tier denial inside a script.
 - MCP integration (§6): the fixed tool set; `run_script` reaching every registry namespace against a headless app + emulator; resources and notifications; tiers enforced per call; disabled-by-default; attach to a running instance vs. launch; stale socket and wrong-token cases.
+- Permission grants: each scope (this run / this session / always) expires when it should; editing a macro invalidates its grants; revoke works immediately; denial returns a readable error; headless refuses anything needing a prompt; no grant skips the laser fire confirmation.
 - Python client: integration tests against a headless app over `freekerf-ipc`.
 - UI end to end (from M4): a test agent runs a script that opens a panel, selects an object and changes a layer, and Playwright checks the UI reflects it; and the opposite (a UI click shows up in `get_state`).
 - **No UI-only actions:** a lint test fails if the web UI mutates app state outside `dispatch`, and the generated `doc/features/actions.md` must match the registry.
@@ -382,5 +397,4 @@ Updated by every PR that delivers a milestone item (empty until M0).
 - Settings format: TOML (readable, consistent with `library`) or JSON (simpler for the web UI)?
 - Auto-update: own channel or package managers only?
 - MCP: expose MCP *prompts* (e.g. "prepare a cut job from this SVG") or a library of example scripts as resources?
-- Scripting: allow user macros to declare and request higher tiers once (with a confirmation), or always run them with a fixed tier set in settings?
 - MCP: should `allow_laser` exist at all, or should agents be limited to `machine` forever? (current plan: exists, off by default, and always needs a human confirmation on screen)
