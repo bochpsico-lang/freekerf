@@ -1,189 +1,271 @@
-# FreeKerf: plano do monorepo Rust
+# FreeKerf: monorepo plan
 
-O FreeKerf é software livre (**GPL-3.0-or-later**) de design e controle para máquinas laser (Grbl, grblHAL, Smoothie, Marlin…). É a evolução do LaserGRBL (© 2016 Diego Settimi), reescrito em Rust, multiplataforma (Linux, Windows, macOS; tablets depois), com uso fluido por mouse/teclado **e** toque.
+FreeKerf is free software (**GPL-3.0-or-later**) for designing jobs and driving laser machines (Grbl, grblHAL, Smoothie, Marlin…). It is the successor of LaserGRBL (© 2016 Diego Settimi), rewritten in Rust, cross-platform (Linux, Windows, macOS; tablets later), and designed for mouse, keyboard **and** touch.
 
-Este repositório ainda não tem código. Este documento descreve **o que precisa ser construído, em que ordem e com quais regras**. Ele é a referência para quem (pessoa ou agente) for implementar.
+> **Status: planning.** There is no code yet. This document defines **what to build, in which order, and under which rules** (architecture, tests, documentation). Once code lands, the maintenance guide is [`AGENTS.md`](AGENTS.md) (created in M0) and this file tracks progress in §12 *Where each item lives*.
 
-Repositórios relacionados na organização [`freekerf`](https://github.com/freekerf):
+Related repositories in the [`freekerf`](https://github.com/freekerf) organization:
 
-| Repositório | Papel para este monorepo |
-|---|---|
-| [`conformance`](https://github.com/freekerf/conformance) | especificação executável do core atual do LaserGRBL (Python). As camadas *protocol* e *golden* rodam contra o build Rust com `LASERGRBL_HOST=rust` |
-| [`design`](https://github.com/freekerf/design) | UX, identidade, design system (tokens `fk-`), protótipo navegável e a análise de toolkit (`tech-notes.md`) |
-| [`library`](https://github.com/freekerf/library) | biblioteca de materiais e perfis de máquina consumida por `freekerf-materials` |
-| [`website`](https://github.com/freekerf/website) | site e documentação de usuário |
+| Repository | Role for this monorepo |
+| --- | --- |
+| [`conformance`](https://github.com/freekerf/conformance) | Executable specification of the current LaserGRBL core (Python). Its *protocol* and *golden* layers run against the Rust build with `LASERGRBL_HOST=rust`. |
+| [`library`](https://github.com/freekerf/library) | Materials and machine profiles. Consumed by `freekerf-materials` as a git dependency on the `freekerf-library` crate (model + `read_archive`). |
+| [`design`](https://github.com/freekerf/design) | UX research, brand, design system (`fk-` tokens), clickable prototype and the UI toolkit analysis (`tech-notes.md`). |
+| [`website`](https://github.com/freekerf/website) | Public site and user documentation. |
 
 ---
 
-## 1. Princípios
+## 1. Principles
 
-1. **Camadas separadas e verificadas por máquina.** A lógica de negócio não conhece I/O, sistema operacional nem UI (ver §3).
-2. **Protocolo "sans-IO".** A máquina de estados Grbl recebe bytes, linhas e tempo, e devolve bytes a enviar e eventos. Assim ela é testável sem threads, sem relógio real e sem serial.
-3. **Uma API de serviço para todas as interfaces.** CLI, app desktop e cliente remoto (tablet) usam a mesma API de comandos e eventos (`freekerf-service`).
-4. **Comportamento observável validado pela suíte `conformance`.** Não é obrigatório reproduzir os bugs do LaserGRBL (ver §6).
-5. **Segurança do operador acima de conveniência.** PARAR sempre disponível, nada dispara o laser sem confirmação, e os estados da máquina são explícitos.
+1. **Layers are separate and machine-checked.** Business logic knows nothing about I/O, the operating system or the UI (§3).
+2. **Sans-IO protocol.** The Grbl state machine takes bytes, lines and time, and returns bytes to send and events. It is tested without threads, real clocks or serial ports.
+3. **One service API for every front end.** The CLI, the desktop app and the remote (tablet) client all use the same command/event API (`freekerf-service`).
+4. **Observable behaviour is checked by the `conformance` suite.** LaserGRBL bugs do not have to be reproduced (§8), but every difference is documented.
+5. **Operator safety over convenience.** STOP is always available, nothing fires the laser without confirmation, and machine states are explicit (§10).
+6. **Code, tests and documentation ship together.** A change is not done until its tests and docs are updated in the same PR (§6, §7).
 
-## 2. Estrutura do repositório
+## 2. Repository layout
 
 ```
 freekerf/
-├── Cargo.toml                 workspace virtual (members por camada)
-├── deny.toml                  política de licenças e fontes (já configurado)
-├── rust-toolchain.toml        toolchain fixa + MSRV
+├── AGENTS.md                  maintenance guide for people and agents (M0)
+├── CLAUDE.md                  contains only "@AGENTS.md"
+├── PLAN.md                    this file
+├── Cargo.toml                 virtual workspace (members per layer)
+├── deny.toml                  license and source policy (already configured)
+├── rust-toolchain.toml        pinned toolchain + MSRV
+├── rustfmt.toml               max_width = 110 (same as `library`)
 ├── crates/
-│   ├── core/                  ── CAMADA CORE: lógica pura, sem I/O
-│   │   ├── freekerf-gcode       parser/modelo G-code, estado modal, arcos, análise (ranges, quadrante), estimativa de tempo
-│   │   ├── freekerf-geometry    caminhos, curvas, flatten, booleanas, offset, transformações
-│   │   ├── freekerf-raster      operações de imagem, 12+ dithers, line-to-line, preparação para vetorização
-│   │   ├── freekerf-document    modelo do projeto: objetos, camadas por cor, parâmetros de corte, formato .fkproj
-│   │   ├── freekerf-import      SVG / DXF / imagem / G-code → documento (lê bytes, não arquivos)
-│   │   ├── freekerf-planner     documento → trabalho: ordem, otimização de percurso, geradores (teste de material, Hershey), G-code
-│   │   ├── freekerf-protocol    máquina de estados sans-IO: Grbl/grblHAL, Smoothie, Marlin, VigoWork
-│   │   └── freekerf-emulator    modelo de um dispositivo Grbl 1.1 (para testes e modo simulador)
-│   ├── config/                ── CAMADA CONFIG: dados persistentes e esquemas
-│   │   ├── freekerf-settings    configurações do app e das máquinas (serde, schema versionado, migrações)
-│   │   ├── freekerf-materials   formato e consulta da biblioteca de materiais (repo `library`)
-│   │   └── freekerf-migrate     importação do LaserGRBL: Settings.bin, botões .zbn, materiais, contadores de uso
-│   ├── native/                ── CAMADA NATIVA: tudo que depende do SO ou de hardware
-│   │   ├── freekerf-transport   trait Transport + serial, Telnet, WebSocket (ESP8266), emulador; Android USB depois
-│   │   ├── freekerf-discovery   descoberta de máquinas na rede (mDNS/varredura)
-│   │   └── freekerf-platform    diretórios, gravação atômica, sons, notificações, info do SO
-│   └── runtime/               ── CAMADA RUNTIME: orquestração
-│       ├── freekerf-machine     driver: protocolo + transporte + relógio numa thread de I/O; ciclo de vida do job
-│       ├── freekerf-service     fachada da aplicação: comandos → eventos/snapshots; sessões; API usada por todas as UIs
-│       └── freekerf-remote      servidor WebSocket para o cliente remoto (tablet) — fase M6
-├── ui/                        ── CAMADA UI (não-Rust)
-│   ├── web/                     frontend (TypeScript) do app desktop/tablet; parte do protótipo do repo `design`
-│   ├── tokens/                  tokens `fk-` gerados a partir de `design/tokens.json`
-│   └── i18n/                    traduções Fluent (.ftl) compartilhadas entre Rust e web
-├── apps/                      ── CAMADA APPS: binários finais (casca fina)
-│   ├── cli/                     binário `freekerf` (headless)
-│   └── desktop/                 app Tauri 2 (`src-tauri` = crate `freekerf-desktop`)
-├── tools/xtask/               automações: check-layers, resx→ftl, sync-tokens, release
-└── docs/
-    ├── ARCHITECTURE.md
-    ├── DIVERGENCES.md           diferenças intencionais em relação ao LaserGRBL
-    ├── host-protocol.md         protocolo JSON Lines do `freekerf host --stdio`
-    └── adr/                     registros de decisão (toolkit de UI, numérica, threads…)
+│   ├── core/                  ── CORE: pure logic, no I/O
+│   │   ├── freekerf-gcode       G-code parser/model, modal state, arcs, analysis (ranges, quadrant), time estimate
+│   │   ├── freekerf-geometry    paths, curves, flattening, booleans, offset, transforms
+│   │   ├── freekerf-raster      image operations, 12+ dithers, line-to-line, vectorization preparation
+│   │   ├── freekerf-document    project model: objects, colour layers, cut settings, .fkproj format
+│   │   ├── freekerf-import      SVG / DXF / image / G-code → document (reads bytes, not files)
+│   │   ├── freekerf-planner     document → job: ordering, path optimization, generators (material test, Hershey), G-code
+│   │   ├── freekerf-protocol    sans-IO state machine: Grbl/grblHAL, Smoothie, Marlin, VigoWork
+│   │   └── freekerf-emulator    model of a Grbl 1.1 device (tests and simulator mode)
+│   ├── config/                ── CONFIG: persistent data and schemas
+│   │   ├── freekerf-settings    app and machine settings (serde, versioned schema, migrations)
+│   │   ├── freekerf-materials   material library access (wraps `library`'s `freekerf-library`)
+│   │   └── freekerf-migrate     LaserGRBL import: Settings.bin, .zbn buttons, materials, usage counters
+│   ├── native/                ── NATIVE: everything that depends on the OS or hardware
+│   │   ├── freekerf-transport   Transport trait + serial, Telnet, WebSocket (ESP8266), emulator; Android USB later
+│   │   ├── freekerf-discovery   machine discovery on the network (mDNS/scan)
+│   │   └── freekerf-platform    directories, atomic writes, sounds, notifications, OS info
+│   ├── runtime/               ── RUNTIME: orchestration
+│   │   ├── freekerf-machine     driver: protocol + transport + clock on an I/O thread; job lifecycle
+│   │   ├── freekerf-service     application facade: commands → events/snapshots; sessions; API used by every UI
+│   │   └── freekerf-remote      WebSocket server for the remote (tablet) client — M6
+│   └── testing/               ── TEST SUPPORT (dev-dependencies only, never shipped)
+│       └── freekerf-testkit     fixtures, fake devices, simulated Clock, PTY helpers, golden/snapshot helpers
+├── ui/                        ── UI (not Rust)
+│   ├── web/                     front end (TypeScript) of the desktop/tablet app, grown from `design`'s prototype
+│   ├── tokens/                  `fk-` tokens generated from `design/tokens.json`
+│   └── i18n/                    Fluent (.ftl) translations shared by Rust and web
+├── apps/                      ── APPS: final binaries (thin shells)
+│   ├── cli/                     `freekerf` binary (headless)
+│   └── desktop/                 Tauri 2 app (`src-tauri` = crate `freekerf-desktop`)
+├── tests/                     cross-crate integration tests (workspace member `freekerf-it`)
+├── tools/xtask/               automation: check-layers, resx2ftl, sync-tokens, release
+└── doc/                       documentation (§7)
 ```
 
-Nomes de crate: sempre `freekerf-<nome>`. Todos com `license = "GPL-3.0-or-later"` herdado do `[workspace.package]`.
+Crate names are always `freekerf-<name>`; every crate inherits `license = "GPL-3.0-or-later"` from `[workspace.package]`.
 
-## 3. Regras de dependência entre camadas
+## 3. Layer dependency rules
 
-| Camada | Pode depender de | Não pode |
-|---|---|---|
-| **core** | só outros crates core e bibliotecas puras | `std::fs`, `std::net`, threads, relógio do sistema, crates de SO/serial/UI. Deve compilar para `wasm32-unknown-unknown` |
-| **config** | core | native, runtime, apps (o I/O de arquivo chega por trait/`platform`) |
+| Layer | May depend on | Must not |
+| --- | --- | --- |
+| **core** | other core crates and pure libraries | `std::fs`, `std::net`, threads, the system clock, OS/serial/UI crates. Must build for `wasm32-unknown-unknown`. |
+| **config** | core | native, runtime, apps (file I/O arrives through a trait / `platform`) |
 | **native** | core | config, runtime, apps |
 | **runtime** | core, config, native | apps, UI |
-| **apps** | runtime (via `freekerf-service`), config, ui | acessar `protocol`/`transport` diretamente |
-| **ui/web** | apenas a API exposta pelo `freekerf-service` (IPC do Tauri ou WebSocket remoto) | lógica de máquina ou de G-code própria |
+| **apps** | runtime (through `freekerf-service`), config, ui | `protocol`/`transport` directly |
+| **testing** | anything | being a normal (non-dev) dependency of any crate |
+| **ui/web** | only the API exposed by `freekerf-service` (Tauri IPC or remote WebSocket) | its own machine or G-code logic |
 
-Verificação automática:
-- `cargo xtask check-layers` lê o `cargo metadata` e falha se uma aresta violar a tabela. Roda no CI.
-- `cargo build -p <crate core> --target wasm32-unknown-unknown` no CI garante que o core não usa I/O.
-- `#![forbid(unsafe_code)]` em todo crate, exceto `freekerf-transport` e `freekerf-platform` (onde houver justificativa documentada).
+Automatic checks:
+- `cargo xtask check-layers` reads `cargo metadata` and fails on any edge that breaks the table. It runs in CI.
+- `cargo build -p <core crate> --target wasm32-unknown-unknown` in CI proves the core does no I/O.
+- `unsafe_code = "forbid"` through workspace lints, except in `freekerf-transport` and `freekerf-platform` where each `unsafe` block has a documented reason.
 
-## 4. Licenças (já configurado em `deny.toml`)
+## 4. Licensing (configured in `deny.toml`)
 
-- Projeto: **GPL-3.0-or-later**; crédito em `NOTICE` ("Derivado do LaserGRBL, Copyright (c) 2016 Diego Settimi"). Portar o C# diretamente é permitido.
-- `cargo deny check` no CI. A lista em `deny.toml` é uma **allow-list**: GPL-2.0-only, AGPL, SSPL, BUSL, EPL, CDDL, licenças NC/proprietárias e crates sem licença são rejeitados. Crates de terceiros só do crates.io (sem git/registries desconhecidos).
-- Potrace (GPL-2.0-or-later) é aceito: a obra combinada fica GPL-3.0.
-- Evite dependências `GPL-3.0-only` (prenderiam o projeto à v3).
-- Assets (fontes, ícones) seguem `design/CREDITS.md`.
+- Project: **GPL-3.0-or-later**; credit in `NOTICE` ("Derivado do LaserGRBL, Copyright (c) 2016 Diego Settimi"). Porting the C# code directly is allowed.
+- `cargo deny check` runs in CI. `deny.toml` is an **allow-list**: GPL-2.0-only, AGPL, SSPL, BUSL, EPL, CDDL, NC/proprietary licenses and unlicensed crates are rejected. Third-party crates come only from crates.io; the `library` git dependency is the only allowed git source (add it to `allow-git` in M2).
+- Potrace (GPL-2.0-or-later) is accepted: the combined work is GPL-3.0.
+- Avoid `GPL-3.0-only` dependencies (they would pin the project to v3).
+- Assets (fonts, icons) follow `design/CREDITS.md`.
 
-## 5. Marcos
+## 5. Engineering practices
 
-Cada marco tem critério de aceite objetivo. Não comece um marco sem o anterior verde no CI.
+SOLID, applied to this codebase (same spirit as `library/AGENTS.md`):
 
-### M0 — Bootstrap (1–2 semanas)
-- Workspace virtual, `rust-toolchain.toml` (stable atual + MSRV fixado), `rustfmt.toml`, lints de workspace (`clippy::pedantic` seletivo, `unsafe_code = "forbid"`).
-- `tools/xtask`: `check-layers`.
-- CI no GitHub Actions (o esqueleto já está em `.github/workflows/ci.yml`): fmt, clippy `-D warnings`, test, `cargo deny check`, `check-layers`, build wasm do core, `cargo check` para Windows (`x86_64-pc-windows-gnu`) e macOS (`aarch64-apple-darwin`). Testes rodam em Linux.
-- `docs/ARCHITECTURE.md` e os ADRs iniciais: threads + canais (`crossbeam-channel`) vs `tokio`; representação numérica (o C# usa `decimal` → `rust_decimal` onde a formatação do *wire* exigir); `Clock` injetável.
+- **S — single responsibility.** One crate per concern (§2); inside a crate, one module per concept. Apps only wire the service to a front end: no business logic in `apps/`.
+- **O — open/closed.** New firmware = new `impl Firmware` in `freekerf-protocol`; new transport = new `impl Transport`; new importer = new `impl Importer`; new streaming mode = new `impl StreamingStrategy`. Registered in one place; existing implementations are not edited to fit a new case.
+- **L — Liskov.** Any `Transport`, `Firmware`, `Importer` or `Clock` can replace another without surprises: no panics on valid input, errors as values.
+- **I — interface segregation.** Small traits (one essential method). Do not add "optional" methods to an existing trait; add a new trait.
+- **D — dependency inversion.** The protocol, machine and service receive `Clock`, `Transport`, `SettingsStore` and the like by injection; tests use the doubles from `freekerf-testkit`.
 
-**Aceite:** CI verde com um crate mínimo em cada camada; `check-layers` falha num PR de teste que viola a regra.
+Other rules:
+- Libraries return errors (`thiserror`); `anyhow` only in apps. No `unwrap`/`expect`/`panic!` on production paths.
+- Logging with `tracing`; no `println!` in libraries.
+- Deterministic outputs: stable ordering, reproducible G-code for the same input and settings.
+- Units in names where ambiguous (`speed_mm_min`, `power_pct`), as in `library`.
+- No telemetry (project decision, same as `library`).
 
-### M1 — Core de máquina, headless (6–10 semanas)
-Crates: `gcode`, `protocol`, `emulator`, `transport` (serial + emulador), `machine`, `settings`, `service`, `apps/cli`.
+## 6. Testing
 
-- Paridade funcional com o escopo "core" do `conformance/SCOPE.md`: modos de streaming, contagem do buffer RX, `ok`/`error:N`/`ALARM`/`<status>`/`[MSG]`, `$$`/`$I`, comandos em tempo real, overrides, jog e jog contínuo, ciclo de vida do job, retomar, código custom com `[expr]`, detecção de firmware, contadores de vida útil do laser, emulador.
-- CLI `freekerf`:
-  - `analyze <arquivo.nc> --json`: o mesmo JSON de `conformance/src/lasergrbl_harness/golden.py`;
+New code comes with tests. CI fails when a gate below fails.
+
+| Level | Where | What it proves | Tooling |
+| --- | --- | --- | --- |
+| **Unit** | next to the code (`#[cfg(test)] mod tests`) | one function/type in isolation; protocol driven step by step with a simulated `Clock` | `cargo test`, `freekerf-testkit` |
+| **Property** | `tests/` of the crate | the parser never panics; parse → format → parse is stable; the RX buffer never exceeds its limit; geometry invariants | `proptest` |
+| **Snapshot / golden** | `tests/` of the crate | G-code and analysis output for fixed inputs; reviewed diffs | `insta` |
+| **Crate integration** | `crates/**/tests/*.rs` | the public API of one crate end to end (e.g. `freekerf-machine` streaming a file to `freekerf-emulator` through a PTY) | `cargo test`, PTY helpers |
+| **Cross-crate integration** | `tests/` (`freekerf-it`) | real compositions: service + machine + transport + emulator; settings migration; import → plan → stream | `cargo test` |
+| **CLI end to end** | `apps/cli/tests/` | the `freekerf` binary: `analyze --json`, `send`, `host --stdio`, `emulate --pty`, exit codes and errors | `assert_cmd`, `predicates` |
+| **Conformance** | external repo `conformance` | observable behaviour vs. LaserGRBL (protocol + golden; importers from M2) with `LASERGRBL_HOST=rust` | `make test-rust` in CI (checkout of `conformance`) |
+| **Fuzzing** | `fuzz/` | G-code, SVG, DXF and host-protocol parsers (from M2; scheduled CI job) | `cargo-fuzz` |
+| **UI end to end** | `ui/web/tests/`, `apps/desktop/tests/` | the 8 flows of `design/ux.md` against the emulator (from M4) | Playwright + Tauri WebDriver |
+| **Benchmarks** | `benches/` | load/analyze/plan large files; results in `doc/benchmarks.md` | `criterion` |
+
+Rules:
+- **Coverage** with `cargo llvm-cov`: CI fails below **90 % lines for the workspace** (same bar as `library`), and below **95 %** for `freekerf-gcode` and `freekerf-protocol`. Excluded code is listed in `doc/coverage.md` with a reason.
+- **No real hardware** in automated tests (§10). Serial tests use PTYs, the emulator or the `conformance` fake Grbl.
+- **No sleeps** in tests: waits on conditions with timeouts, or the simulated `Clock`. A flaky test is a bug: fix it or quarantine it with an issue link, never retry blindly.
+- **Test data** lives in `crates/<crate>/tests/fixtures/` or in `freekerf-testkit`; large generated inputs are created at test time.
+
+## 7. Documentation
+
+All documentation is in **English**: this file, `README.md`, `AGENTS.md`, everything under `doc/`, rustdoc, commit messages and PR descriptions. Product UI text goes through i18n (`ui/i18n/`), with at least `en` and `pt-BR`.
+
+Structure (created in M0, maintained afterwards):
+
+| File | Content |
+| --- | --- |
+| `AGENTS.md` | Maintenance guide for people and agents: overview, layout, commands, architecture on one screen, SOLID as applied here, invariant rules (safety, layers, licenses), the living-documentation table, testing rules, conventions. `CLAUDE.md` contains only `@AGENTS.md`. |
+| `doc/architecture.md` | Layers, crates, data flow (Mermaid diagrams), extension points table ("I want to… → do…"), key decisions. |
+| `doc/features/` | **One page per feature** (e.g. `streaming.md`, `jog.md`, `overrides.md`, `firmware-variants.md`, `gcode-analysis.md`, `svg-import.md`, `material-library.md`, `host-protocol.md`), plus `README.md` as the index. Each page: purpose, user-visible behaviour, API/CLI entry points, configuration, limits, safety notes, tests that cover it, related divergences. |
+| `doc/adr/NNNN-title.md` | Architecture decision records (threads vs. tokio, numeric representation, injectable `Clock`, UI toolkit, settings format…). |
+| `doc/divergences.md` | Every intentional difference from LaserGRBL (§8). |
+| `doc/coverage.md`, `doc/benchmarks.md` | Current numbers and exclusions. |
+| `doc/roadmap.md` | What was postponed and open decisions. |
+| `CHANGELOG.md` | Keep a Changelog format, from the first release. |
+
+**Living documentation:** every behaviour change updates the docs **in the same PR**. `AGENTS.md` keeps this table up to date:
+
+| Changed… | Update |
+| --- | --- |
+| a public API (any crate) | rustdoc (`missing_docs` is on), the feature page |
+| protocol / streaming / firmware behaviour | `doc/features/<feature>.md`, `doc/divergences.md` if it differs from LaserGRBL |
+| the `host --stdio` protocol | `doc/features/host-protocol.md` and `conformance`'s `RustHost` |
+| settings format | `doc/features/settings.md`, a migration and its test |
+| crates, traits, data flow, layers | `doc/architecture.md`, `AGENTS.md`, `xtask check-layers` |
+| a decision | a new ADR |
+| something postponed | `doc/roadmap.md` |
+| a milestone item | §12 of this file |
+
+Generated documentation (JSON schemas of settings and the host protocol, CLI `--help` captured in docs) is checked in CI: committed == generated.
+
+## 8. Divergences from LaserGRBL
+
+- LaserGRBL bugs listed in `conformance/FINDINGS.md` **do not have to be reproduced**. FreeKerf may behave differently, as long as it is **documented**.
+- Every relevant FINDINGS item gets an entry `DIV-NNN` in `doc/divergences.md`: *kept* / *fixed* / *not applicable*, with the reason and the affected test.
+- When a `conformance` test fails because of an intentional divergence, mark it **for the Rust host only** (`rust_divergence("DIV-NNN")` marker in `conformance`). Never delete the test or loosen the assertion for the C# host.
+
+## 9. Milestones
+
+Each milestone has objective acceptance criteria, **including tests and docs**. Do not start a milestone until the previous one is green in CI.
+
+### M0 — Bootstrap (1–2 weeks)
+- Virtual workspace, `rust-toolchain.toml` (current stable + pinned MSRV), `rustfmt.toml`, workspace lints (`missing_docs`, `unsafe_code = "forbid"`, selected `clippy::pedantic`).
+- `freekerf-testkit` skeleton; `tools/xtask` with `check-layers`.
+- CI (skeleton in `.github/workflows/ci.yml`): fmt, clippy `-D warnings`, tests with `cargo llvm-cov` and the thresholds of §6, `cargo deny check`, `check-layers`, wasm build of the core, `cargo check` for Windows (`x86_64-pc-windows-gnu`) and macOS (`aarch64-apple-darwin`). Tests run on Linux.
+- Docs: `AGENTS.md`, `CLAUDE.md`, `doc/architecture.md`, `doc/features/README.md`, `doc/roadmap.md`, ADRs 0001–0003 (threads + `crossbeam-channel` vs. `tokio`; numeric representation — LaserGRBL uses `decimal`, so `rust_decimal` where wire formatting requires it; injectable `Clock`).
+
+**Acceptance:** CI green with one minimal crate per layer; a test PR that breaks a layer rule fails `check-layers`; docs skeleton in place.
+
+### M1 — Headless machine core (6–10 weeks)
+Crates: `gcode`, `protocol`, `emulator`, `transport` (serial + emulator), `machine`, `settings`, `service`, `testkit`, `apps/cli`.
+
+- Functional parity with the "core" tier of `conformance/SCOPE.md`: streaming modes, RX buffer accounting, `ok`/`error:N`/`ALARM`/`<status>`/`[MSG]`, `$$`/`$I`, real-time commands, overrides, jog and continuous jog, job lifecycle, resume, custom code with `[expr]`, firmware detection, laser life counters, emulator.
+- `freekerf` CLI:
+  - `analyze <file.nc> --json`: the same JSON as `conformance/src/lasergrbl_harness/golden.py`;
   - `send`, `console`;
-  - `emulate --pty`: expõe o emulador numa PTY, útil inclusive para testar o LaserGRBL antigo;
-  - `host --stdio`: protocolo JSON Lines (`docs/host-protocol.md`) que implementa o `HostAdapter` da suíte.
-- No repo `conformance`: PR adicionando `RustHost` e o analisador Rust, selecionados por `LASERGRBL_HOST=rust`.
-- Arquivos grandes: carga em streaming e análise paralela (`rayon`); benchmark com um raster sintético de ~1M linhas.
+  - `emulate --pty`: exposes the emulator on a PTY (also useful to test the old LaserGRBL);
+  - `host --stdio`: JSON Lines protocol (`doc/features/host-protocol.md`) implementing `conformance`'s `HostAdapter`.
+- In `conformance`: a PR adding `RustHost`, the Rust analyzer, the `rust_divergence` marker and a `make test-rust` target that needs neither Mono nor `LASERGRBL_REPO`.
+- Large files: streaming load and parallel analysis (`rayon`); benchmark with a synthetic ~1M-line raster.
 
-**Aceite:**
-- camadas *protocol* e *golden (G-code)* do `conformance` verdes com `LASERGRBL_HOST=rust`, rodadas 3 vezes sem flakiness (ou com a divergência registrada, ver §6);
-- cobertura (`cargo llvm-cov`) ≥ 95% em `gcode`/`protocol` e ≥ 85% nos demais;
-- `proptest`: o parser não entra em pânico com nenhuma entrada, parse→format→parse é estável e o buffer nunca passa do limite;
-- `BENCHMARKS.md` comparando com o C#.
+**Acceptance:**
+- `conformance` *protocol* and *golden (G-code)* layers green with `LASERGRBL_HOST=rust`, 3 consecutive runs without flakiness (or the divergence recorded, §8);
+- coverage thresholds of §6; property tests for the parser and the buffer accounting; integration tests streaming through a PTY to the emulator; CLI end-to-end tests;
+- feature pages for every M1 feature, `doc/divergences.md`, `doc/benchmarks.md` (Rust vs. C#).
 
-### M2 — Importadores e planner (6–10 semanas)
+### M2 — Importers and planner (6–10 weeks)
 Crates: `geometry`, `raster`, `document`, `import`, `planner`, `materials`, `migrate`.
 
-- SVG (camadas por cor, preenchimento/corte, parâmetros por camada), DXF (arcos verdadeiros, splines → arcos com tolerância), imagem (ajustes, dithers, line-to-line), vetorização (Potrace e centerline), geradores (grade potência × velocidade, teste de tons) e fontes Hershey.
-- `freekerf-migrate`: Settings.bin do LaserGRBL (BinaryFormatter, só leitura), botões `.zbn`, materiais e contadores.
-- Formato de projeto `.fkproj` versionado.
+- SVG (colour layers, fill/cut, per-layer settings), DXF (true arcs, splines → arcs within a tolerance), images (adjustments, dithers, line-to-line), vectorization (Potrace and centerline), generators (power × speed grid, shade test) and Hershey fonts.
+- `freekerf-materials` on top of `library`'s `freekerf-library` (`read_archive` of a release package).
+- `freekerf-migrate`: LaserGRBL Settings.bin (BinaryFormatter, read-only), `.zbn` buttons, materials and counters.
+- Versioned `.fkproj` project format with a JSON schema generated from the model (same approach as `library`).
 
-**Aceite:** camada *golden (importers)* do `conformance` verde com `LASERGRBL_HOST=rust`. Os casos `platform_dependent` (dependentes do GDI+) são comparados com tolerância documentada.
+**Acceptance:** `conformance` *golden (importers)* green with `LASERGRBL_HOST=rust`; `platform_dependent` (GDI+) cases compared with a documented tolerance. Fuzz targets for SVG/DXF/G-code running in a scheduled CI job. Integration test import → plan → stream to the emulator. Feature pages for every importer and generator.
 
-### M3 — Spike de UI (2–3 semanas)
-Execute a tabela "O que o spike precisa validar" de `design/tech-notes.md` (canvas com 20 000 caminhos + imagem de 8000×6000, gestos, IPC de geometria a 60 Hz, serial, cliente remoto, acessibilidade, empacotamento) para **Tauri 2** e, nos testes 1, 2 e 5, para **Flutter + flutter_rust_bridge**.
+### M3 — UI spike (2–3 weeks)
+Run the "What the spike must validate" table of `design/tech-notes.md` (canvas with 20,000 paths + an 8000×6000 image, gestures, 60 Hz geometry IPC, serial, remote client, accessibility, packaging) for **Tauri 2** and, for tests 1, 2 and 5, for **Flutter + flutter_rust_bridge**.
 
-**Aceite:** `docs/adr/000X-ui-toolkit.md` com a decisão e os números medidos. A recomendação atual é Tauri 2; ela só muda se o WebKitGTK no Linux reprovar os testes 1 ou 2.
+**Acceptance:** `doc/adr/000X-ui-toolkit.md` with the decision and the measured numbers; spike code kept in a branch, not in `main`. The current recommendation is Tauri 2; it changes only if WebKitGTK on Linux fails tests 1 or 2.
 
-### M4 — App desktop MVP (10–16 semanas)
-- `ui/web` a partir do protótipo de `design/prototypes/app`: modos Projetar/Produzir, canvas (pan, zoom, pinça, seleção, alças), camadas por cor, inspetor, painel da máquina, console, confirmação antes de disparar, recuperação de trabalho, boas-vindas e migração do LaserGRBL.
-- Todos os itens **MVP** da matriz em `design/research.md` §6.
-- i18n: `tools/xtask resx2ftl` converte as traduções `.resx` do LaserGRBL que ainda se aplicam.
-- Densidade automática por tipo de entrada; temas claro, escuro e alto contraste com os tokens `fk-`.
+### M4 — Desktop MVP (10–16 weeks)
+- `ui/web` grown from `design/prototypes/app`: Design/Produce modes, canvas (pan, zoom, pinch, selection, handles), colour layers, inspector, machine panel, console, fire confirmation, job recovery, welcome flow and LaserGRBL migration.
+- All **MVP** items of the matrix in `design/research.md` §6.
+- i18n: `cargo xtask resx2ftl` converts the LaserGRBL `.resx` translations that still apply.
+- Automatic density by input type; light, dark and high-contrast themes from the `fk-` tokens.
 
-**Aceite:** os 8 fluxos de `design/ux.md` executáveis ponta a ponta contra o emulador; testes E2E (Playwright via WebDriver do Tauri) desses fluxos no CI Linux.
+**Acceptance:** the 8 flows of `design/ux.md` pass as UI end-to-end tests against the emulator in CI on Linux; front-end unit tests (component logic) with coverage reported; user-facing docs drafted for `website`.
 
-### M5 — v1 e distribuição (8–12 semanas)
-- Itens **v1** da matriz: edição de nós, booleanas, offset, array, trace, biblioteca de materiais, teste de material, editor `$$`, Smoothie/Marlin na UI, Telnet/WebSocket + descoberta, notificações.
-- Empacotamento:
+### M5 — v1 and distribution (8–12 weeks)
+- **v1** items of the matrix: node editing, booleans, offset, array, trace, material library UI, material test, `$$` editor, Smoothie/Marlin in the UI, Telnet/WebSocket + discovery, notifications.
+- Packaging:
   - Linux: `.deb`, AppImage, Flatpak;
-  - Windows: MSI assinado;
-  - macOS: DMG assinado e notarizado;
-  - atualização automática opcional e desativável.
-- CI em matriz real (Linux, Windows, macOS).
+  - Windows: signed MSI;
+  - macOS: signed and notarized DMG;
+  - optional, opt-out auto-update.
+- CI matrix on real runners (Linux, Windows, macOS): unit + integration tests on all three; UI E2E on Linux and Windows.
 
-### M6 — Tablet e controle remoto (depois)
-`freekerf-remote` (WebSocket na LAN, *heartbeat* do jog contínuo, PARAR < 50 ms) e o cliente em tablet (Tauri mobile ou web servida pelo core). Android com USB host direto; o iPad funciona só como cliente remoto.
+**Acceptance:** installers built by the release workflow; smoke test of each installer in CI; `CHANGELOG.md`; user docs published on `website`.
 
-## 6. Divergências do LaserGRBL
+### M6 — Tablet and remote control (later)
+`freekerf-remote` (LAN WebSocket, heartbeat for continuous jog, STOP < 50 ms) and the tablet client (Tauri mobile or web served by the core). Android with direct USB host; iPad only as a remote client.
 
-- **Não é preciso reproduzir os bugs** listados em `conformance/FINDINGS.md`. O comportamento do FreeKerf pode ser diferente, desde que **documentado**.
-- Todo item de FINDINGS recebe uma linha em `docs/DIVERGENCES.md`: *mantido* / *corrigido* / *não se aplica*, com justificativa e o teste afetado.
-- Quando um teste do `conformance` falhar por uma divergência intencional, marque-o **apenas para o host Rust** (marker `rust_divergence("DIV-NNN")` no repo `conformance`) apontando para a entrada do DIVERGENCES.md. Não apague o teste nem afrouxe a asserção para o host C#.
+**Acceptance:** latency tests (jog step < 100 ms, STOP < 50 ms) in an integration test over loopback and on a real LAN (manual, documented); the heartbeat stops continuous jog when the client disappears (integration test).
 
-## 7. Qualidade
+## 10. Safety
 
-- `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo deny check`, `cargo xtask check-layers`.
-- Bibliotecas sem `unwrap`/`expect`/`panic!` em caminhos de produção; erros com `thiserror` nas libs e `anyhow` só em apps; logs com `tracing`.
-- Testes: unitários por crate; testes de protocolo determinísticos com `Clock` simulado; `proptest` nos parsers; fuzzing (`cargo-fuzz`) para G-code, SVG e DXF a partir do M2.
-- Documentação: rustdoc em toda API pública dos crates `core` e `service`.
+- No automated test opens real serial devices (`/dev/ttyUSB*`, `/dev/ttyACM*`, `/dev/ttyS*`, `COMx`). Use PTYs, the emulator or `conformance`'s fake Grbl. Real-machine tests are manual and documented in the PR.
+- STOP (soft reset + laser off) bypasses every queue and works in every state; covered by unit and integration tests.
+- No command that turns the laser on is sent without an explicit user action. Continuous jog by touch requires a heartbeat (dead-man switch).
+- Materials flagged `block` by `library`'s hazard list cannot be used in a job; `warn` shows an alert.
 
-## 8. Segurança
+## 11. How to start
 
-- Nenhum teste automatizado abre dispositivos seriais reais (`/dev/ttyUSB*`, `/dev/ttyACM*`, `COMx`). Use PTY, o emulador ou o fake Grbl do `conformance`. Testes em máquina real são manuais e documentados.
-- PARAR (soft reset + desliga o laser) tem prioridade sobre qualquer fila e funciona em qualquer estado.
-- Nenhum comando que liga o laser é enviado sem uma ação explícita do usuário. O jog contínuo por toque exige *heartbeat* (homem-morto).
+1. Read `conformance/README.md`, `SCOPE.md` and `FINDINGS.md`; `design/README.md`, `ux.md` and `tech-notes.md`; and `library/AGENTS.md` as the reference for documentation and testing style.
+2. Do M0 and open a PR with the skeleton.
+3. M1 in small PRs, one crate at a time: `gcode` → `analyze --json` + golden → `protocol` → `transport`/`machine` → `host --stdio` + `RustHost` → variants, emulator, settings. Each PR brings its tests and its feature page.
 
-## 9. Como começar
+## 12. Where each item lives
 
-1. Leia `conformance/README.md`, `SCOPE.md` e `FINDINGS.md`, e `design/README.md`, `ux.md` e `tech-notes.md`.
-2. Execute o M0 e abra um PR com o esqueleto.
-3. M1 em PRs pequenos, um crate por vez: `gcode` → `analyze --json` + golden → `protocol` → `transport`/`machine` → `host --stdio` + `RustHost` → variantes, emulador, settings.
+Updated by every PR that delivers a milestone item (empty until M0).
 
-## 10. Perguntas em aberto
+| Item | Implementation | Tests | Documentation |
+| --- | --- | --- | --- |
+| — | — | — | — |
 
-- Formato de configuração: TOML (legível) ou JSON (mais simples para a UI web)?
-- Telemetria opcional (o LaserGRBL tem `UsageStats`): manter, com opt-in explícito, ou remover?
-- Atualização automática: canal próprio ou só gerenciadores de pacote?
+## 13. Open questions
+
+- Settings format: TOML (readable, consistent with `library`) or JSON (simpler for the web UI)?
+- Auto-update: own channel or package managers only?
