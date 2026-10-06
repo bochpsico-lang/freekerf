@@ -1,17 +1,17 @@
 # FreeKerf
 
-Software livre de design e controle para máquinas laser (Grbl, grblHAL, Smoothie, Marlin…), escrito em Rust, multiplataforma, para mouse, teclado e toque. É a evolução do [LaserGRBL](https://github.com/arkypita/LaserGRBL).
+Free software for designing jobs and driving laser machines (Grbl, grblHAL, Smoothie, Marlin…), written in Rust, cross-platform, for mouse, keyboard and touch. Successor of [LaserGRBL](https://github.com/arkypita/LaserGRBL).
 
-> **Status: planejamento.** Ainda não há código. O que será construído, a arquitetura em camadas e os marcos estão em **[PLAN.md](PLAN.md)**.
+> **Status: planning.** There is no code yet. What will be built, the layered architecture, the testing and documentation rules and the milestones are in **[PLAN.md](PLAN.md)**.
 
-| Repositório | Conteúdo |
-|---|---|
-| **freekerf** (este) | monorepo Rust: core, config, nativo, runtime, UI e apps |
-| [conformance](https://github.com/freekerf/conformance) | suíte que especifica o comportamento do core atual do LaserGRBL |
-| [design](https://github.com/freekerf/design) | UX, identidade visual, design system e protótipo navegável |
-| [library](https://github.com/freekerf/library) | biblioteca de materiais e perfis de máquina |
-| [website](https://github.com/freekerf/website) | site e documentação de usuário |
+| Repository | Content |
+| --- | --- |
+| **freekerf** (this one) | Rust monorepo: core, config, native, runtime, UI and apps |
+| [conformance](https://github.com/freekerf/conformance) | suite that specifies the behaviour of the current LaserGRBL core |
+| [design](https://github.com/freekerf/design) | UX, brand, design system and clickable prototype |
+| [library](https://github.com/freekerf/library) | materials and machine profiles |
+| [website](https://github.com/freekerf/website) | website and user documentation |
 
-## Licença
+## License
 
-[GPL-3.0-or-later](LICENSE). Derivado do LaserGRBL, Copyright (c) 2016 Diego Settimi (ver [NOTICE](NOTICE)). As dependências são verificadas com `cargo deny` ([deny.toml](deny.toml)).
+[GPL-3.0-or-later](LICENSE). Derived from LaserGRBL, Copyright (c) 2016 Diego Settimi (see [NOTICE](NOTICE)). Dependencies are checked with `cargo deny` ([deny.toml](deny.toml)).
