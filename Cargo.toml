@@ -38,6 +38,7 @@ freekerf-emulator = { path = "crates/core/freekerf-emulator" }
 freekerf-session = { path = "crates/core/freekerf-session" }
 freekerf-geometry = { path = "crates/core/freekerf-geometry" }
 freekerf-document = { path = "crates/core/freekerf-document" }
+freekerf-planner = { path = "crates/core/freekerf-planner" }
 freekerf-settings = { path = "crates/config/freekerf-settings" }
 freekerf-transport = { path = "crates/native/freekerf-transport" }
 freekerf-platform = { path = "crates/native/freekerf-platform" }

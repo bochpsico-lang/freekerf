@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub mod analysis;
+pub mod import_case;
 
 pub use freekerf_session::{ActionError, ActionSpec, Caller, CallerKind, Tier};
 

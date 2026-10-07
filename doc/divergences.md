@@ -81,11 +81,18 @@ per id. Which white-box behaviour is compared where: conformance's
 | DIV-025 | An empty line follows every status report | No empty line | fixed | `freekerf-emulator` tests |
 | — | Emulator executes lines with sleeps on its own threads | Sans-IO device with a 15-block planner; RX buffer accounting, error rules and manual acknowledge for tests | different design | `freekerf-emulator` tests |
 
-## Importers (M2)
+## Importers and generators
 
-DIV-031 to DIV-050 (SVG, DXF, Hershey, raster, Potrace, Centerline findings) are
-**not applicable** until the importers exist (milestone M2); each will get its
-entry then. The conformance importer goldens are skipped for the Rust host.
+The conformance importer goldens run for the Rust host by case kind (`freekerf
+import-case --kinds`); kinds not implemented yet are skipped.
+
+| Id | LaserGRBL | FreeKerf | Status | Tests |
+| --- | --- | --- | --- | --- |
+| DIV-039 | Cutting test label for a pass range reads `1 - F2 pass` | Same | kept (golden `gen_cutting_grid`; a label, no effect on the job) | conformance `gen_cutting_grid` |
+| DIV-040 | Hershey coordinates written with `double.ToString()`: 15 significant digits, floating point noise included (`Y0.00299999999999989`) | Same (`freekerf_gcode::dotnet`) | kept (goldens; harmless for the machine) | conformance `hershey_*`, `gen_*` |
+
+DIV-031 to DIV-038 and DIV-041 to DIV-050 (SVG, DXF, raster, Potrace, Centerline
+findings) get their entries with the importers that contain them.
 
 ## FreeKerf only
 

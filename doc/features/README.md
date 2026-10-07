@@ -21,3 +21,5 @@ tests and divergences from LaserGRBL. The action catalogue is generated.
 | [host-protocol.md](host-protocol.md) | `freekerf host --stdio` (JSON Lines) | M1 |
 | [actions.md](actions.md) | the action registry (generated) | M1 |
 | [projects.md](projects.md) | the document model and the `.fkproj` file | M2 |
+| [planner.md](planner.md) | document → G-code: layer order, fillings, the G-code writer | M2 |
+| [test-patterns.md](test-patterns.md) | cutting, power/speed and shake tests, Hershey text | M2 |
