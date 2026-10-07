@@ -340,10 +340,8 @@ Crates: `geometry`, `raster`, `document`, `import`, `planner`, `materials`, `mig
 
 **Acceptance:** `conformance` *golden (importers)* green with `LASERGRBL_HOST=rust`; `platform_dependent` (GDI+) cases compared with a documented tolerance. Script engine and MCP integration tests of §9.6 green for the headless scope; `doc/features/scripting.md`, `doc/features/mcp.md`, the generated `doc/features/actions.md` and `api.d.ts`. Fuzz targets for SVG/DXF/G-code running in a scheduled CI job. Integration test import → plan → stream to the emulator. Feature pages for every importer and generator.
 
-### M3 — UI spike (2–3 weeks)
-Run the "What the spike must validate" table of `design/tech-notes.md` (canvas with 20,000 paths + an 8000×6000 image, gestures, 60 Hz geometry IPC, serial, remote client, accessibility, packaging) for **Tauri 2** and, for tests 1, 2 and 5, for **Flutter + flutter_rust_bridge**.
-
-**Acceptance:** `doc/adr/000X-ui-toolkit.md` with the decision and the measured numbers; spike code kept in a branch, not in `main`. The current recommendation is Tauri 2; it changes only if WebKitGTK on Linux fails tests 1 or 2.
+### M3 — UI toolkit decision (done)
+The code spike was replaced by desk research ([`doc/research/ui-toolkit.md`](doc/research/ui-toolkit.md)). **Decision: Tauri 2** ([ADR 0006](doc/adr/0006-ui-toolkit.md)). The first goal is a **desktop app**; tablets stay at M6. Multi-touch problems found during implementation are recorded in `doc/roadmap.md` and handled later; they do not block milestones. Bulk data crosses the IPC as raw payloads (`tauri::ipc::Response`, raw channels), never JSON arrays.
 
 ### M4 — Desktop MVP (10–16 weeks)
 - `ui/web` grown from `design/prototypes/app`: Design/Produce modes, canvas (pan, zoom, pinch, selection, handles), colour layers, inspector, machine panel, console, fire confirmation, job recovery, welcome flow and LaserGRBL migration.
@@ -352,7 +350,7 @@ Run the "What the spike must validate" table of `design/tech-notes.md` (canvas w
 - Automatic density by input type; light, dark and high-contrast themes from the `fk-` tokens.
 - **Automation in the desktop app (§9):** all view actions (mode, panels, selection, viewport, dialogs) in the registry; the UI dispatches only through it; attach-or-launch of the desktop app; semantic view snapshot + window screenshot; "Agent connected" and running-script indicators, action log, cancel and disconnect; `laser` tier with human confirmation on screen; automation settings page (off by default); macro editor with `api.d.ts` autocomplete; LaserGRBL custom buttons migrated to scripts.
 
-**Acceptance:** the 8 flows of `design/ux.md` pass as UI end-to-end tests against the emulator in CI on Linux, and the same flows can be driven end to end by a test MCP client through `run_script`; the no-UI-only-actions lint passes; front-end unit tests (component logic) with coverage reported; user-facing docs drafted for `website`.
+**Acceptance:** canvas performance check on Linux (20,000 paths + 8000×6000 image, ≥ 50 fps pan with mouse; results in `doc/benchmarks.md`); the 8 flows of `design/ux.md` pass as UI end-to-end tests against the emulator in CI on Linux, and the same flows can be driven end to end by a test MCP client through `run_script`; the no-UI-only-actions lint passes; front-end unit tests (component logic) with coverage reported; user-facing docs drafted for `website`.
 
 ### M5 — v1 and distribution (8–12 weeks)
 - **v1** items of the matrix: node editing, booleans, offset, array, trace, material library UI, material test, `$$` editor, Smoothie/Marlin in the UI, Telnet/WebSocket + discovery, notifications.
@@ -407,12 +405,14 @@ Updated by every PR that delivers a milestone item.
 | M1: conformance `RustHost`, Rust analyzer, `rust_divergence`, `make test-rust` | `freekerf/conformance` (`lasergrbl_harness/host.py`, `golden.py`, `Makefile`; freekerf/conformance#2) | `make test-rust`: 32 passed, 3 runs in a row; CI job `conformance` | `doc/features/host-protocol.md`, conformance `README.md` |
 | M1: large files | `freekerf-gcode` (`rayon`, feature `parallel`) | `benches/analysis.rs` | `doc/benchmarks.md` |
 | M1: divergences | — | conformance (no marker needed so far) | `doc/divergences.md` |
+| M3: UI toolkit decision (Tauri 2) | — | — | `doc/research/ui-toolkit.md`, `doc/adr/0006-ui-toolkit.md` |
 
 ## 14. Decisions already taken
 
 - **Settings format: TOML** (readable in diffs, consistent with `library`). The schema is generated from the Rust model and checked in CI; the web UI reads and writes settings only through actions, never the file.
 - **`conformance` is public**, so CI in this repository checks it out without a token.
 - **No auto-update for now.** Releases ship as installers and through package managers (M5); the app does not check for or download updates. Revisit later through `doc/roadmap.md`.
+- **UI toolkit: Tauri 2** (ADR 0006). Desktop first; gesture problems are deferred, not blocking; tablets at M6.
 - **No MCP prompts for now.** The MCP server exposes the tools of §9.3 and the state resources; MCP *prompts* (e.g. "prepare a cut job from this SVG") and example scripts as resources are not needed now. Listed in `doc/roadmap.md` to revisit later.
 
 ## 15. Open questions

@@ -17,9 +17,12 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 
 ## Decided
 
+- UI toolkit: Tauri 2, desktop first (ADR 0006). Multi-touch problems found on Linux are listed here when they appear and handled later.
+
 - No auto-update for now (PLAN §14).
 - No MCP prompts for now (PLAN §14).
 
 ## Open
+
 
 - MCP: should `allow_laser` exist at all (PLAN §15)?
