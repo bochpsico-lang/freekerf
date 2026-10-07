@@ -22,7 +22,7 @@ fixed entries are outside what those layers observe.
 | --- | --- | --- | --- | --- |
 | DIV-008 | Vigo, outside a job: commands marked `ok` at once but left pending, bytes not counted | Same | kept (no board to test a change on) | `host_behaviour.rs::vigo_wraps_jobs_and_uses_sbuf_counters` |
 | DIV-015 | A `\|` status report with `Pin:` and an unknown version is read with the 0.9 parser and dropped | Any report with `\|` is read with the 1.1 parser | fixed | `host_behaviour.rs::legacy_status_reports_without_version` |
-| DIV-016 | A successful `$N=V` updates a throw-away configuration when none was read yet | The settings table is always updated | fixed | `protocol.rs::write_settings_sends_one_dollar_line_per_setting` |
+| DIV-016 | A successful `$N=V` updates a throw-away configuration when none was read yet | The settings table is always updated, and used (a table read for no version takes the board's) | fixed | `protocol.rs::write_settings_sends_one_dollar_line_per_setting`, `host_behaviour.rs::settings_written_before_any_read_are_used`, conformance `test_jog.py::test_settings_written_before_any_read_are_forgotten` |
 | DIV-017 | Comment-only lines are kept as empty commands and streamed as empty lines | Same | kept (goldens `stream`) | golden `comments_spacing`, `host_behaviour.rs::comment_lines_are_streamed_as_empty_lines_and_header_footer_wrap_the_job` |
 | DIV-019 | Resume queues an empty command when no modal group is settled | The empty command is not queued | fixed | `host_behaviour.rs::resume_adds_the_motion_mode_homing_and_work_offset` |
 | DIV-020 | Safety door sends `@` (Grbl 0.9) | Sends 0x84 (Grbl 1.1) | fixed | `host_behaviour.rs::state_rules_of_immediate_commands` |

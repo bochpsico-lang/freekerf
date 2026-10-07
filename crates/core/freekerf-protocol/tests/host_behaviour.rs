@@ -638,6 +638,32 @@ fn settings_query_rejected_keeps_the_old_table() {
 }
 
 #[test]
+fn settings_written_before_any_read_are_used() {
+    // $$ rejected: no table was read; the values written since still count (DIV-016,
+    // conformance test_jog.py::test_settings_written_before_any_read_are_forgotten)
+    let mut b = Bench::with(
+        HostOptions::default(),
+        DeviceConfig {
+            error_rules: vec![(regex::Regex::new(r"^\$\$$").unwrap(), 9)],
+            ..DeviceConfig::default()
+        },
+    );
+    b.connect();
+    assert!(b.host.settings().is_empty());
+    b.host
+        .write_settings(
+            &[(20, "1".into()), (130, "300".into()), (131, "200".into())],
+            b.now,
+        )
+        .unwrap();
+    b.exchange();
+    b.advance(20);
+    b.host.jog_to(500.0, -50.0, 1000.0, b.now).unwrap();
+    b.exchange();
+    assert_eq!(b.lines().last().unwrap(), "$J=G90X300.00Y0.00F1000");
+}
+
+#[test]
 fn wifi_configuration_by_vendor() {
     let mut b = connected();
     assert!(matches!(
