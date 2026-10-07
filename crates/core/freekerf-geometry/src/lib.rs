@@ -20,6 +20,7 @@ pub mod arcfit;
 pub mod bezier;
 pub mod boolean;
 pub mod clipper;
+pub mod gdipath;
 pub mod hatch;
 mod matrix;
 pub mod order;

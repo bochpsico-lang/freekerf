@@ -2,10 +2,13 @@
 
 use freekerf_gcode::report::Report;
 use freekerf_gcode::{AnalysisOptions, Program};
+use freekerf_geometry::hatch::FillPattern;
 use freekerf_raster::dither::{DitherMode, dither};
 use freekerf_raster::image::Image;
 use freekerf_raster::l2l::{Direction, L2lConf, L2lOptions, load_image_l2l};
 use freekerf_raster::ops::{self, Formula, Interpolation};
+use freekerf_raster::potrace::{TraceOptions, trace};
+use freekerf_raster::vectorize::{Filling, PotraceOptions, load_image_potrace};
 use proptest::prelude::*;
 
 fn image() -> impl Strategy<Value = Image> {
@@ -62,5 +65,32 @@ proptest! {
             let eps = 2.0 / res;
             prop_assert!(x0 >= -eps && y0 >= -eps && x1 <= w + eps && y1 <= h + eps, "{x0} {y0} {x1} {y1} {w} {h}");
         }
+    }
+
+    #[test]
+    fn vectorizing_never_panics(bits in proptest::collection::vec(any::<bool>(), 64), smooth in 0.0f64..1.4, fill in 0usize..4) {
+        let px = bits.iter().map(|&b| if b { 0xFF00_0000 } else { 0xFFFF_FFFF }).collect();
+        let img = Image::from_pixels(8, 8, px).unwrap();
+        let t = TraceOptions { alphamax: smooth, curve_optimizing: smooth > 0.5, ..TraceOptions::default() };
+        let paths = trace(&img, &t);
+        // every traced path is closed
+        for p in &paths {
+            prop_assert!(!p.is_empty());
+            prop_assert_eq!(p[0].a, p[p.len() - 1].b);
+        }
+        let filling = [
+            Filling::None,
+            Filling::Vector(FillPattern::Horizontal),
+            Filling::Vector(FillPattern::Inset),
+            Filling::Raster(Direction::Vertical),
+        ][fill];
+        let lines = load_image_potrace(
+            &img,
+            &PotraceOptions { trace: t, optimize_fast: fill % 2 == 0, filling },
+            &L2lConf::default(),
+            &L2lOptions::default(),
+            true,
+        );
+        prop_assert!(!lines.is_empty());
     }
 }

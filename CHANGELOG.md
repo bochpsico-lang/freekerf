@@ -43,6 +43,9 @@ All notable changes to FreeKerf are documented here. The format follows
   (grayscale formulas, invert, threshold, whitenize, fill, outline, resize), nine
   dithering modes and Line2Line raster G-code, identical to LaserGRBL on the
   conformance goldens (GDI+ steps within the tolerance of ADR 0008).
+- Vectorization: Potrace (a port of LaserGRBL's CsPotrace, outlines as biarcs,
+  vector and raster fillings) and centerline through the external `autotrace`
+  program, identical to LaserGRBL on the conformance goldens (ADR 0009, 0010).
 - `freekerf import-case`: runs `conformance` importer golden cases.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.

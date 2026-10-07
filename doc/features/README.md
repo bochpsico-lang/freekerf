@@ -26,3 +26,4 @@ tests and divergences from LaserGRBL. The action catalogue is generated.
 | [svg-import.md](svg-import.md) | SVG files: colour layers, shapes, transforms, curves | M2 |
 | [dxf-import.md](dxf-import.md) | DXF files: lines, true arcs, splines, blocks, colours | M2 |
 | [raster.md](raster.md) | bitmaps: image operations, dithering, Line2Line | M2 |
+| [vectorize.md](vectorize.md) | Potrace vectorize (outlines, fillings) and centerline (autotrace) | M2 |

@@ -17,7 +17,7 @@ flowchart TB
   end
   subgraph native
     transport[freekerf-transport<br/>serial, emulator, PTY]
-    platform[freekerf-platform<br/>dirs, atomic writes]
+    platform[freekerf-platform<br/>dirs, atomic writes, programs]
   end
   subgraph config
     settings[freekerf-settings<br/>settings.toml, schema, migrations]
@@ -31,7 +31,7 @@ flowchart TB
     document[freekerf-document<br/>layers, objects, .fkproj]
     planner[freekerf-planner<br/>document to G-code]
     import[freekerf-import<br/>SVG, DXF to document]
-    raster[freekerf-raster<br/>image ops, dithering, Line2Line]
+    raster[freekerf-raster<br/>image ops, dithering, Line2Line,<br/>Potrace, centerline request]
   end
   cli --> service
   cli --> settings
@@ -54,6 +54,7 @@ flowchart TB
   service --> import
   import --> document
   raster --> gcode
+  raster --> geometry
   service --> raster
 ```
 

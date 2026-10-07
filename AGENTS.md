@@ -22,7 +22,7 @@ crates/core/       pure logic, no I/O, builds for wasm32
   freekerf-geometry    paths, curves, transforms, Clipper 6.4.2 port, hatch fillings
   freekerf-document    project model (layers, objects, cut/raster settings), .fkproj
   freekerf-import      SVG / DXF bytes -> document (colour layers)
-  freekerf-raster      bitmaps: image operations, dithering, Line2Line G-code
+  freekerf-raster      bitmaps: image operations, dithering, Line2Line, Potrace vectorize
   freekerf-planner     document -> G-code (LaserGRBL writer), generators, Hershey
   freekerf-protocol    sans-IO host state machine (port of GrblCore) + firmware variants
   freekerf-emulator    sans-IO Grbl 1.1 device (simulator, tests)

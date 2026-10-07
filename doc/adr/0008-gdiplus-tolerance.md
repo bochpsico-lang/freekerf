@@ -34,10 +34,12 @@ interpreter (absolute and relative moves, `G0`/`G1`/`G2`/`G3`, `M3`/`M4`/`M5`, `
 every cutting move is drawn onto a grid of the job's raster resolution (one cell per
 dot), each cell keeping the highest power that crossed it, normalised to 0..255. The
 two maps must cover the same cells to within one cell on every side and agree with
-the bitmap metric above. The header and footer lines (before the first and after the
-last cutting move) are compared exactly. This metric lands in `conformance` with the
-FreeKerf kinds that produce such G-code (A6/A7); its thresholds are calibrated
-there and recorded in this ADR if they change.
+the bitmap metric above (for the maximum, a cell may match one of its 8 neighbours).
+The header and footer lines (before the first and after the last cutting move) are
+compared exactly; summaries by ranges (within one cell) and estimated time (within
+5 %), not by command count, since an equal burn can be written in more or fewer
+lines. Measured on `potrace_raster_fill`: max 1.02, mean 0.08;
+`potrace_raster_fill_no_pwm`: 0 and 0.
 
 Rules:
 

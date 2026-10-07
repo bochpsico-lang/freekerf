@@ -34,6 +34,11 @@ Cyotek Ltd., http://www.cyotek.com, distributed under the MIT License:
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
 
+crates/core/freekerf-raster/src/potrace: a port of CsPotrace, Copyright (C)
+2001-2016 Peter Selinger and Copyright (C) 2009-2016 Wolfgang Nagl, distributed
+under the GNU General Public License version 2 or (at your option) any later
+version, as included in LaserGRBL; and of LaserGRBL's BezierToBiarc code.
+
 crates/core/freekerf-raster/src/gdi.rs: GDI+ image scaling as Mono's libgdiplus
 does it, ported from libgdiplus 6.1 (Copyright (c) Novell, Inc. and the Mono
 contributors, MIT License; gdi_unpremultiply.bin is its alpha table), pixman 0.42

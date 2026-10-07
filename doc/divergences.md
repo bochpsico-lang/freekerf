@@ -101,11 +101,15 @@ import-case --kinds`); kinds not implemented yet are skipped.
 | DIV-040 | Hershey coordinates written with `double.ToString()`: 15 significant digits, floating point noise included (`Y0.00299999999999989`) | Same (`freekerf_gcode::dotnet`) | kept (goldens; harmless for the machine) | conformance `hershey_*`, `gen_*` |
 | DIV-041 | Error diffusion never reaches row 0 or column 0 (a uniform mid-grey first row comes out all black); the green and blue errors are swapped | Same (`freekerf_raster::dither`) | kept (goldens `img_dither_*`; one row and column, no effect on grey images) | conformance `img_dither_*` |
 | DIV-042 | Random dithering is seeded with the clock: the same image engraves differently each time | Seeded by the caller: the same image and seed give the same result | fixed | `dither.rs::every_mode_gives_black_and_white` |
+| DIV-045 | Vectorize options unchecked in the dialog are not "off": spot removal keeps turdsize 2, optimization keeps tolerance 0.2 | Same (`TraceOptions::default`) | kept (goldens `potrace_*`) | conformance `potrace_*` |
+| DIV-046 | Vectorize with raster filling: the filling header follows the raster PWM option, the outlines the machine's "Support Hardware PWM" | Same | kept (golden `potrace_raster_fill_no_pwm`) | conformance `potrace_raster_fill_no_pwm` |
+| DIV-047 | The raster filling sets `vectorfilling` on the caller's `L2LConf` | Settings are passed by value; nothing of the caller's changes | not applicable | — |
+| DIV-048 | A failing or missing autotrace is only logged; the empty output then fails as "Root element is missing" | The tracer's error is returned with its cause; empty output is an error too | fixed | `autotrace.rs::centerline_with_a_double` |
+| DIV-049 | Centerline reads speed, power, laser commands and offset from the raster dialog settings, not from the `L2LConf` it receives | Every value is an explicit parameter of `autotrace::centerline` (conformance maps the settings) | not applicable | conformance `centerline_settings` |
 | DIV-043 | A malformed saved layer setting is half loaded | Layer settings are document data, validated when read | not applicable | — |
 | DIV-044 | Every layer pass starts with a comment-only line (an empty command); pen up/down lines keep a space before their comment (`S0 `) | Same | kept (every `svg_*`/`dxf_*` golden) | conformance `svg_*`, `dxf_*` |
 
-DIV-045 to DIV-050 (Potrace, Centerline findings) get their entries with the
-importers that contain them.
+DIV-050 (raster dialog pipeline) gets its entry with `image_processor`.
 
 ## FreeKerf only
 

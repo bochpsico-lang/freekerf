@@ -95,12 +95,45 @@ pub fn fill(
     pattern: FillPattern,
     step: f64,
 ) -> Result<Vec<Vec<Point>>, ClipperError> {
+    fill_paths(&shape_paths(shapes), width, height, pattern, step)
+}
+
+/// [`fill`] for shapes already flattened in single precision (`GraphicsPath`
+/// points, see [`crate::gdipath`]): every point is used as it is.
+///
+/// # Errors
+/// Coordinates out of the clipper's range.
+pub fn fill_flat(
+    shapes: &[Vec<(f32, f32)>],
+    width: f64,
+    height: f64,
+    pattern: FillPattern,
+    step: f64,
+) -> Result<Vec<Vec<Point>>, ClipperError> {
+    let paths: Paths = shapes
+        .iter()
+        .map(|s| {
+            s.iter()
+                .map(|&(x, y)| int_point(f64::from(x) * RESOLUTION, f64::from(y) * RESOLUTION))
+                .collect()
+        })
+        .collect();
+    fill_paths(&paths, width, height, pattern, step)
+}
+
+fn fill_paths(
+    shapes: &Paths,
+    width: f64,
+    height: f64,
+    pattern: FillPattern,
+    step: f64,
+) -> Result<Vec<Vec<Point>>, ClipperError> {
     if pattern == FillPattern::Inset {
         return inset(shapes, step);
     }
     let mut c = Clipper::new();
     c.add_paths(&grid(width, height, pattern, step), PolyType::Subject, false)?;
-    c.add_paths(&shape_paths(shapes), PolyType::Clip, true)?;
+    c.add_paths(shapes, PolyType::Clip, true)?;
     let Some(tree) = c.execute_tree(
         ClipType::Intersection,
         PolyFillType::EvenOdd,
@@ -112,10 +145,10 @@ pub fn fill(
     Ok(to_polylines(&tree.open_paths(), false))
 }
 
-fn inset(shapes: &[Vec<Point>], spacing: f64) -> Result<Vec<Vec<Point>>, ClipperError> {
+fn inset(shapes: &Paths, spacing: f64) -> Result<Vec<Vec<Point>>, ClipperError> {
     let mut out = Vec::new();
     let mut c = ClipperOffset::default();
-    c.add_paths(&shape_paths(shapes), JoinType::Round, EndType::ClosedPolygon);
+    c.add_paths(shapes, JoinType::Round, EndType::ClosedPolygon);
     let mut i = 1.0;
     loop {
         let solution = c.execute(-spacing * i * RESOLUTION)?;

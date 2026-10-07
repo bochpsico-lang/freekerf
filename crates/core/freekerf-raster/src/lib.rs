@@ -17,11 +17,15 @@
 //! assert_eq!(gcode[0], "G0 X0 Y0 F1000");
 //! ```
 
+pub mod centerline;
 pub mod dither;
 pub mod gdi;
 pub mod image;
 pub mod l2l;
 pub mod ops;
+pub mod potrace;
+mod render;
+pub mod vectorize;
 
 /// Errors of raster operations.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

@@ -19,6 +19,7 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 | Item | Why | When |
 | --- | --- | --- |
 | Per-object transform in the document (scale/rotate without touching the geometry) | needs the editor's handles to be useful | M4/M5 |
+| Shipping `autotrace` with the desktop app (bundled binary per platform, or a detected system install) | packaging decision; M2 runs it from the `PATH` (ADR 0010) | M4 (installers) |
 | Zipped project container (`.fkproj` with images as separate entries) | JSON with base64 images is enough until projects with many large images appear | when needed |
 
 ## Decided

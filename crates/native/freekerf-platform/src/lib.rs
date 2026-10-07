@@ -11,6 +11,14 @@ pub enum PlatformError {
     /// No home/config directory could be determined.
     #[error("cannot determine the configuration directory")]
     NoConfigDir,
+    /// An external program failed to start or exited with an error.
+    #[error("{program}: {message}")]
+    Program {
+        /// Program run.
+        program: String,
+        /// What went wrong (exit status and standard error, or the start error).
+        message: String,
+    },
     /// I/O error on a path.
     #[error("{path}: {source}")]
     Io {
@@ -128,9 +136,60 @@ pub fn read(path: &Path) -> Result<Vec<u8>, PlatformError> {
     fs::read(path).map_err(io(path))
 }
 
+/// Runs `program` with `args` (no shell) and returns its standard output.
+///
+/// # Errors
+/// The program cannot be started or exits with a failure status.
+pub fn run_capture(program: &Path, args: &[String]) -> Result<Vec<u8>, PlatformError> {
+    let name = program.display().to_string();
+    let out = std::process::Command::new(program)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|e| PlatformError::Program {
+            program: name.clone(),
+            message: e.to_string(),
+        })?;
+    if !out.status.success() {
+        return Err(PlatformError::Program {
+            program: name,
+            message: format!("{}: {}", out.status, String::from_utf8_lossy(&out.stderr).trim()),
+        });
+    }
+    Ok(out.stdout)
+}
+
+/// Deletes a file, ignoring a missing one.
+///
+/// # Errors
+/// On I/O errors other than "not found".
+pub fn remove_file(path: &Path) -> Result<(), PlatformError> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(io(path)(e)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn programs_and_removal() {
+        let out = run_capture(Path::new("echo"), &["hi".into()]).unwrap();
+        assert_eq!(out, b"hi\n");
+        assert!(run_capture(Path::new("false"), &[]).is_err());
+        let e = run_capture(Path::new("/no/such/program"), &[]).unwrap_err();
+        assert!(e.to_string().contains("/no/such/program"));
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("x");
+        write_atomic(&p, b"1").unwrap();
+        remove_file(&p).unwrap();
+        remove_file(&p).unwrap();
+        assert!(remove_file(dir.path()).is_err());
+    }
 
     #[test]
     fn atomic_write_and_read() {

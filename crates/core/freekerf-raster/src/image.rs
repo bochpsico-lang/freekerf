@@ -94,6 +94,19 @@ impl Image {
         Self::from_rgba(rgba.width(), rgba.height(), rgba.as_raw())
     }
 
+    /// The image as a 32-bit RGBA PNG file.
+    ///
+    /// # Errors
+    /// The encoder failed (empty image).
+    pub fn encode_png(&self) -> Result<Vec<u8>, RasterError> {
+        let mut out = Vec::new();
+        image::RgbaImage::from_raw(self.width, self.height, self.to_rgba())
+            .ok_or_else(|| RasterError::Size(format!("{}×{}", self.width, self.height)))?
+            .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+            .map_err(|e| RasterError::Decode(e.to_string()))?;
+        Ok(out)
+    }
+
     /// The image as 8-bit RGBA bytes.
     #[must_use]
     pub fn to_rgba(&self) -> Vec<u8> {
@@ -242,6 +255,8 @@ mod tests {
         }
         let img = Image::decode(&png).unwrap();
         assert_eq!(img.pixels(), [0xFFFF_0000, 0x8000_00FF]);
+        assert_eq!(Image::decode(&img.encode_png().unwrap()).unwrap(), img);
+        assert!(Image::new(0, 0, 0).encode_png().is_err());
         assert!(Image::decode(b"not an image").is_err());
     }
 }

@@ -11,10 +11,12 @@ publish.workspace = true
 
 [dependencies]
 freekerf-gcode.workspace = true
+freekerf-geometry.workspace = true
 image.workspace = true
 schemars.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+tiny-skia.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

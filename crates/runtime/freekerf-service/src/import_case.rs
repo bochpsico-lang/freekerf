@@ -14,10 +14,15 @@ use freekerf_geometry::hatch::FillPattern;
 use freekerf_import::{Import, dxf, svg};
 use freekerf_planner::generators::{self, CuttingTest, GreyscaleTest, ShakeTest};
 use freekerf_planner::{Firmware, Job, MachineOptions, PlanOptions, VectorStyle, hershey};
+use freekerf_raster::centerline::CenterlineOptions;
 use freekerf_raster::dither::DitherMode;
 use freekerf_raster::image::{Argb, Image, argb};
 use freekerf_raster::l2l::{Direction, L2lConf, L2lOptions, load_image_l2l};
 use freekerf_raster::ops::{self, Formula, Interpolation};
+use freekerf_raster::potrace::TraceOptions;
+
+use crate::autotrace;
+use freekerf_raster::vectorize::{Filling, PotraceOptions, load_image_potrace};
 use serde_json::{Value, json};
 
 /// Case kinds this build runs.
@@ -27,7 +32,9 @@ pub const SUPPORTED_KINDS: &[&str] = &[
     "svg",
     "dxf",
     "svg_text",
+    "centerline",
     "raster",
+    "potrace",
     "image_op",
 ];
 
@@ -301,6 +308,15 @@ fn planned(
     .map_err(|e| CaseError::Invalid(e.to_string()))
 }
 
+/// The harness' autotrace double: prints a recorded SVG.
+struct Recorded(String);
+
+impl autotrace::Tracer for Recorded {
+    fn trace(&self, _png: &[u8], _args: &[String]) -> Result<String, autotrace::CenterlineError> {
+        Ok(self.0.clone())
+    }
+}
+
 /// A pixel token of the harness: 2 (grey), 6 (RGB) or 8 (ARGB) hex digits.
 fn pixel_token(tok: &str) -> Result<Argb, CaseError> {
     let v =
@@ -420,6 +436,42 @@ fn l2l_conf(case: &Value) -> Result<L2lConf, CaseError> {
         }
     }
     Ok(c)
+}
+
+/// The vectorize settings of a `potrace` case and its filling (`conf.dir`).
+fn potrace_options(case: &Value) -> Result<(PotraceOptions, Value), CaseError> {
+    let po = case.get("potrace").cloned().unwrap_or_else(|| json!({}));
+    let opt = |k: &str| po.get(k).and_then(Value::as_f64);
+    #[allow(clippy::cast_possible_truncation)]
+    let trace = TraceOptions {
+        turdsize: opt("spot_removal").map_or(2, |v| v as i32),
+        alphamax: opt("smoothing").unwrap_or(0.0),
+        curve_optimizing: opt("optimize").is_some(),
+        opttolerance: opt("optimize").unwrap_or(0.2),
+    };
+    let mut rest = case.clone();
+    let dir = rest
+        .get_mut("conf")
+        .and_then(Value::as_object_mut)
+        .and_then(|c| c.remove("dir"))
+        .unwrap_or_else(|| json!("Horizontal"));
+    let filling = match dir.as_str().unwrap_or_default() {
+        "None" => Filling::None,
+        "Horizontal" => Filling::Raster(Direction::Horizontal),
+        "Vertical" => Filling::Raster(Direction::Vertical),
+        "Diagonal" => Filling::Raster(Direction::Diagonal),
+        other => Filling::Vector(
+            fill_pattern(other).ok_or_else(|| CaseError::Invalid(format!("direction `{other}`")))?,
+        ),
+    };
+    Ok((
+        PotraceOptions {
+            trace,
+            optimize_fast: po.get("optimize_fast").and_then(Value::as_bool).unwrap_or(false),
+            filling,
+        },
+        rest,
+    ))
 }
 
 fn image_op(case: &Value) -> Result<Image, CaseError> {
@@ -624,21 +676,47 @@ pub fn run(case: &Value, read: &Reader<'_>) -> Result<Value, CaseError> {
                     )
                 });
             #[allow(clippy::cast_possible_truncation)]
-            let opts = svg::SvgOptions {
-                scale_to_mm: Some(float(case, "max_size")? as f32),
-                user_offset: offset,
-                legacy_bezier: !settings.smart_bezier,
-            };
-            let import = svg::import(&bytes, &opts).map_err(|e| CaseError::Invalid(e.to_string()))?;
-            let doc = import.into_single_layer(Some(&Source {
-                format: SourceFormat::Svg,
-                file: String::new(),
-            }));
-            let job = planned(&doc, &settings, VectorStyle::Svg, false)?;
+            let max_size = float(case, "max_size")? as f32;
+            let job =
+                autotrace::replay_svg(&bytes, max_size, offset, settings.smart_bezier, &settings.machine)
+                    .map_err(|e| CaseError::Invalid(e.to_string()))?;
             // LaserGRBL returns the converter text: lines joined with CRLF, split on LF
             let mut lines = job.lines;
             lines.push(String::new());
             Ok(json!({ "converter_output": lines }))
+        }
+        "centerline" => {
+            let img = case_image(field(case, "image")?)?;
+            let th = case.get("thresholds").cloned().unwrap_or_else(|| json!({}));
+            let on = |k: &str| th.get(k).and_then(Value::as_bool).unwrap_or(true);
+            let value = |k: &str, d: i64| th.get(k).and_then(Value::as_i64).unwrap_or(d);
+            #[allow(clippy::cast_possible_truncation)]
+            let options = CenterlineOptions {
+                corner_threshold: on("use_corner").then(|| value("corner", 110) as i32),
+                line_threshold: on("use_line").then(|| value("line", 10) as i32),
+            };
+            let name = field(case, "autotrace_output")?
+                .as_str()
+                .unwrap_or_default()
+                .to_owned();
+            let svg_text = read(&name).map_err(|e| CaseError::Input(name.clone(), e))?;
+            let tracer = Recorded(String::from_utf8_lossy(&svg_text).into_owned());
+            #[allow(clippy::cast_possible_truncation)]
+            let offset = (settings.offset.0 as f32, settings.offset.1 as f32);
+            let c = autotrace::centerline(
+                &img,
+                &options,
+                &tracer,
+                offset,
+                settings.smart_bezier,
+                &settings.machine,
+            )
+            .map_err(|e| CaseError::Invalid(e.to_string()))?;
+            let given = Image::decode(&c.png).map_err(|e| CaseError::Invalid(e.to_string()))?;
+            let mut out = file_result(&program_of(&c.lines, &settings));
+            out["autotrace_args"] = json!(c.args);
+            out["autotrace_input"] = dump_image(&given);
+            Ok(out)
         }
         "raster" => {
             let img = case_image(field(case, "image")?)?;
@@ -652,6 +730,18 @@ pub fn run(case: &Value, read: &Reader<'_>) -> Result<Value, CaseError> {
                 &load_image_l2l(&img, &conf, &opts),
                 &settings,
             )))
+        }
+        "potrace" => {
+            let img = case_image(field(case, "image")?)?;
+            let (options, rest) = potrace_options(case)?;
+            let conf = l2l_conf(&rest)?;
+            let opts = L2lOptions {
+                disable_g0: settings.machine.disable_g0,
+                unidirectional: settings.machine.unidirectional,
+                max_pwm: settings.machine.max_pwm,
+            };
+            let lines = load_image_potrace(&img, &options, &conf, &opts, settings.machine.support_pwm);
+            Ok(file_result(&program_of(&lines, &settings)))
         }
         "image_op" => Ok(json!({ "pixels": dump_image(&image_op(case)?) })),
         other => Err(CaseError::Unsupported(other.to_owned())),
@@ -785,6 +875,68 @@ mod tests {
         ] {
             assert!(raster(bad).is_err());
         }
+    }
+
+    #[test]
+    fn potrace_and_centerline_cases() {
+        let image = json!({"ascii": ["......", ".####.", ".####.", "......"]});
+        let run_po = |conf: Value, po: Value| {
+            run(
+                &json!({"kind": "potrace", "image": image, "conf": conf, "potrace": po}),
+                &no_files,
+            )
+        };
+        for dir in [
+            "None",
+            "Horizontal",
+            "Vertical",
+            "Diagonal",
+            "NewGrid",
+            "NewInsetFilling",
+        ] {
+            let r = run_po(
+                json!({"dir": dir, "res": 2.0}),
+                json!({"optimize": 0.3, "smoothing": 1.0, "spot_removal": 0}),
+            );
+            assert!(r.is_ok(), "{dir}: {r:?}");
+        }
+        assert!(run(&json!({"kind": "potrace", "image": image}), &no_files).is_ok());
+        assert!(run_po(json!({"dir": "Sideways"}), json!({})).is_err());
+
+        let svg = br#"<svg width="60" height="40"><path style="stroke:#000" d="M10 10L50 30"/></svg>"#;
+        let files = |name: &str| {
+            if name == "out.svg" {
+                Ok(svg.to_vec())
+            } else {
+                Err(format!("no file {name}"))
+            }
+        };
+        let c = run(
+            &json!({"kind": "centerline", "image": image, "autotrace_output": "out.svg",
+                    "thresholds": {"use_corner": false, "line": 25}}),
+            &files,
+        )
+        .unwrap();
+        let args = c["autotrace_args"].as_array().unwrap();
+        assert!(!args.iter().any(|a| a == "-corner-t"));
+        assert!(args.iter().any(|a| a == "2.5"));
+        assert_eq!(c["autotrace_input"].as_array().unwrap().len(), 4);
+        assert!(
+            run(
+                &json!({"kind": "centerline", "image": image, "autotrace_output": "x.svg"}),
+                &files
+            )
+            .is_err()
+        );
+        assert!(run(&json!({"kind": "centerline", "image": image}), &files).is_err());
+        let empty = |_: &str| Ok(Vec::new());
+        assert!(
+            run(
+                &json!({"kind": "centerline", "image": image, "autotrace_output": "e.svg"}),
+                &empty
+            )
+            .is_err()
+        );
     }
 
     #[test]
