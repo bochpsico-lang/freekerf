@@ -19,7 +19,7 @@ use freekerf_protocol::host::decimal;
 use freekerf_protocol::{
     ConsoleRow, Event, FirmwareKind, Host, HostError, HostSnapshot, Issue, JogDirection, ResumeSuggestion,
 };
-use freekerf_session::{ActionError, ActionSpec, Caller, NoParams, Registry, Tier};
+use freekerf_session::{NoParams, Registry};
 use freekerf_settings::{MachineCache, Settings, SettingsStore};
 use freekerf_transport::{EmulatorTransport, SerialTransport, Transport};
 use schemars::JsonSchema;
@@ -27,6 +27,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub mod analysis;
+
+pub use freekerf_session::{ActionError, ActionSpec, Caller, CallerKind, Tier};
 
 /// Rows kept in the console history.
 pub const CONSOLE_ROWS: usize = 5000;
@@ -43,6 +45,64 @@ pub enum ServiceEvent {
     ProgramLoaded,
 }
 
+impl ServiceEvent {
+    /// The event as JSON for front ends (`{"event": "...", ...}`).
+    #[must_use]
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::SettingsChanged => serde_json::json!({"event": "settings_changed"}),
+            Self::ProgramLoaded => serde_json::json!({"event": "program_loaded"}),
+            Self::Machine(MachineEvent::Connected { transport }) => {
+                serde_json::json!({"event": "connected", "transport": transport})
+            }
+            Self::Machine(MachineEvent::Disconnected { user }) => serde_json::json!({"event": "disconnected", "user": user}),
+            Self::Machine(MachineEvent::Host(e)) => {
+                serde_json::json!({"event": "host", "data": serde_json::to_value(e).unwrap_or(Value::Null)})
+            }
+        }
+    }
+
+    /// One line of text for a terminal console, when the event has one.
+    #[must_use]
+    pub fn console_line(&self) -> Option<String> {
+        use freekerf_protocol::CommandStatus;
+        match self {
+            Self::Machine(MachineEvent::Host(Event::Console(row))) => Some(match row {
+                ConsoleRow::Command { text, .. } => format!("> {text}"),
+                ConsoleRow::Result { result, status, decoded, .. } => match (status, decoded) {
+                    (CommandStatus::ResponseGood, _) => return None,
+                    (_, Some(d)) => format!("  {result} ({d})"),
+                    _ => format!("  {result}"),
+                },
+                ConsoleRow::Message { text, decoded, .. } => decoded.clone().unwrap_or_else(|| text.clone()),
+            }),
+            Self::Machine(MachineEvent::Host(Event::Issue(i))) => Some(format!("! issue: {i}")),
+            Self::Machine(MachineEvent::Host(Event::StatusChanged { new, .. })) => Some(format!("# {new}")),
+            Self::Machine(MachineEvent::Host(Event::JobEnded { lines, errors, time_ms })) => {
+                Some(format!("# job ended: {lines} lines, {errors} errors, {:.1} s", *time_ms as f64 / 1000.0))
+            }
+            Self::Machine(MachineEvent::Connected { transport }) => Some(format!("# connected: {transport}")),
+            Self::Machine(MachineEvent::Disconnected { .. }) => Some("# disconnected".into()),
+            _ => None,
+        }
+    }
+}
+
+/// The emulator served on a pseudo terminal (`freekerf emulate --pty`).
+#[cfg(unix)]
+pub mod emulator {
+    pub use freekerf_transport::pty::PtyEmulator;
+
+    /// Starts the emulator on a PTY; `timed`: motions take their real time.
+    ///
+    /// # Errors
+    /// No PTY available.
+    pub fn serve_pty(timed: bool) -> Result<PtyEmulator, String> {
+        let cfg = freekerf_emulator::DeviceConfig { timed, ..freekerf_emulator::DeviceConfig::default() };
+        freekerf_transport::pty::serve_emulator(cfg).map_err(|e| e.to_string())
+    }
+}
+
 /// Where the service keeps its files (none: memory only).
 #[derive(Default)]
 pub struct Stores {
@@ -55,6 +115,33 @@ pub struct Stores {
 impl std::fmt::Debug for Stores {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Stores").field("settings", &self.settings.is_some()).field("cache", &self.cache.is_some()).finish()
+    }
+}
+
+impl Stores {
+    /// Files in `dir`, or in the per-user directories when `None` (`$FREEKERF_HOME`
+    /// overrides them).
+    ///
+    /// # Errors
+    /// No home directory.
+    pub fn files(dir: Option<&Path>) -> Result<Self, String> {
+        let dirs = match dir {
+            Some(d) => freekerf_platform::Dirs::under(d),
+            None => freekerf_platform::Dirs::user().map_err(|e| e.to_string())?,
+        };
+        Ok(Self {
+            settings: Some(Arc::new(FileStore(dirs.settings_file()))),
+            cache: Some(Arc::new(FileStore(dirs.data_file("machine-cache.json")))),
+        })
+    }
+
+    /// Path of the settings file these stores use, if any.
+    #[must_use]
+    pub fn settings_path(dir: Option<&Path>) -> Option<std::path::PathBuf> {
+        match dir {
+            Some(d) => Some(freekerf_platform::Dirs::under(d).settings_file()),
+            None => freekerf_platform::Dirs::user().ok().map(|d| d.settings_file()),
+        }
     }
 }
 

@@ -49,6 +49,7 @@ assert_cmd = "2"
 clap = { version = "4", features = ["derive"] }
 criterion = { version = "0.5", default-features = false }
 crossbeam-channel = "0.5"
+ctrlc = "3"
 directories = "6"
 insta = { version = "1", features = ["json"] }
 nix = { version = "0.30", features = ["term", "fs", "poll"] }
