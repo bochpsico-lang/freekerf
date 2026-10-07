@@ -396,7 +396,7 @@ Updated by every PR that delivers a milestone item.
 | M0: test kit | `crates/testing/freekerf-testkit` (`SimClock`, `Bench`) | used by the protocol tests | `AGENTS.md` |
 | M0: docs and ADRs | `AGENTS.md`, `CLAUDE.md`, `doc/` | `cargo xtask check-docs` | `doc/adr/0001`-`0005` |
 | M1: G-code parser, state, analysis | `crates/core/freekerf-gcode` | `tests/golden.rs`, `tests/properties.rs`, unit tests | `doc/features/gcode-analysis.md` |
-| M1: protocol host (streaming, responses, status, `$$`/`$I`, overrides, jog, jobs, resume, custom code, life counters) | `crates/core/freekerf-protocol` | `tests/protocol.rs` (conformance scenarios), `tests/host_behaviour.rs`, unit tests | `doc/features/{connection,streaming,job-lifecycle,custom-code,jog,overrides,machine-settings,laser-life}.md` |
+| M1: protocol host (streaming, responses, status, `$$`/`$I`, overrides, jog, jobs, resume, custom code, life counters) | `crates/core/freekerf-protocol` | `tests/protocol.rs` (conformance scenarios), `tests/host_behaviour.rs`, `tests/buffer_properties.rs`, unit tests | `doc/features/{connection,streaming,job-lifecycle,custom-code,jog,overrides,machine-settings,laser-life}.md` |
 | M1: firmware variants | `crates/core/freekerf-protocol/src/firmware.rs` | `host_behaviour.rs` (banners, Smoothie, Marlin, Vigo) | `doc/features/firmware-variants.md` |
 | M1: emulator | `crates/core/freekerf-emulator`, `freekerf-transport` (in process, PTY) | unit tests, transport tests | `doc/features/emulator.md` |
 | M1: transports | `crates/native/freekerf-transport` | `tests/serial_pty.rs`, unit tests | `doc/features/connection.md` |
