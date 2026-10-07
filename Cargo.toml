@@ -1,0 +1,101 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/core/*",
+    "crates/config/*",
+    "crates/native/*",
+    "crates/runtime/*",
+    "crates/testing/*",
+    "apps/cli",
+    "tests",
+    "tools/xtask",
+]
+default-members = [
+    "crates/core/*",
+    "crates/config/*",
+    "crates/native/*",
+    "crates/runtime/*",
+    "crates/testing/*",
+    "apps/cli",
+    "tests",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "GPL-3.0-or-later"
+authors = ["The FreeKerf contributors"]
+repository = "https://github.com/freekerf/freekerf"
+homepage = "https://github.com/freekerf"
+publish = false
+
+[workspace.dependencies]
+# workspace crates
+freekerf-gcode = { path = "crates/core/freekerf-gcode", default-features = false }
+freekerf-protocol = { path = "crates/core/freekerf-protocol" }
+freekerf-emulator = { path = "crates/core/freekerf-emulator" }
+freekerf-session = { path = "crates/core/freekerf-session" }
+freekerf-settings = { path = "crates/config/freekerf-settings" }
+freekerf-transport = { path = "crates/native/freekerf-transport" }
+freekerf-platform = { path = "crates/native/freekerf-platform" }
+freekerf-machine = { path = "crates/runtime/freekerf-machine" }
+freekerf-service = { path = "crates/runtime/freekerf-service" }
+freekerf-testkit = { path = "crates/testing/freekerf-testkit" }
+
+# third party
+anyhow = "1"
+assert_cmd = "2"
+clap = { version = "4", features = ["derive"] }
+criterion = { version = "0.5", default-features = false }
+crossbeam-channel = "0.5"
+ctrlc = "3"
+directories = "6"
+insta = { version = "1", features = ["json"] }
+nix = { version = "0.31", features = ["term", "fs", "poll"] }
+predicates = "3"
+proptest = "1"
+rayon = "1"
+regex = "1"
+rust_decimal = { version = "1", default-features = false, features = ["std"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serialport = { version = "4", default-features = false }
+tempfile = "3"
+thiserror = "2"
+toml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[workspace.lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+# selected pedantic lints (see AGENTS.md); the rest of pedantic stays off
+cloned_instead_of_copied = "warn"
+explicit_iter_loop = "warn"
+flat_map_option = "warn"
+if_not_else = "warn"
+implicit_clone = "warn"
+inefficient_to_string = "warn"
+manual_let_else = "warn"
+match_same_arms = "warn"
+needless_pass_by_value = "warn"
+redundant_closure_for_method_calls = "warn"
+semicolon_if_nothing_returned = "warn"
+uninlined_format_args = "warn"
+unnested_or_patterns = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+todo = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

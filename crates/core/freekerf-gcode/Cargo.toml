@@ -1,0 +1,32 @@
+[package]
+name = "freekerf-gcode"
+description = "G-code commands, modal state, arcs, program analysis (ranges, quadrant) and time estimate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+default = ["parallel"]
+## parse large programs on all cores with rayon (off for wasm builds)
+parallel = ["dep:rayon"]
+
+[dependencies]
+rayon = { workspace = true, optional = true }
+rust_decimal.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+proptest.workspace = true
+serde_json.workspace = true
+
+[[bench]]
+name = "analysis"
+harness = false
+
+[lints]
+workspace = true

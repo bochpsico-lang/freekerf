@@ -1,0 +1,7 @@
+# Development toolchain (pinned stable). The minimum supported version (MSRV) is
+# `rust-version` in Cargo.toml and is checked by its own CI job.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy", "llvm-tools-preview"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

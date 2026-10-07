@@ -8,10 +8,14 @@ on:
 permissions:
   contents: read
 
+env:
+  CARGO_TERM_COLOR: always
+  # keep in sync with rust-toolchain.toml and `rust-version` in Cargo.toml
+  TOOLCHAIN: "1.97.0"
+  MSRV: "1.88"
+
 jobs:
-  # Becomes active as soon as the workspace Cargo.toml exists (milestone M0).
   licenses:
-    if: hashFiles('Cargo.toml') != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,14 +23,105 @@ jobs:
         with:
           command: check
 
-  rust:
-    if: hashFiles('Cargo.toml') != ''
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.TOOLCHAIN }}
           components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - name: layer rules
+        run: cargo xtask check-layers
+      - name: generated docs are up to date
+        run: cargo xtask check-docs
+      - name: rustdoc
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      # thresholds: doc/coverage.md (90 % workspace, 95 % freekerf-gcode and freekerf-protocol)
+      - name: tests with coverage (workspace >= 90 % lines)
+        run: cargo llvm-cov --workspace --exclude xtask --exclude freekerf-testkit --fail-under-lines 90 --summary-only
+      - name: freekerf-gcode >= 95 % lines
+        run: cargo llvm-cov -p freekerf-gcode --fail-under-lines 95 --summary-only
+      - name: freekerf-protocol >= 95 % lines
+        run: cargo llvm-cov -p freekerf-protocol --fail-under-lines 95 --summary-only
+
+  wasm-core:
+    # the core does no I/O: it builds for a target without an operating system
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session
+
+  cross-check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-pc-windows-gnu, aarch64-apple-darwin]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace --all-targets --target ${{ matrix.target }}
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.MSRV }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo +${{ env.MSRV }} check --workspace --all-targets
+
+  conformance:
+    # conformance's protocol and golden (G-code) layers against the Rust build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p freekerf-cli
+      - uses: actions/checkout@v4
+        with:
+          repository: freekerf/conformance
+          path: conformance
+      - uses: astral-sh/setup-uv@v6
+      - name: make test-rust
+        working-directory: conformance
+        env:
+          FREEKERF_BIN: ${{ github.workspace }}/target/debug/freekerf
+        run: |
+          if ! grep -q '^test-rust:' Makefile; then
+            # until freekerf/conformance merges the Rust host (branch claude/rust-host)
+            echo "::warning::conformance main has no test-rust target yet: using branch claude/rust-host"
+            git fetch --depth 1 origin claude/rust-host
+            git checkout FETCH_HEAD
+          fi
+          uv sync
+          make test-rust
