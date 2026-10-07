@@ -31,6 +31,7 @@ flowchart TB
     document[freekerf-document<br/>layers, objects, .fkproj]
     planner[freekerf-planner<br/>document to G-code]
     import[freekerf-import<br/>SVG, DXF to document]
+    raster[freekerf-raster<br/>image ops, dithering, Line2Line]
   end
   cli --> service
   cli --> settings
@@ -52,11 +53,13 @@ flowchart TB
   service --> planner
   service --> import
   import --> document
+  raster --> gcode
+  service --> raster
 ```
 
 | Layer | Crates | Rule |
 | --- | --- | --- |
-| core | gcode, protocol, emulator, session, geometry, document, planner, import | no I/O, no threads of their own, no clock; builds for `wasm32-unknown-unknown` |
+| core | gcode, protocol, emulator, session, geometry, document, planner, import, raster | no I/O, no threads of their own, no clock; builds for `wasm32-unknown-unknown` |
 | config | settings | core only; files through the `SettingsStore` trait |
 | native | transport, platform | core only |
 | runtime | machine, service | core, config, native |

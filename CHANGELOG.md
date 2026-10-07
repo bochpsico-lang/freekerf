@@ -39,6 +39,10 @@ All notable changes to FreeKerf are documented here. The format follows
 - `freekerf-import`: SVG (colour layers, all path commands, shapes, transforms,
   units) and ASCII DXF (lines, true arcs, splines fitted with arcs, blocks,
   colours, units) import, identical to LaserGRBL except for documented fixes.
+- `freekerf-raster`: bitmaps (PNG, JPEG, BMP, GIF), LaserGRBL's image operations
+  (grayscale formulas, invert, threshold, whitenize, fill, outline, resize), nine
+  dithering modes and Line2Line raster G-code, identical to LaserGRBL on the
+  conformance goldens (GDI+ steps within the tolerance of ADR 0008).
 - `freekerf import-case`: runs `conformance` importer golden cases.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.

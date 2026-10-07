@@ -99,11 +99,13 @@ import-case --kinds`); kinds not implemented yet are skipped.
 | DIV-038 | The SVG/DXF writer reads the firmware type once per process | Read for every job from the options | fixed | `writer.rs` tests |
 | DIV-039 | Cutting test label for a pass range reads `1 - F2 pass` | Same | kept (golden `gen_cutting_grid`; a label, no effect on the job) | conformance `gen_cutting_grid` |
 | DIV-040 | Hershey coordinates written with `double.ToString()`: 15 significant digits, floating point noise included (`Y0.00299999999999989`) | Same (`freekerf_gcode::dotnet`) | kept (goldens; harmless for the machine) | conformance `hershey_*`, `gen_*` |
+| DIV-041 | Error diffusion never reaches row 0 or column 0 (a uniform mid-grey first row comes out all black); the green and blue errors are swapped | Same (`freekerf_raster::dither`) | kept (goldens `img_dither_*`; one row and column, no effect on grey images) | conformance `img_dither_*` |
+| DIV-042 | Random dithering is seeded with the clock: the same image engraves differently each time | Seeded by the caller: the same image and seed give the same result | fixed | `dither.rs::every_mode_gives_black_and_white` |
 | DIV-043 | A malformed saved layer setting is half loaded | Layer settings are document data, validated when read | not applicable | — |
 | DIV-044 | Every layer pass starts with a comment-only line (an empty command); pen up/down lines keep a space before their comment (`S0 `) | Same | kept (every `svg_*`/`dxf_*` golden) | conformance `svg_*`, `dxf_*` |
 
-DIV-041, DIV-042 and DIV-045 to DIV-050 (raster, Potrace, Centerline findings) get
-their entries with the importers that contain them.
+DIV-045 to DIV-050 (Potrace, Centerline findings) get their entries with the
+importers that contain them.
 
 ## FreeKerf only
 
@@ -116,3 +118,4 @@ their entries with the importers that contain them.
 | DIV-105 | No "safety countdown" before a job | UI concern: the fire confirmation of the desktop app (M4) | — |
 | DIV-106 | No intermediate converter text: LaserGRBL's centerline conversion builds a G-code string with debugging comments (`G0X1Y1(M)`) before loading it; FreeKerf plans the job directly | The comments never reach the machine or a saved file. Conformance compares `svg_text` cases for the Rust host without the comments | conformance `svgtext_*` |
 | DIV-107 | SVG path data that does not begin with a moveto, when it is the first element of its colour, starts at its first point; LaserGRBL draws a line from wherever the laser was | The previous position is arbitrary (another colour, another pass). After an element of the same colour both draw from its end | `convert.rs` tests, conformance `svg_fill_capture_edge` |
+| DIV-108 | A nearest-neighbour resize copies the nearest pixel; libgdiplus (Mono's GDI+, where the goldens were recorded) blends neighbours and the transparent border even in `NearestNeighbor` mode | Windows GDI+ and the mode's definition do not blend (ADR 0008) | `ops.rs` tests, conformance `img_resize_nearest`, `img_resize_keep_alpha` (marked) |
