@@ -1,0 +1,19 @@
+[package]
+name = "freekerf-cli"
+description = "The `freekerf` command line: analyze, send, console, emulate, host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "freekerf"
+path = "src/main.rs"
+
+[dependencies]
+
+[lints]
+workspace = true
