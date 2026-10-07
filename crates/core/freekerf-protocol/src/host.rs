@@ -1185,7 +1185,9 @@ impl Host {
                 c.tp.job_error();
             }
             if p.q.cmd.is_settings_write() && status == CommandStatus::ResponseGood {
-                // stored even when no table was read yet (FINDINGS F-16 fixed: DIV-016)
+                // stored and used even when no table was read yet (FINDINGS F-16
+                // fixed: DIV-016): a table of no version would ignore the value
+                c.settings.adopt_version(c.version.as_ref());
                 c.settings.add_or_update(p.q.cmd.text());
                 c.events.push_back(Event::SettingsChanged);
             }

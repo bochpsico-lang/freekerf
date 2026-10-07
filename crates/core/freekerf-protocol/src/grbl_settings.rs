@@ -234,6 +234,14 @@ impl GrblSettings {
         }
     }
 
+    /// Gives a table that belongs to no version (no `$$` read yet) the board's
+    /// version, so the values written since are used (DIV-016).
+    pub fn adopt_version(&mut self, version: Option<&FirmwareVersion>) {
+        if self.version.is_none() {
+            self.version = version.cloned();
+        }
+    }
+
     /// Sets `$n` directly.
     pub fn set(&mut self, n: u32, value: impl Into<String>) {
         self.values.insert(n, value.into());
@@ -363,6 +371,14 @@ mod tests {
         assert!(s.set_if_exists("$1 = 30"));
         assert_eq!(s.get(1), Some("30"));
         assert!(!s.set_if_exists("garbage"));
+        // a table without version ignores its values until it adopts one
+        let mut t = GrblSettings::default();
+        t.add_or_update("$130=500");
+        assert_eq!(t.table_width(), Decimal::from(300));
+        t.adopt_version(Some(&FirmwareVersion::new(1, 1)));
+        assert_eq!(t.table_width(), Decimal::from(500));
+        t.adopt_version(Some(&FirmwareVersion::new(0, 9)));
+        assert!(t.version().is_some_and(FirmwareVersion::is_v11));
         assert!(s.has_changes(1, "31") && !s.has_changes(1, "30") && s.has_changes(2, "x"));
         assert_eq!(s.iter().count(), 1);
         assert_eq!(s.validate(33), None);
