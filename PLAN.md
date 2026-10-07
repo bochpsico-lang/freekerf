@@ -340,10 +340,16 @@ Crates: `geometry`, `raster`, `document`, `import`, `planner`, `materials`, `mig
 
 **Acceptance:** `conformance` *golden (importers)* green with `LASERGRBL_HOST=rust`; `platform_dependent` (GDI+) cases compared with a documented tolerance. Script engine and MCP integration tests of §9.6 green for the headless scope; `doc/features/scripting.md`, `doc/features/mcp.md`, the generated `doc/features/actions.md` and `api.d.ts`. Fuzz targets for SVG/DXF/G-code running in a scheduled CI job. Integration test import → plan → stream to the emulator. Feature pages for every importer and generator.
 
-### M3 — UI spike (2–3 weeks)
-Run the "What the spike must validate" table of `design/tech-notes.md` (canvas with 20,000 paths + an 8000×6000 image, gestures, 60 Hz geometry IPC, serial, remote client, accessibility, packaging) for **Tauri 2** and, for tests 1, 2 and 5, for **Flutter + flutter_rust_bridge**.
+### M3 — UI toolkit: research + targeted validation (1–2 weeks)
+The code spike was replaced by desk research: [`doc/research/ui-toolkit.md`](doc/research/ui-toolkit.md) (Tauri 2, Flutter + flutter_rust_bridge, Kotlin Multiplatform/Compose, Slint/iced/egui/Dioxus, Electron). It proposes **Flutter + flutter_rust_bridge v2** ([ADR 0006](doc/adr/0006-ui-toolkit.md), status *proposed*). Verification on import found errors in part of the report's evidence (§0 of the report), so three targeted experiments decide:
 
-**Acceptance:** `doc/adr/000X-ui-toolkit.md` with the decision and the measured numbers; spike code kept in a branch, not in `main`. The current recommendation is Tauri 2; it changes only if WebKitGTK on Linux fails tests 1 or 2.
+- **A — canvas stress:** 20,000 paths + 8000×6000 image, pan/zoom; Flutter, Tauri 2 (WebKitGTK), Electron.
+- **B — IPC latency:** 60 Hz positions + 5 MB batches; flutter_rust_bridge v2 vs. Tauri 2 raw `ipc::Response`/channels.
+- **C — Wayland multi-touch:** pinch, two-finger pan, drag cancel on the second finger.
+
+All on Linux (Wayland and X11, Intel and NVIDIA GPUs), with the pass criteria of §8 of the report. Experiment code lives in a branch or a scratch repository, never in `main`.
+
+**Acceptance:** results of A–C recorded in the report; ADR 0006 moved to *accepted* (or rewritten for the toolkit that passed, following its "What decides it" section); §2, §6 and M4 updated for the chosen toolkit.
 
 ### M4 — Desktop MVP (10–16 weeks)
 - `ui/web` grown from `design/prototypes/app`: Design/Produce modes, canvas (pan, zoom, pinch, selection, handles), colour layers, inspector, machine panel, console, fire confirmation, job recovery, welcome flow and LaserGRBL migration.
@@ -407,6 +413,7 @@ Updated by every PR that delivers a milestone item.
 | M1: conformance `RustHost`, Rust analyzer, `rust_divergence`, `make test-rust` | `freekerf/conformance` (`lasergrbl_harness/host.py`, `golden.py`, `Makefile`; freekerf/conformance#2) | `make test-rust`: 32 passed, 3 runs in a row; CI job `conformance` | `doc/features/host-protocol.md`, conformance `README.md` |
 | M1: large files | `freekerf-gcode` (`rayon`, feature `parallel`) | `benches/analysis.rs` | `doc/benchmarks.md` |
 | M1: divergences | — | conformance (no marker needed so far) | `doc/divergences.md` |
+| M3: UI toolkit research (proposal, pending experiments A–C) | — | — | `doc/research/ui-toolkit.md`, `doc/adr/0006-ui-toolkit.md` |
 
 ## 14. Decisions already taken
 
