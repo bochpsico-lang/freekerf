@@ -81,10 +81,17 @@ impl Report {
     }
 }
 
-/// `round(float(str(d)), 6)` of `golden.py`.
+/// `round(float(str(d)), 6)` of `golden.py`: the decimal text parsed as a float
+/// (correctly rounded), then rounded to 6 decimals. `f64_from_decimal` (the lossy
+/// `(double)decimal` used by the analysis) can differ in the last bits for large
+/// values, e.g. 12345678901234567890.123456789.
 #[must_use]
 pub fn num(value: Decimal) -> f64 {
-    round_to(f64_from_decimal(value), 6)
+    let exact = value
+        .to_string()
+        .parse()
+        .unwrap_or_else(|_| f64_from_decimal(value));
+    round_to(exact, 6)
 }
 
 /// Milliseconds as seconds, rounded to 3 decimals.
@@ -135,5 +142,9 @@ mod tests {
         assert_eq!(r.quadrant, "Unknown");
         assert_eq!(millis_to_seconds(1047), 1.047);
         assert_eq!(num(Decimal::new(1_234_567_891, 9)), 1.234_568);
+        // the float nearest to the decimal text, as Python's float(str(d))
+        let big: Decimal = "12345678901234567890.123456789".parse().unwrap();
+        assert_eq!(num(big), 12_345_678_901_234_567_890.0_f64);
+        assert_eq!(num(-big), -12_345_678_901_234_567_890.0_f64);
     }
 }
