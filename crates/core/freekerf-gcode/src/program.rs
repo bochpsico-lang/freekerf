@@ -227,6 +227,17 @@ mod tests {
     }
 
     #[test]
+    fn negative_feed_gives_a_negative_offset() {
+        // A negative feed gives a negative arc time and the cumulative offset
+        // goes down; LaserGRBL does the same (conformance golden
+        // `negative_feed.nc`: offsets_s [0.0, -376.991]).
+        let p = Program::parse("F-1g1P\ni1", &AnalysisOptions::default());
+        let offsets: Vec<i64> = p.lines().iter().map(|l| l.offset_ms).collect();
+        assert_eq!(offsets, vec![0, -376_991]);
+        assert_eq!(p.estimated_ms(), -376_991);
+    }
+
+    #[test]
     fn bom_and_invalid_utf8_are_tolerated() {
         let p = Program::parse_bytes(b"\xef\xbb\xbfG0 X1\n\xffG1 X2", &AnalysisOptions::default());
         assert_eq!(p.len(), 2);
