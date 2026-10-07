@@ -13,8 +13,12 @@ with the same number (`F-12` → `DIV-012`); FreeKerf-only differences start at
 
 When a conformance test fails because of a *fixed* entry, it is marked
 `@pytest.mark.rust_divergence("DIV-NNN")` in conformance (strict xfail for the
-Rust host only). Today no protocol or golden (G-code) test needs the marker: the
-fixed entries are outside what those layers observe.
+Rust host only; a golden case carries the mark in the first line of its `.nc`).
+Marked today: DIV-015, DIV-016, DIV-019, DIV-020, DIV-022, DIV-024, DIV-030,
+DIV-101 (protocol tests) and DIV-052, DIV-053 (golden cases). The differential layer
+of conformance (`make test-diff`) removes these differences with one explicit rule
+per id. Which white-box behaviour is compared where: conformance's
+`doc/traceability.md`.
 
 ## Protocol and streaming
 
@@ -31,7 +35,8 @@ fixed entries are outside what those layers observe.
 | DIV-024 | `WriteConfig`/`RefreshConfig` silently do nothing unless Idle/Alarm | The action fails with "settings can be written only in Idle or Alarm" | fixed | `host_behaviour.rs::manual_commands_are_refused_during_a_job` |
 | DIV-028 | `$$`/`$I` without answer in 10 s: the query stays pending and the next `ok` shifts every later response | The query fails after 10 s but stays pending, so a late answer acknowledges the query itself | fixed | `host_behaviour.rs::settings_refresh_and_timeouts` |
 | DIV-029 | `WriteConfig` busy-waits with no timeout | Writes are a non-blocking operation; the service waits for its end with a 30 s timeout | fixed | `service.rs::manual_commands_settings_and_jog` |
-| DIV-030 | A job started during the connect-time `$$`/`$I` is lost (queue pointers swapped) and stays "in program" forever | Starting a job is refused (`busy`) until those queries end; manual commands wait in the queue | fixed | `host_behaviour.rs::run_program_preconditions` |
+| DIV-030 | A job started during the connect-time `$$`/`$I` goes to a private queue: its sent lines count as replies to `$$` (the settings read ends early), the lines not sent when the queues are restored are dropped, and the job ends as if complete, footer included (or stays "in program" forever) | Starting a job is refused (`busy`) until those queries end; manual commands wait in the queue | fixed | `host_behaviour.rs::run_program_preconditions`, conformance `test_jobs.py::test_job_started_during_the_connect_time_settings_read_is_cut_short` |
+| DIV-051 | Any received line that contains `ok` in any case and is not a status report or a banner (`[MSG:Look up]`) acknowledges the oldest pending line ("broken ok") | Same | kept (the wire traffic depends on it; a stricter rule needs real-board evidence) | `host_behaviour.rs::ip_messages_alarms_and_broken_oks`, conformance `test_responses.py::test_any_message_containing_ok_acknowledges_a_line` |
 
 ## G-code parsing and analysis
 
@@ -42,6 +47,8 @@ fixed entries are outside what those layers observe.
 | DIV-004 | Removing an inline comment keeps the spaces on both sides | Same | kept (goldens `commands`) | golden `comments_spacing` |
 | DIV-012 | `G2/G3 R`: center at the chord midpoint | Same | kept (goldens `arcs`) | golden `arcs`, `arc.rs::r_arcs_use_the_chord_midpoint` |
 | DIV-018 | G20 never tracked: inch programs analyzed as mm | Same | kept (golden `inches`) | golden `inches` |
+| DIV-052 | Lines are upper-cased with the current culture: on Turkish Windows `i` becomes `İ` (an arc's `I` is lost and `İ` is sent to the board); on en-US `ı` becomes `I` | Unicode default upper-casing, the same on every locale (`i` → `I`; the conformance harness runs LaserGRBL with the invariant culture, where `ı` stays) | fixed | golden `casing` (conformance), `command.rs::normalizes_spaces_and_comments` |
+| DIV-053 | The first exception while analyzing a command (e.g. the time of an absurd move such as `X99999999999999999999` overflowing `TimeSpan`) stops the analysis: later commands get no time offset and do not extend the ranges | That move's time counts as 0 ms and the analysis goes on | fixed | golden `analysis_overflow` (conformance), `number.rs::millis_round_like_timespan` |
 | — | Time estimates rounded to whole ms per command (`TimeSpan.From*`) | Same (`number::millis_from`) | kept | every golden `offsets_s` |
 
 ## Configuration, versions, settings

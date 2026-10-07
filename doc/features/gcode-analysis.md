@@ -42,4 +42,6 @@ conformance `tests/golden/test_golden.py` with `LASERGRBL_HOST=rust`.
 
 ## Divergences
 
-DIV-001, DIV-004, DIV-012, DIV-017, DIV-018 (all kept).
+DIV-001, DIV-004, DIV-012, DIV-017, DIV-018 (kept); DIV-052 (letters upper-cased
+without a locale) and DIV-053 (an overflowing move counts 0 ms, the analysis goes on)
+(fixed).
