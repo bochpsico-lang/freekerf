@@ -47,9 +47,9 @@ proptest! {
     #[test]
     fn inclusion_exclusion_holds_for_rectangles(a in rect(), b in rect()) {
         let s = boolean::DEFAULT_SCALE;
-        let i = area(&boolean::boolean(&[a.clone()], &[b.clone()], Op::Intersection, s).unwrap());
-        let u = area(&boolean::boolean(&[a.clone()], &[b.clone()], Op::Union, s).unwrap());
-        let d = area(&boolean::boolean(&[a.clone()], &[b.clone()], Op::Difference, s).unwrap());
+        let i = area(&boolean::boolean(std::slice::from_ref(&a), std::slice::from_ref(&b), Op::Intersection, s).unwrap());
+        let u = area(&boolean::boolean(std::slice::from_ref(&a), std::slice::from_ref(&b), Op::Union, s).unwrap());
+        let d = area(&boolean::boolean(std::slice::from_ref(&a), std::slice::from_ref(&b), Op::Difference, s).unwrap());
         let (aa, ab) = (area(&[a]), area(&[b]));
         let tol = 1e-3 * (aa + ab) + 1e-2;
         prop_assert!((u - (aa + ab - i)).abs() < tol);
@@ -58,7 +58,7 @@ proptest! {
 
     #[test]
     fn shrinking_never_grows(a in rect(), delta in 0.01..5.0f64) {
-        let inner = boolean::offset(&[a.clone()], -delta, boolean::Join::Square, boolean::DEFAULT_SCALE).unwrap();
+        let inner = boolean::offset(std::slice::from_ref(&a), -delta, boolean::Join::Square, boolean::DEFAULT_SCALE).unwrap();
         prop_assert!(area(&inner) <= area(&[a]) + 1e-6);
     }
 
