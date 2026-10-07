@@ -14,6 +14,13 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 | Sounds, notifications, hotkeys, safety countdown | UI concerns | M4a (hotkeys, countdown), M5 (sounds, notifications) |
 | Importing LaserGRBL settings (`Settings.bin`), buttons, counters | `freekerf-migrate` | M2 |
 
+## Postponed from M2
+
+| Item | Why | When |
+| --- | --- | --- |
+| Per-object transform in the document (scale/rotate without touching the geometry) | needs the editor's handles to be useful | M4/M5 |
+| Zipped project container (`.fkproj` with images as separate entries) | JSON with base64 images is enough until projects with many large images appear | when needed |
+
 ## Decided
 
 - UI toolkit: Tauri 2, desktop first (ADR 0006). Multi-touch problems found on Linux are listed here when they appear and handled later.

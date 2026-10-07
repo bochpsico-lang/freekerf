@@ -431,6 +431,7 @@ Updated by every PR that delivers a milestone item.
 | M1: large files | `freekerf-gcode` (`rayon`, feature `parallel`) | `benches/analysis.rs` | `doc/benchmarks.md` |
 | M1: divergences | — | conformance (no marker needed so far) | `doc/divergences.md` |
 | M2: geometry (paths, transforms, Bézier flattening, arc fitting, booleans, offsets, hatch fillings, path ordering) | `crates/core/freekerf-geometry` (Clipper 6.4.2 port in `src/clipper`) | unit tests, `tests/properties.rs`, `tests/clipper_differential.rs` (440 cases vs. LaserGRBL's `Clipper.cs`) | ADR 0007, `doc/architecture.md` |
+| M2: document model and `.fkproj` (versioned, generated JSON schema) | `crates/core/freekerf-document`, `doc/schema/fkproj.schema.json` | unit tests, `tests/properties.rs` (round trip) | `doc/features/projects.md` |
 | M3: UI toolkit decision (Tauri 2) | — | — | `doc/research/ui-toolkit.md`, `doc/adr/0006-ui-toolkit.md` |
 | M4a: plan split into M4a / M4b | `PLAN.md` §10 | — | `PLAN.md` |
 

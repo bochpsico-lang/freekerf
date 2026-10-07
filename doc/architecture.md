@@ -28,6 +28,7 @@ flowchart TB
     gcode[freekerf-gcode<br/>parser, state, analysis]
     emulator[freekerf-emulator<br/>sans-IO Grbl 1.1 device]
     geometry[freekerf-geometry<br/>paths, booleans, hatch fillings]
+    document[freekerf-document<br/>layers, objects, .fkproj]
   end
   cli --> service
   cli --> settings
@@ -43,11 +44,12 @@ flowchart TB
   settings --> protocol
   protocol --> gcode
   emulator --> gcode
+  document --> geometry
 ```
 
 | Layer | Crates | Rule |
 | --- | --- | --- |
-| core | gcode, protocol, emulator, session, geometry | no I/O, no threads of their own, no clock; builds for `wasm32-unknown-unknown` |
+| core | gcode, protocol, emulator, session, geometry, document | no I/O, no threads of their own, no clock; builds for `wasm32-unknown-unknown` |
 | config | settings | core only; files through the `SettingsStore` trait |
 | native | transport, platform | core only |
 | runtime | machine, service | core, config, native |
@@ -120,3 +122,4 @@ sequenceDiagram
 | --- | --- | --- |
 | `doc/features/actions.md` | the service registry | `cargo xtask check-docs` |
 | `doc/schema/settings.schema.json` | `freekerf_settings::Settings` | `cargo xtask check-docs` |
+| `doc/schema/fkproj.schema.json` | `freekerf_document::Document` | `cargo xtask check-docs` |

@@ -1,0 +1,1265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Document",
+  "description": "A project.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "description": "Always [`FORMAT`].",
+      "type": "string"
+    },
+    "layers": {
+      "description": "Layers in user order (execution order also depends on their mode).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Layer"
+      }
+    },
+    "next_object_id": {
+      "description": "Next object id (ids are never reused).",
+      "type": "integer",
+      "format": "uint64",
+      "default": 0,
+      "minimum": 0
+    },
+    "objects": {
+      "description": "Objects in drawing order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Object"
+      }
+    },
+    "version": {
+      "description": "File version ([`VERSION`] when written by this FreeKerf).",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "layers",
+    "objects"
+  ],
+  "$defs": {
+    "Adjustments": {
+      "description": "Grey-level adjustments, in the units of LaserGRBL's dialog.",
+      "type": "object",
+      "properties": {
+        "blue": {
+          "description": "Blue weight, percent.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "brightness": {
+          "description": "Brightness, percent (100 = unchanged).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "contrast": {
+          "description": "Contrast, percent (100 = unchanged).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "formula": {
+          "description": "Grey formula.",
+          "$ref": "#/$defs/GrayFormula"
+        },
+        "green": {
+          "description": "Green weight, percent.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "red": {
+          "description": "Red weight, percent (`Custom` formula).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "threshold": {
+          "description": "Black/white threshold, percent (`None`: keep the grey levels).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "white_clip": {
+          "description": "Lighter greys become white, percent.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "formula",
+        "red",
+        "green",
+        "blue",
+        "brightness",
+        "contrast",
+        "white_clip"
+      ]
+    },
+    "Bytes": {
+      "description": "binary data, base64",
+      "type": "string",
+      "contentEncoding": "base64"
+    },
+    "CenterlineSettings": {
+      "description": "Centerline (autotrace) thresholds; `None` disables one.",
+      "type": "object",
+      "properties": {
+        "corner_threshold": {
+          "description": "Corner threshold, degrees.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "line_threshold": {
+          "description": "Line threshold, tenths of a pixel.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      }
+    },
+    "Color": {
+      "description": "sRGB colour `#RRGGBB`",
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    "DitherMode": {
+      "description": "Dithering algorithm (`ImageTransform.DitheringMode`).",
+      "oneOf": [
+        {
+          "description": "Atkinson.",
+          "type": "string",
+          "const": "atkinson"
+        },
+        {
+          "description": "Floyd–Steinberg.",
+          "type": "string",
+          "const": "floyd_steinberg"
+        },
+        {
+          "description": "Burkes.",
+          "type": "string",
+          "const": "burks"
+        },
+        {
+          "description": "Jarvis, Judice and Ninke.",
+          "type": "string",
+          "const": "jarvis"
+        },
+        {
+          "description": "Random threshold.",
+          "type": "string",
+          "const": "random"
+        },
+        {
+          "description": "Sierra (two rows).",
+          "type": "string",
+          "const": "sierra2"
+        },
+        {
+          "description": "Sierra (three rows).",
+          "type": "string",
+          "const": "sierra3"
+        },
+        {
+          "description": "Sierra Lite.",
+          "type": "string",
+          "const": "sierra_light"
+        },
+        {
+          "description": "Stucki.",
+          "type": "string",
+          "const": "stucki"
+        }
+      ]
+    },
+    "FillPattern": {
+      "description": "The filling patterns (LaserGRBL's `Direction.New*` values).",
+      "oneOf": [
+        {
+          "description": "Horizontal lines.",
+          "type": "string",
+          "const": "horizontal"
+        },
+        {
+          "description": "Vertical lines.",
+          "type": "string",
+          "const": "vertical"
+        },
+        {
+          "description": "Lines at 45° (up to the left).",
+          "type": "string",
+          "const": "diagonal"
+        },
+        {
+          "description": "Lines at -45°.",
+          "type": "string",
+          "const": "reverse_diagonal"
+        },
+        {
+          "description": "Horizontal and vertical lines.",
+          "type": "string",
+          "const": "grid"
+        },
+        {
+          "description": "Both diagonals.",
+          "type": "string",
+          "const": "diagonal_grid"
+        },
+        {
+          "description": "Small `+` marks.",
+          "type": "string",
+          "const": "cross"
+        },
+        {
+          "description": "Small `×` marks.",
+          "type": "string",
+          "const": "diagonal_cross"
+        },
+        {
+          "description": "Small diamonds.",
+          "type": "string",
+          "const": "squares"
+        },
+        {
+          "description": "Zig-zag lines.",
+          "type": "string",
+          "const": "zig_zag"
+        },
+        {
+          "description": "Hilbert curve tiles.",
+          "type": "string",
+          "const": "hilbert"
+        },
+        {
+          "description": "Concentric insets of the shape outline.",
+          "type": "string",
+          "const": "inset"
+        }
+      ]
+    },
+    "FillSettings": {
+      "description": "Hatch filling of a layer.",
+      "type": "object",
+      "properties": {
+        "lines_per_mm": {
+          "description": "Lines per millimetre (the distance between lines is `1 / lines_per_mm`).",
+          "type": "number",
+          "format": "double"
+        },
+        "pattern": {
+          "description": "Pattern.",
+          "$ref": "#/$defs/FillPattern"
+        }
+      },
+      "required": [
+        "pattern",
+        "lines_per_mm"
+      ]
+    },
+    "GrayFormula": {
+      "description": "Grey conversion formula (`ImageTransform.Formula`).",
+      "oneOf": [
+        {
+          "description": "(R + G + B) / 3.",
+          "type": "string",
+          "const": "simple_average"
+        },
+        {
+          "description": "Weighted average.",
+          "type": "string",
+          "const": "weight_average"
+        },
+        {
+          "description": "Luminance with the \"optical correct\" weights.",
+          "type": "string",
+          "const": "optical_correct"
+        },
+        {
+          "description": "The red, green and blue percentages of [`Adjustments`].",
+          "type": "string",
+          "const": "custom"
+        }
+      ]
+    },
+    "ImageData": {
+      "description": "The pixels of an image.",
+      "oneOf": [
+        {
+          "description": "The file as imported (PNG, JPEG, BMP, GIF): decoded when needed.",
+          "type": "object",
+          "properties": {
+            "bytes": {
+              "description": "The file bytes.",
+              "$ref": "#/$defs/Bytes"
+            },
+            "kind": {
+              "type": "string",
+              "const": "encoded"
+            },
+            "media_type": {
+              "description": "Media type (`image/png`...).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "media_type",
+            "bytes"
+          ]
+        },
+        {
+          "description": "Decoded pixels, 8-bit RGBA, row by row from the top.",
+          "type": "object",
+          "properties": {
+            "height": {
+              "description": "Height in pixels.",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "rgba"
+            },
+            "pixels": {
+              "description": "`width * height * 4` bytes.",
+              "$ref": "#/$defs/Bytes"
+            },
+            "width": {
+              "description": "Width in pixels.",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "width",
+            "height",
+            "pixels"
+          ]
+        }
+      ]
+    },
+    "ImageEdit": {
+      "description": "A non-destructive edit of the image, applied in order before processing.\nCoordinates refer to a preview of `reference` size (as in the raster dialog,\nwhere the user clicks on a scaled preview).",
+      "oneOf": [
+        {
+          "description": "Keep a rectangle `[x, y, w, h]`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "crop"
+            },
+            "rect": {
+              "description": "Rectangle in preview coordinates.",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "maxItems": 4,
+              "minItems": 4
+            },
+            "reference": {
+              "description": "Size of the preview.",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          },
+          "required": [
+            "op",
+            "rect",
+            "reference"
+          ]
+        },
+        {
+          "description": "Remove white borders.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "auto_trim"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Rotate 90° clockwise.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "rotate_cw"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Rotate 90° counterclockwise.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "rotate_ccw"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Invert colours.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "invert"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Upside down.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "flip_h"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Mirror.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "flip_v"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "description": "Flood fill from a point with a colour (`#AARRGGBB` as four bytes).",
+          "type": "object",
+          "properties": {
+            "argb": {
+              "description": "ARGB colour.",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "maximum": 255,
+                "minimum": 0
+              },
+              "maxItems": 4,
+              "minItems": 4
+            },
+            "at": {
+              "description": "Seed point in preview coordinates.",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "op": {
+              "type": "string",
+              "const": "fill"
+            },
+            "reference": {
+              "description": "Size of the preview.",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "tolerance": {
+              "description": "Colour tolerance.",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "op",
+            "at",
+            "reference",
+            "argb",
+            "tolerance"
+          ]
+        },
+        {
+          "description": "Keep only the outline of the region at a point.",
+          "type": "object",
+          "properties": {
+            "at": {
+              "description": "Seed point in preview coordinates.",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "op": {
+              "type": "string",
+              "const": "outline"
+            },
+            "reference": {
+              "description": "Size of the preview.",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          },
+          "required": [
+            "op",
+            "at",
+            "reference"
+          ]
+        }
+      ]
+    },
+    "ImageObject": {
+      "description": "An image placed on the bed.",
+      "type": "object",
+      "properties": {
+        "data": {
+          "description": "Pixels.",
+          "$ref": "#/$defs/ImageData"
+        },
+        "edits": {
+          "description": "Edits applied before processing.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ImageEdit"
+          }
+        },
+        "position": {
+          "description": "Lower-left corner on the bed, mm.",
+          "$ref": "#/$defs/Point"
+        },
+        "settings": {
+          "description": "How it becomes a job.",
+          "$ref": "#/$defs/RasterSettings"
+        },
+        "size_mm": {
+          "description": "Size on the bed, mm `[width, height]`.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        }
+      },
+      "required": [
+        "data",
+        "position",
+        "size_mm",
+        "settings"
+      ]
+    },
+    "Interpolation": {
+      "description": "Resampling filter for resizing.",
+      "oneOf": [
+        {
+          "description": "Nearest neighbour (pixel art, sharp edges).",
+          "type": "string",
+          "const": "nearest_neighbor"
+        },
+        {
+          "description": "Bilinear.",
+          "type": "string",
+          "const": "bilinear"
+        },
+        {
+          "description": "Bicubic.",
+          "type": "string",
+          "const": "bicubic"
+        },
+        {
+          "description": "High-quality bilinear.",
+          "type": "string",
+          "const": "high_quality_bilinear"
+        },
+        {
+          "description": "High-quality bicubic (LaserGRBL's default).",
+          "type": "string",
+          "const": "high_quality_bicubic"
+        }
+      ]
+    },
+    "Layer": {
+      "description": "A colour layer: the objects of one colour and how to engrave or cut them.",
+      "type": "object",
+      "properties": {
+        "color": {
+          "description": "Colour that groups the objects.",
+          "$ref": "#/$defs/Color"
+        },
+        "fill": {
+          "description": "Filling (used by `fill` and `fill_and_line`).",
+          "$ref": "#/$defs/FillSettings",
+          "default": {
+            "lines_per_mm": 10.0,
+            "pattern": "horizontal"
+          }
+        },
+        "id": {
+          "description": "Identifier.",
+          "$ref": "#/$defs/LayerId"
+        },
+        "mode": {
+          "description": "Processing mode.",
+          "$ref": "#/$defs/LayerMode",
+          "default": "line"
+        },
+        "name": {
+          "description": "Display name (the colour when empty).",
+          "type": "string"
+        },
+        "passes": {
+          "description": "Number of passes (at least 1).",
+          "type": "integer",
+          "format": "uint32",
+          "default": 1,
+          "minimum": 0
+        },
+        "power": {
+          "description": "Laser power as the `S` value sent to the machine.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "speed_mm_min": {
+          "description": "Feed rate while the laser is on, mm/min.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "visible": {
+          "description": "Shown in the editor (hidden layers are still planned unless `ignore`).",
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "required": [
+        "id",
+        "color",
+        "speed_mm_min",
+        "power"
+      ]
+    },
+    "LayerId": {
+      "description": "Identifier of a layer inside a document.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "LayerMode": {
+      "description": "How the objects of a layer are processed (LaserGRBL's `SvgLayerMode`).",
+      "oneOf": [
+        {
+          "description": "Engrave the outlines.",
+          "type": "string",
+          "const": "line"
+        },
+        {
+          "description": "Engrave the area inside the shapes with a hatch pattern.",
+          "type": "string",
+          "const": "fill"
+        },
+        {
+          "description": "Fill, then engrave the outline for a clean edge.",
+          "type": "string",
+          "const": "fill_and_line"
+        },
+        {
+          "description": "Cut through the outlines; cut layers always run last.",
+          "type": "string",
+          "const": "cut"
+        },
+        {
+          "description": "Skip the layer.",
+          "type": "string",
+          "const": "ignore"
+        }
+      ]
+    },
+    "LineDirection": {
+      "description": "Direction of raster lines (`ImageProcessor.Direction` for Line2Line).",
+      "oneOf": [
+        {
+          "description": "Left to right, then back.",
+          "type": "string",
+          "const": "horizontal"
+        },
+        {
+          "description": "Bottom to top, then back.",
+          "type": "string",
+          "const": "vertical"
+        },
+        {
+          "description": "Diagonal strips.",
+          "type": "string",
+          "const": "diagonal"
+        }
+      ]
+    },
+    "Object": {
+      "description": "An object on a layer.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Identifier.",
+          "$ref": "#/$defs/ObjectId"
+        },
+        "layer": {
+          "description": "Layer it belongs to.",
+          "$ref": "#/$defs/LayerId"
+        },
+        "name": {
+          "description": "Display name (element id, file name...).",
+          "type": "string"
+        },
+        "source": {
+          "description": "Origin.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Source"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "description": "Vector paths in millimetres (Y up), in drawing order.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "shape"
+            },
+            "paths": {
+              "description": "Paths.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Path"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "paths"
+          ]
+        },
+        {
+          "description": "A raster image.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "image"
+            }
+          },
+          "$ref": "#/$defs/ImageObject",
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "An element of an imported file that was not converted; kept so the user\nsees it (and LaserGRBL-compatible output writes its comment).",
+          "type": "object",
+          "properties": {
+            "element": {
+              "description": "Element name (`text`, `image`, `polygon`...).",
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "unsupported"
+            },
+            "reason": {
+              "description": "Reason.",
+              "$ref": "#/$defs/UnsupportedReason"
+            }
+          },
+          "required": [
+            "kind",
+            "element",
+            "reason"
+          ]
+        }
+      ],
+      "required": [
+        "id",
+        "layer"
+      ]
+    },
+    "ObjectId": {
+      "description": "Identifier of an object inside a document (never reused).",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "Path": {
+      "description": "A connected sequence of segments.",
+      "type": "object",
+      "properties": {
+        "closed": {
+          "description": "The last segment ends on `start` and the shape is meant to be closed.",
+          "type": "boolean",
+          "default": false
+        },
+        "segments": {
+          "description": "Segments, each from the end of the previous one.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Segment"
+          }
+        },
+        "start": {
+          "description": "First point.",
+          "$ref": "#/$defs/Point"
+        }
+      },
+      "required": [
+        "start",
+        "segments"
+      ]
+    },
+    "Point": {
+      "description": "A point (or a vector) with `f64` coordinates.",
+      "type": "object",
+      "properties": {
+        "x": {
+          "description": "X.",
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "description": "Y.",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ]
+    },
+    "RasterSettings": {
+      "description": "How an image becomes a job (the raster dialog values).",
+      "type": "object",
+      "properties": {
+        "adjustments": {
+          "description": "Grey adjustments.",
+          "$ref": "#/$defs/Adjustments"
+        },
+        "border_speed_mm_min": {
+          "description": "Feed rate of borders (vectorize, centerline), mm/min.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "centerline": {
+          "description": "Centerline options.",
+          "$ref": "#/$defs/CenterlineSettings"
+        },
+        "direction": {
+          "description": "Line direction for line-by-line tools.",
+          "$ref": "#/$defs/LineDirection"
+        },
+        "dithering": {
+          "description": "Dithering algorithm (`dithering` tool).",
+          "$ref": "#/$defs/DitherMode"
+        },
+        "interpolation": {
+          "description": "Resampling filter.",
+          "$ref": "#/$defs/Interpolation"
+        },
+        "laser_off": {
+          "description": "Laser off command.",
+          "type": "string"
+        },
+        "laser_on": {
+          "description": "Laser on command (`M3` constant power, `M4` dynamic).",
+          "type": "string"
+        },
+        "lines_per_mm": {
+          "description": "Lines per millimetre.",
+          "type": "number",
+          "format": "double"
+        },
+        "mark_speed_mm_min": {
+          "description": "Feed rate of raster lines, mm/min.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "max_power": {
+          "description": "`S` for black.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "min_power": {
+          "description": "`S` for white (raster) / unused below.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "tool": {
+          "description": "Processing tool.",
+          "$ref": "#/$defs/RasterTool"
+        },
+        "vectorize": {
+          "description": "Vectorize options.",
+          "$ref": "#/$defs/VectorizeSettings"
+        }
+      },
+      "required": [
+        "tool",
+        "direction",
+        "lines_per_mm",
+        "adjustments",
+        "dithering",
+        "interpolation",
+        "vectorize",
+        "centerline",
+        "border_speed_mm_min",
+        "mark_speed_mm_min",
+        "min_power",
+        "max_power",
+        "laser_on",
+        "laser_off"
+      ]
+    },
+    "RasterTool": {
+      "description": "What the raster dialog does with the image (`ImageProcessor.Tool`).",
+      "oneOf": [
+        {
+          "description": "Line by line, power proportional to the grey level.",
+          "type": "string",
+          "const": "line_to_line"
+        },
+        {
+          "description": "Line by line on a dithered (black and white) image.",
+          "type": "string",
+          "const": "dithering"
+        },
+        {
+          "description": "Trace the borders as vectors (Potrace), optionally fill them.",
+          "type": "string",
+          "const": "vectorize"
+        },
+        {
+          "description": "Trace the centre lines of strokes (autotrace).",
+          "type": "string",
+          "const": "centerline"
+        },
+        {
+          "description": "Line by line on the image as it is (no grey processing).",
+          "type": "string",
+          "const": "passthrough"
+        }
+      ]
+    },
+    "Segment": {
+      "description": "One piece of a path, from the end of the previous one.",
+      "oneOf": [
+        {
+          "description": "A straight line.",
+          "type": "object",
+          "properties": {
+            "end": {
+              "description": "End point.",
+              "$ref": "#/$defs/Point"
+            },
+            "kind": {
+              "type": "string",
+              "const": "line"
+            }
+          },
+          "required": [
+            "kind",
+            "end"
+          ]
+        },
+        {
+          "description": "A circular arc (never a full turn unless start and end coincide).",
+          "type": "object",
+          "properties": {
+            "ccw": {
+              "description": "Counterclockwise (`G3`); clockwise (`G2`) otherwise. Y points up.",
+              "type": "boolean"
+            },
+            "center": {
+              "description": "Centre.",
+              "$ref": "#/$defs/Point"
+            },
+            "end": {
+              "description": "End point.",
+              "$ref": "#/$defs/Point"
+            },
+            "kind": {
+              "type": "string",
+              "const": "arc"
+            }
+          },
+          "required": [
+            "kind",
+            "end",
+            "center",
+            "ccw"
+          ]
+        },
+        {
+          "description": "A cubic Bézier curve.",
+          "type": "object",
+          "properties": {
+            "c1": {
+              "description": "First control point.",
+              "$ref": "#/$defs/Point"
+            },
+            "c2": {
+              "description": "Second control point.",
+              "$ref": "#/$defs/Point"
+            },
+            "end": {
+              "description": "End point.",
+              "$ref": "#/$defs/Point"
+            },
+            "kind": {
+              "type": "string",
+              "const": "cubic"
+            }
+          },
+          "required": [
+            "kind",
+            "c1",
+            "c2",
+            "end"
+          ]
+        }
+      ]
+    },
+    "Source": {
+      "description": "Where an object came from.",
+      "type": "object",
+      "properties": {
+        "file": {
+          "description": "File name (no directory), empty when unknown.",
+          "type": "string"
+        },
+        "format": {
+          "description": "Format.",
+          "$ref": "#/$defs/SourceFormat"
+        }
+      },
+      "required": [
+        "format"
+      ]
+    },
+    "SourceFormat": {
+      "description": "The file format an object was imported from: how LaserGRBL wrote its G-code\ndiffers per source (pen comments in SVG, none in DXF), and the planner keeps\nthat when asked for LaserGRBL-compatible output.",
+      "oneOf": [
+        {
+          "description": "SVG drawing.",
+          "type": "string",
+          "const": "svg"
+        },
+        {
+          "description": "DXF drawing.",
+          "type": "string",
+          "const": "dxf"
+        },
+        {
+          "description": "Raster image.",
+          "type": "string",
+          "const": "image"
+        },
+        {
+          "description": "Drawn in FreeKerf.",
+          "type": "string",
+          "const": "native"
+        }
+      ]
+    },
+    "UnsupportedReason": {
+      "description": "Why an element of an imported file was not converted.",
+      "oneOf": [
+        {
+          "description": "The element kind is not converted (SVG `text`, `image`).",
+          "type": "string",
+          "const": "not_converted"
+        },
+        {
+          "description": "A `polyline`/`polygon` whose points have no commas.",
+          "type": "string",
+          "const": "missing_comma"
+        }
+      ]
+    },
+    "VectorFill": {
+      "description": "Filling of vectorized shapes.",
+      "oneOf": [
+        {
+          "description": "Raster lines inside the shapes (drawn and resampled, then line by line).",
+          "type": "object",
+          "properties": {
+            "direction": {
+              "$ref": "#/$defs/LineDirection"
+            },
+            "kind": {
+              "type": "string",
+              "const": "raster"
+            }
+          },
+          "required": [
+            "kind",
+            "direction"
+          ]
+        },
+        {
+          "description": "Vector hatch lines clipped by the shapes.",
+          "type": "object",
+          "properties": {
+            "direction": {
+              "$ref": "#/$defs/FillPattern"
+            },
+            "kind": {
+              "type": "string",
+              "const": "hatch"
+            }
+          },
+          "required": [
+            "kind",
+            "direction"
+          ]
+        }
+      ]
+    },
+    "VectorizeSettings": {
+      "description": "Vectorize (Potrace) options; `None` disables an option.",
+      "type": "object",
+      "properties": {
+        "adaptive_quality": {
+          "description": "Lower the resolution where detail allows (\"adaptive quality\").",
+          "type": "boolean"
+        },
+        "down_sampling": {
+          "description": "Down-sampling factor before tracing.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "fill": {
+          "description": "Filling of the traced shapes.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VectorFill"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fill_lines_per_mm": {
+          "description": "Filling quality, lines per mm.",
+          "type": "number",
+          "format": "double"
+        },
+        "optimize": {
+          "description": "Curve optimization tolerance.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "optimize_fast": {
+          "description": "Reorder the traced paths to reduce travel.",
+          "type": "boolean"
+        },
+        "smoothing": {
+          "description": "Corner smoothing (`alphamax`).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "spot_removal": {
+          "description": "Drop shapes up to this many pixels (\"turd size\").",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "adaptive_quality",
+        "optimize_fast",
+        "fill_lines_per_mm"
+      ]
+    }
+  }
+}
