@@ -22,7 +22,7 @@ from pixels, from RGBA bytes or decoded from PNG, JPEG, BMP or GIF bytes
 | `threshold(img, t, apply)` | `ImageAttributes.SetThreshold` | cut-off `round(t·255)`; without `apply` only the gray matrix |
 | `whitenize(img, threshold, demo)` | `ImageTransform.Whitenize` | pixels lighter than the threshold become white (red in demo mode) |
 | `fill(img, at, color, tolerance)` / `outline(img, at)` | flood fill and outline tools | 4-connected |
-| `resize(img, w, h, kill_alpha, filter)` | `ImageTransform.ResizeImage` | nearest neighbour, bilinear, bicubic |
+| `resize(img, w, h, kill_alpha, filter)` | `ImageTransform.ResizeImage` | smooth filters: libgdiplus' scaling (Cairo's box filter, `gdi::draw_scaled`); nearest neighbour: the nearest pixel |
 
 ## Dithering (`dither`)
 
@@ -44,9 +44,12 @@ that matter (`disable_g0`, `unidirectional`, `max_pwm`).
 ## Platform differences
 
 The GDI+ steps (colour matrix, threshold, resize) are implemented in Rust, so the
-results are the same on every platform and in wasm. The conformance goldens of
-those steps were recorded with libgdiplus; they are compared with the tolerance of
-[ADR 0008](../adr/0008-gdiplus-tolerance.md).
+results are the same on every platform and in wasm. They follow libgdiplus, where
+the conformance goldens were recorded: `gdi::draw_scaled` is libgdiplus'
+`DrawImage` scaling (Cairo and pixman arithmetic, premultiplied alpha tables). Cases
+drawn through GDI+ are compared with the tolerance of
+[ADR 0008](../adr/0008-gdiplus-tolerance.md); today all but the nearest-neighbour
+resize (DIV-108) match exactly.
 
 ## Divergences
 

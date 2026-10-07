@@ -34,6 +34,13 @@ Cyotek Ltd., http://www.cyotek.com, distributed under the MIT License:
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
 
+crates/core/freekerf-raster/src/gdi.rs: GDI+ image scaling as Mono's libgdiplus
+does it, ported from libgdiplus 6.1 (Copyright (c) Novell, Inc. and the Mono
+contributors, MIT License; gdi_unpremultiply.bin is its alpha table), pixman 0.42
+(Copyright (c) Keith Packard, Red Hat, Inc. and others, MIT License) and Cairo 1.18
+(Copyright (c) Red Hat, Inc. and others, LGPL-2.1 or MPL-1.1, used here under the
+LGPL-2.1's permission to apply the GNU GPL). The MIT License text is above.
+
 crates/core/freekerf-geometry/src/clipper: a Rust port of Clipper 6.4.2
 (polygon clipping and offsetting), Copyright (c) 2010-2017 Angus Johnson,
 http://www.angusj.com, distributed under the Boost Software License 1.0:
