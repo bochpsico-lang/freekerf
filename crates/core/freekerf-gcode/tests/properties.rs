@@ -48,13 +48,11 @@ proptest! {
     #[test]
     fn analysis_never_panics(lines in proptest::collection::vec(gcode_line(), 0..40)) {
         let p = Program::parse(&lines.join("\n"), &AnalysisOptions::default());
-        let mut last = i64::MIN;
-        for l in p.lines() {
-            // offsets only grow unless a negative dwell is used
-            if !l.command.is_pause() {
-                prop_assert!(l.offset_ms >= last || last == i64::MIN || l.offset_ms == last);
-            }
-            last = l.offset_ms;
-        }
+        // Offsets are not monotonic: a negative dwell or a negative feed (an arc
+        // at F-1) gives a negative duration, as in LaserGRBL (see
+        // `program::tests::negative_feed_gives_a_negative_offset`).
+        // What always holds: the estimate is the offset of the last line.
+        let last = p.lines().last().map_or(0, |l| l.offset_ms);
+        prop_assert_eq!(p.estimated_ms(), last);
     }
 }
