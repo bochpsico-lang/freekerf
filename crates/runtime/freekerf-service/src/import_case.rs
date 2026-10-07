@@ -7,14 +7,17 @@
 //! they map to FreeKerf's planner options. Input files are read through the
 //! caller's reader (relative names under the cases' `inputs` directory).
 
+use freekerf_document::{Color, Document, FillSettings, Layer, LayerId, LayerMode, Source, SourceFormat};
 use freekerf_gcode::report::{millis_to_seconds, num};
 use freekerf_gcode::{AnalysisOptions, Command, Decimal, Program, TimingConfig};
+use freekerf_geometry::hatch::FillPattern;
+use freekerf_import::{Import, dxf, svg};
 use freekerf_planner::generators::{self, CuttingTest, GreyscaleTest, ShakeTest};
-use freekerf_planner::{Firmware, MachineOptions, hershey};
+use freekerf_planner::{Firmware, Job, MachineOptions, PlanOptions, VectorStyle, hershey};
 use serde_json::{Value, json};
 
 /// Case kinds this build runs.
-pub const SUPPORTED_KINDS: &[&str] = &["generator", "hershey"];
+pub const SUPPORTED_KINDS: &[&str] = &["generator", "hershey", "svg", "dxf", "svg_text"];
 
 /// Error of a case: malformed, unsupported or failing to read its input.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -163,12 +166,134 @@ fn program_of(lines: &[String], settings: &CaseSettings) -> Program {
     p
 }
 
+/// LaserGRBL's `ImageProcessor.Direction` names of hatch fillings; other values
+/// (raster directions, `None`) give no filling.
+fn fill_pattern(name: &str) -> Option<FillPattern> {
+    Some(match name {
+        "NewHorizontal" => FillPattern::Horizontal,
+        "NewVertical" => FillPattern::Vertical,
+        "NewDiagonal" => FillPattern::Diagonal,
+        "NewReverseDiagonal" => FillPattern::ReverseDiagonal,
+        "NewGrid" => FillPattern::Grid,
+        "NewDiagonalGrid" => FillPattern::DiagonalGrid,
+        "NewCross" => FillPattern::Cross,
+        "NewDiagonalCross" => FillPattern::DiagonalCross,
+        "NewSquares" => FillPattern::Squares,
+        "NewZigZag" => FillPattern::ZigZag,
+        "NewHilbert" => FillPattern::Hilbert,
+        "NewInsetFilling" => FillPattern::Inset,
+        _ => return None,
+    })
+}
+
+fn layer_mode(name: &str) -> Result<LayerMode, CaseError> {
+    Ok(match name {
+        "Line" => LayerMode::Line,
+        "Fill" => LayerMode::Fill,
+        "FillAndLine" => LayerMode::FillAndLine,
+        "Cut" => LayerMode::Cut,
+        "Ignore" => LayerMode::Ignore,
+        other => return Err(CaseError::Invalid(format!("unknown layer mode `{other}`"))),
+    })
+}
+
+/// The layers of a case (`make_layers` of the harness): the listed ones, or every
+/// scanned colour with `layer_defaults` over `LAYER_DEFAULTS`.
+fn case_layers(case: &Value, import: &Import) -> Result<Vec<Layer>, CaseError> {
+    let defaults = json!({"mode": "Line", "speed": 1000, "power": 1000, "passes": 1});
+    let merge = |spec: &Value| {
+        let mut m = defaults.as_object().cloned().unwrap_or_default();
+        if let Some(d) = case.get("layer_defaults").and_then(Value::as_object) {
+            m.extend(d.clone());
+        }
+        if let Some(o) = spec.as_object() {
+            m.extend(o.clone());
+        }
+        Value::Object(m)
+    };
+    let specs: Vec<Value> = match case.get("layers").and_then(Value::as_array) {
+        Some(list) => list.iter().map(merge).collect(),
+        None => import
+            .colors
+            .iter()
+            .map(|c| merge(&json!({"color": c.color.to_string()})))
+            .collect(),
+    };
+    specs
+        .iter()
+        .map(|s| {
+            let color: Color = text(s, "color")?
+                .parse()
+                .map_err(|_| CaseError::Invalid("layer colour".into()))?;
+            let mut l = Layer::new(
+                LayerId(0),
+                color,
+                as_u32(&s["speed"]).unwrap_or(0),
+                as_u32(&s["power"]).unwrap_or(0),
+            );
+            l.mode = layer_mode(&text(s, "mode")?)?;
+            l.passes = as_u32(&s["passes"]).unwrap_or(1);
+            let mut fill = FillSettings {
+                pattern: FillPattern::Horizontal,
+                lines_per_mm: s.get("lines_per_mm").and_then(Value::as_f64).unwrap_or(10.0),
+            };
+            if let Some(f) = s.get("fill").and_then(Value::as_str) {
+                match fill_pattern(f) {
+                    Some(p) => fill.pattern = p,
+                    None => fill.lines_per_mm = 0.0, // a raster direction: no hatch lines
+                }
+            }
+            l.fill = fill;
+            Ok(l)
+        })
+        .collect()
+}
+
+fn scan_json(import: &Import) -> Value {
+    Value::Array(
+        import
+            .colors
+            .iter()
+            .map(|c| json!({"color": c.color.to_string(), "count": c.count}))
+            .collect(),
+    )
+}
+
+fn input<'a>(case: &Value, read: &Reader<'a>) -> Result<Vec<u8>, CaseError> {
+    let name = match (
+        case.get("input").and_then(Value::as_str),
+        case.get("resource").and_then(Value::as_str),
+    ) {
+        (Some(i), _) => i.to_owned(),
+        // an svg embedded in LaserGRBL.exe: a file of inputs/resources/ named by the resource
+        (None, Some(r)) => format!("resources/{r}"),
+        (None, None) => return Err(CaseError::Invalid("missing `input`".into())),
+    };
+    read(&name).map_err(|e| CaseError::Input(name, e))
+}
+
+fn planned(
+    doc: &Document,
+    settings: &CaseSettings,
+    style: VectorStyle,
+    preamble: bool,
+) -> Result<Job, CaseError> {
+    freekerf_planner::plan(
+        doc,
+        &PlanOptions {
+            machine: settings.machine.clone(),
+            vector_style: Some(style),
+            layer_preamble: preamble,
+        },
+    )
+    .map_err(|e| CaseError::Invalid(e.to_string()))
+}
+
 /// Runs a case. `read` gives the bytes of an input file.
 ///
 /// # Errors
 /// Malformed or unsupported cases, unreadable inputs.
 pub fn run(case: &Value, read: &Reader<'_>) -> Result<Value, CaseError> {
-    let _ = read;
     let settings = CaseSettings::from_case(case)?;
     let kind = case.get("kind").and_then(Value::as_str).unwrap_or_default();
     match kind {
@@ -229,6 +354,69 @@ pub fn run(case: &Value, read: &Reader<'_>) -> Result<Value, CaseError> {
             };
             Ok(file_result(&program_of(&lines, &settings)))
         }
+        "svg" | "dxf" => {
+            let bytes = input(case, read)?;
+            let (import, format, style) = if kind == "svg" {
+                let opts = svg::SvgOptions {
+                    legacy_bezier: !settings.smart_bezier,
+                    ..svg::SvgOptions::default()
+                };
+                let i = svg::import(&bytes, &opts).map_err(|e| CaseError::Invalid(e.to_string()))?;
+                (i, SourceFormat::Svg, VectorStyle::Svg)
+            } else {
+                let tolerance = case
+                    .get("spline_tolerance")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(settings.spline_tolerance);
+                let opts = dxf::DxfOptions {
+                    spline_tolerance: tolerance,
+                };
+                let i = dxf::import(&bytes, &opts).map_err(|e| CaseError::Invalid(e.to_string()))?;
+                (i, SourceFormat::Dxf, VectorStyle::Dxf)
+            };
+            let scan = scan_json(&import);
+            let layers = case_layers(case, &import)?;
+            let source = Source {
+                format,
+                file: String::new(),
+            };
+            let doc = import.into_document(layers, Some(&source));
+            let job = planned(&doc, &settings, style, true)?;
+            let mut out = file_result(&job.program(&settings.analysis()));
+            out["scan"] = scan;
+            Ok(out)
+        }
+        "svg_text" => {
+            // the conversion half of LaserGRBL's centerline: every element, no layers,
+            // scaled to `max_size`, moved by `offset`
+            let bytes = input(case, read)?;
+            #[allow(clippy::cast_possible_truncation)]
+            let offset = case
+                .get("offset")
+                .and_then(Value::as_array)
+                .map_or((0.0, 0.0), |a| {
+                    (
+                        a[0].as_f64().unwrap_or(0.0) as f32,
+                        a[1].as_f64().unwrap_or(0.0) as f32,
+                    )
+                });
+            #[allow(clippy::cast_possible_truncation)]
+            let opts = svg::SvgOptions {
+                scale_to_mm: Some(float(case, "max_size")? as f32),
+                user_offset: offset,
+                legacy_bezier: !settings.smart_bezier,
+            };
+            let import = svg::import(&bytes, &opts).map_err(|e| CaseError::Invalid(e.to_string()))?;
+            let doc = import.into_single_layer(Some(&Source {
+                format: SourceFormat::Svg,
+                file: String::new(),
+            }));
+            let job = planned(&doc, &settings, VectorStyle::Svg, false)?;
+            // LaserGRBL returns the converter text: lines joined with CRLF, split on LF
+            let mut lines = job.lines;
+            lines.push(String::new());
+            Ok(json!({ "converter_output": lines }))
+        }
         other => Err(CaseError::Unsupported(other.to_owned())),
     }
 }
@@ -259,6 +447,78 @@ mod tests {
         assert_eq!(g["gcode"][0], "M5");
         assert!(g["summary"]["count"].as_u64().unwrap() > 10);
         assert!(g["summary"]["estimated_time_s"].as_f64().unwrap() > 0.0);
+    }
+
+    #[test]
+    fn layer_specs_and_inputs() {
+        for (name, p) in [
+            ("NewHorizontal", FillPattern::Horizontal),
+            ("NewVertical", FillPattern::Vertical),
+            ("NewDiagonal", FillPattern::Diagonal),
+            ("NewReverseDiagonal", FillPattern::ReverseDiagonal),
+            ("NewGrid", FillPattern::Grid),
+            ("NewDiagonalGrid", FillPattern::DiagonalGrid),
+            ("NewCross", FillPattern::Cross),
+            ("NewDiagonalCross", FillPattern::DiagonalCross),
+            ("NewSquares", FillPattern::Squares),
+            ("NewZigZag", FillPattern::ZigZag),
+            ("NewHilbert", FillPattern::Hilbert),
+            ("NewInsetFilling", FillPattern::Inset),
+        ] {
+            assert_eq!(fill_pattern(name), Some(p));
+        }
+        assert_eq!(fill_pattern("Horizontal"), None);
+        for m in ["Line", "Fill", "FillAndLine", "Cut", "Ignore"] {
+            assert!(layer_mode(m).is_ok());
+        }
+        assert!(layer_mode("x").is_err());
+        let import = Import::default();
+        let layers = case_layers(
+            &json!({"layers": [{"color": "#FF0000", "mode": "Cut", "fill": "Vertical", "passes": 3}],
+                    "layer_defaults": {"speed": 77}}),
+            &import,
+        )
+        .unwrap();
+        assert_eq!(
+            (layers[0].speed_mm_min, layers[0].passes, layers[0].mode),
+            (77, 3, LayerMode::Cut)
+        );
+        assert_eq!(layers[0].fill.lines_per_mm, 0.0);
+        assert!(case_layers(&json!({"layers": [{"color": "red"}]}), &import).is_err());
+        assert!(
+            case_layers(
+                &json!({"layers": [{"color": "#000000", "mode": "Nope"}]}),
+                &import
+            )
+            .is_err()
+        );
+        // a resource is a file of inputs/resources/
+        let seen = std::cell::RefCell::new(String::new());
+        let read = |n: &str| {
+            *seen.borrow_mut() = n.to_owned();
+            Err("missing".to_owned())
+        };
+        let e = run(&json!({"kind": "svg", "resource": "LaserGRBL.X.svg"}), &read).unwrap_err();
+        assert_eq!(*seen.borrow(), "resources/LaserGRBL.X.svg");
+        assert!(matches!(e, CaseError::Input(..)));
+        assert!(run(&json!({"kind": "dxf"}), &no_files).is_err());
+        assert!(
+            run(
+                &json!({"kind": "svg_text", "input": "a.svg", "max_size": 1.0}),
+                &no_files
+            )
+            .is_err()
+        );
+        let bad_svg = |_: &str| Ok(b"<svg".to_vec());
+        assert!(run(&json!({"kind": "svg", "input": "a.svg"}), &bad_svg).is_err());
+        assert!(run(&json!({"kind": "dxf", "input": "a.dxf"}), &bad_svg).is_err());
+        assert!(
+            run(
+                &json!({"kind": "svg_text", "input": "a.svg", "max_size": 1.0}),
+                &bad_svg
+            )
+            .is_err()
+        );
     }
 
     #[test]

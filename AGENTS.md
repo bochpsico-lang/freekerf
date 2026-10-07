@@ -21,6 +21,7 @@ crates/core/       pure logic, no I/O, builds for wasm32
   freekerf-gcode       commands, modal state, arcs, analysis, time estimate
   freekerf-geometry    paths, curves, transforms, Clipper 6.4.2 port, hatch fillings
   freekerf-document    project model (layers, objects, cut/raster settings), .fkproj
+  freekerf-import      SVG / DXF bytes -> document (colour layers)
   freekerf-planner     document -> G-code (LaserGRBL writer), generators, Hershey
   freekerf-protocol    sans-IO host state machine (port of GrblCore) + firmware variants
   freekerf-emulator    sans-IO Grbl 1.1 device (simulator, tests)
@@ -52,7 +53,7 @@ cargo xtask gen-docs                         # regenerate doc/features/actions.m
 cargo xtask check-docs                       # CI: generated docs are committed
 cargo llvm-cov --workspace --exclude xtask --exclude freekerf-testkit --summary-only
 cargo bench -p freekerf-gcode                # 1M-line analysis (doc/benchmarks.md)
-cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session -p freekerf-geometry -p freekerf-document -p freekerf-planner
+cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session -p freekerf-geometry -p freekerf-document -p freekerf-planner -p freekerf-import
 cargo deny check
 
 cargo run -p freekerf-cli -- analyze file.nc --json

@@ -409,6 +409,7 @@ Updated by every PR that delivers a milestone item.
 | M2: document model and `.fkproj` (versioned, generated JSON schema) | `crates/core/freekerf-document`, `doc/schema/fkproj.schema.json` | unit tests, `tests/properties.rs` (round trip) | `doc/features/projects.md` |
 | M2: planner (layer order, fillings, LaserGRBL G-code writer), generators, Hershey | `crates/core/freekerf-planner`, `freekerf-gcode/src/dotnet.rs` | unit tests, `freekerf-gcode/tests/dotnet_format.rs` (vs. Mono), conformance `generator`/`hershey` goldens | `doc/features/{planner,test-patterns}.md` |
 | M2: conformance importer runner (`freekerf import-case`, `LASERGRBL_HOST=rust`) | `freekerf-service/src/import_case.rs`, `apps/cli`; freekerf/conformance#9 | `apps/cli/tests/cli.rs`, conformance `make test-rust` | `doc/features/cli.md`, conformance `README.md` |
+| M2: SVG and DXF import | `crates/core/freekerf-import` (`svg/`, `dxf/`) | unit tests, `tests/properties.rs`, `freekerf-service/tests/import_cases.rs`, conformance `svg_*`/`dxf_*`/`svg_text` (freekerf/conformance#10) | `doc/features/{svg-import,dxf-import}.md`, `doc/divergences.md` |
 | M3: UI toolkit decision (Tauri 2) | — | — | `doc/research/ui-toolkit.md`, `doc/adr/0006-ui-toolkit.md` |
 
 ## 14. Decisions already taken

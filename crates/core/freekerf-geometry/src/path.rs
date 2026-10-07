@@ -89,6 +89,10 @@ pub struct Path {
     /// The last segment ends on `start` and the shape is meant to be closed.
     #[serde(default)]
     pub closed: bool,
+    /// Drawn from where the previous path ended, without a travel move (SVG path
+    /// data that does not begin with a moveto).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub from_current: bool,
 }
 
 impl Path {
@@ -99,6 +103,7 @@ impl Path {
             start,
             segments: Vec::new(),
             closed: false,
+            from_current: false,
         }
     }
 
@@ -220,6 +225,7 @@ impl Path {
         let similar = m.is_similarity();
         let mut out = Self::new(m.transform(self.start));
         out.closed = self.closed;
+        out.from_current = self.from_current;
         let mut current = self.start;
         for s in &self.segments {
             match *s {

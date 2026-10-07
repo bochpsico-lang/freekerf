@@ -15,7 +15,8 @@ When a conformance test fails because of a *fixed* entry, it is marked
 `@pytest.mark.rust_divergence("DIV-NNN")` in conformance (strict xfail for the
 Rust host only; a golden case carries the mark in the first line of its `.nc`).
 Marked today: DIV-015, DIV-016, DIV-019, DIV-020, DIV-022, DIV-024, DIV-030,
-DIV-101 (protocol tests) and DIV-052, DIV-053 (golden cases). The differential layer
+DIV-101 (protocol tests), DIV-052, DIV-053 (golden cases) and DIV-031, DIV-032,
+DIV-034, DIV-036 (importer cases, field `"rust_divergence"` of the case JSON). The differential layer
 of conformance (`make test-diff`) removes these differences with one explicit rule
 per id. Which white-box behaviour is compared where: conformance's
 `doc/traceability.md`.
@@ -88,11 +89,21 @@ import-case --kinds`); kinds not implemented yet are skipped.
 
 | Id | LaserGRBL | FreeKerf | Status | Tests |
 | --- | --- | --- | --- | --- |
+| DIV-031 | SVG path numbers such as `-4.5.5` (`-4.5` then `.5`) read as one number: the command loses its arguments and the whole import fails | Read as two numbers; incomplete argument groups are dropped instead of failing | fixed | `convert.rs::numbers_and_tokens`, conformance `svg_compact_numbers` (marked) |
+| DIV-032 | A `path` without `d` throws and loses the whole import | The element is skipped | fixed | conformance `svg_path_without_d` (marked) |
+| DIV-033 | A failed import clears the loaded file first, and reports nothing | An import returns an error; the document is untouched | fixed | `freekerf-import` error tests |
+| DIV-034 | `polyline`/`polygon`: point tokens of 3 characters or less (`9,9`) are skipped; points without commas give only a comment | Every pair is read (white space and/or commas, as SVG says) | fixed | conformance `svg_basic_shapes`, `svg_disable_g0`, `svg_no_pwm`, `svg_via_source` (marked); `*_portable` twins agree on both hosts |
+| DIV-035 | An SVG arc with a zero radius draws nothing (a gap) | Same | kept (rare; the goldens `svg_paths*` depend on it) | conformance `svg_paths`, `svg_smoothie` |
+| DIV-036 | `skewX`/`skewY` ignored; a transform without its `)` loses its last character | Both applied as SVG says | fixed | `convert.rs::transforms_as_laser_grbl_reads_them`, conformance `svg_transforms` (marked), `svg_transforms_portable` agrees |
+| DIV-037 | A relative file name starting with `LaserGRBL.` is read as an embedded resource | Importers read bytes; there are no resource names | not applicable | — |
+| DIV-038 | The SVG/DXF writer reads the firmware type once per process | Read for every job from the options | fixed | `writer.rs` tests |
 | DIV-039 | Cutting test label for a pass range reads `1 - F2 pass` | Same | kept (golden `gen_cutting_grid`; a label, no effect on the job) | conformance `gen_cutting_grid` |
 | DIV-040 | Hershey coordinates written with `double.ToString()`: 15 significant digits, floating point noise included (`Y0.00299999999999989`) | Same (`freekerf_gcode::dotnet`) | kept (goldens; harmless for the machine) | conformance `hershey_*`, `gen_*` |
+| DIV-043 | A malformed saved layer setting is half loaded | Layer settings are document data, validated when read | not applicable | — |
+| DIV-044 | Every layer pass starts with a comment-only line (an empty command); pen up/down lines keep a space before their comment (`S0 `) | Same | kept (every `svg_*`/`dxf_*` golden) | conformance `svg_*`, `dxf_*` |
 
-DIV-031 to DIV-038 and DIV-041 to DIV-050 (SVG, DXF, raster, Potrace, Centerline
-findings) get their entries with the importers that contain them.
+DIV-041, DIV-042 and DIV-045 to DIV-050 (raster, Potrace, Centerline findings) get
+their entries with the importers that contain them.
 
 ## FreeKerf only
 
@@ -103,3 +114,5 @@ findings) get their entries with the importers that contain them.
 | DIV-103 | Requests that LaserGRBL ignores when not allowed (unlock while running, hold while idle...) return an error with the reason | Front ends and agents need to know | `host_behaviour.rs::state_rules_of_immediate_commands` |
 | DIV-104 | No sounds, Telegram notifications, hotkeys or dialogs in the core | UI concerns (M4); the core emits events | — |
 | DIV-105 | No "safety countdown" before a job | UI concern: the fire confirmation of the desktop app (M4) | — |
+| DIV-106 | No intermediate converter text: LaserGRBL's centerline conversion builds a G-code string with debugging comments (`G0X1Y1(M)`) before loading it; FreeKerf plans the job directly | The comments never reach the machine or a saved file. Conformance compares `svg_text` cases for the Rust host without the comments | conformance `svgtext_*` |
+| DIV-107 | SVG path data that does not begin with a moveto, when it is the first element of its colour, starts at its first point; LaserGRBL draws a line from wherever the laser was | The previous position is arbitrary (another colour, another pass). After an element of the same colour both draw from its end | `convert.rs` tests, conformance `svg_fill_capture_edge` |

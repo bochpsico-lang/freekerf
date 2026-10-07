@@ -39,6 +39,7 @@ freekerf-session = { path = "crates/core/freekerf-session" }
 freekerf-geometry = { path = "crates/core/freekerf-geometry" }
 freekerf-document = { path = "crates/core/freekerf-document" }
 freekerf-planner = { path = "crates/core/freekerf-planner" }
+freekerf-import = { path = "crates/core/freekerf-import" }
 freekerf-settings = { path = "crates/config/freekerf-settings" }
 freekerf-transport = { path = "crates/native/freekerf-transport" }
 freekerf-platform = { path = "crates/native/freekerf-platform" }
@@ -61,6 +62,7 @@ predicates = "3"
 proptest = "1"
 rayon = "1"
 regex = "1"
+roxmltree = "0.21"
 rust_decimal = { version = "1", default-features = false, features = ["std"] }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }

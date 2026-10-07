@@ -153,9 +153,11 @@ impl Emitter {
     }
 
     fn path(&mut self, p: &Path) {
-        self.pen_up("path");
-        let c = self.cmt("path");
-        self.w.move_to_rapid(p.start, c);
+        if !p.from_current {
+            self.pen_up("path");
+            let c = self.cmt("path");
+            self.w.move_to_rapid(p.start, c);
+        }
         let mut current = p.start;
         for s in &p.segments {
             self.pen_down("path");
@@ -199,6 +201,7 @@ impl Emitter {
                 self.w.raw("( +++++++++++++++++++++++++++++++++ )");
             }
             UnsupportedReason::MissingComma => self.w.raw("( polygon coordinates - missing '.')"),
+            UnsupportedReason::MissingArgument => self.w.raw("( Missing argument )"),
         }
     }
 }
@@ -352,6 +355,7 @@ mod tests {
             ("text", UnsupportedReason::NotConverted),
             ("image", UnsupportedReason::NotConverted),
             ("polygon", UnsupportedReason::MissingComma),
+            ("path", UnsupportedReason::MissingArgument),
         ] {
             d.add_object(
                 l,
@@ -366,6 +370,7 @@ mod tests {
         assert_eq!(lines.iter().filter(|s| s.contains("not supported")).count(), 2);
         assert_eq!(lines.iter().filter(|s| s.contains("Convert Object")).count(), 1);
         assert_eq!(lines.iter().filter(|s| s.contains("missing")).count(), 1);
+        assert_eq!(lines.iter().filter(|s| s.contains("Missing argument")).count(), 1);
     }
 
     #[test]
