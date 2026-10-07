@@ -3,6 +3,8 @@
 //! `fixtures/ClipperCases.cs` under Mono) must give exactly the same paths, in the
 //! same order, with the same vertices.
 
+#![allow(clippy::unwrap_used)] // test helpers parsing a trusted fixture
+
 use freekerf_geometry::clipper::{
     ClipType, Clipper, ClipperOffset, EndType, IntPoint, JoinType, Paths, PolyFillType, PolyType,
 };
