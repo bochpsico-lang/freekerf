@@ -51,7 +51,7 @@ criterion = { version = "0.5", default-features = false }
 crossbeam-channel = "0.5"
 directories = "6"
 insta = { version = "1", features = ["json"] }
-nix = { version = "0.30", features = ["term", "fs"] }
+nix = { version = "0.30", features = ["term", "fs", "poll"] }
 predicates = "3"
 proptest = "1"
 rayon = "1"

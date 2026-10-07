@@ -10,6 +10,24 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+crossbeam-channel.workspace = true
+freekerf-emulator.workspace = true
+freekerf-gcode = { workspace = true, features = ["parallel"] }
+freekerf-machine.workspace = true
+freekerf-platform.workspace = true
+freekerf-protocol.workspace = true
+freekerf-session.workspace = true
+freekerf-settings.workspace = true
+freekerf-transport.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+freekerf-testkit.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

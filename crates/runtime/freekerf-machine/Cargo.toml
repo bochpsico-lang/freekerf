@@ -10,6 +10,16 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+crossbeam-channel.workspace = true
+freekerf-protocol.workspace = true
+freekerf-transport.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+freekerf-emulator.workspace = true
+freekerf-gcode.workspace = true
+freekerf-testkit.workspace = true
 
 [lints]
 workspace = true

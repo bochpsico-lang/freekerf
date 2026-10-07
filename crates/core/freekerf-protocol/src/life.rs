@@ -135,6 +135,12 @@ pub enum Selection {
 }
 
 impl LaserLife {
+    /// Counters loaded from storage (none selected yet).
+    #[must_use]
+    pub fn with_counters(counters: Vec<LaserLifeCounter>) -> Self {
+        Self { counters, ..Self::default() }
+    }
+
     /// Picks the counter on connect: the only one, or the only alive one. Without
     /// counters nothing is tracked (FINDINGS F-07 fixed: DIV-007).
     pub fn on_connect(&mut self) -> Selection {
