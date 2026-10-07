@@ -275,3 +275,42 @@ fn host_stdio_drives_the_emulator_on_a_pty() {
     drop(emu.stdin.take());
     assert!(emu.wait().unwrap().success());
 }
+
+#[test]
+fn import_case_runs_conformance_cases() {
+    let home = tempfile::tempdir().unwrap();
+    let kinds = freekerf(home.path())
+        .args(["import-case", "--kinds"])
+        .output()
+        .unwrap();
+    assert!(kinds.status.success());
+    let kinds = String::from_utf8(kinds.stdout).unwrap();
+    assert!(kinds.lines().any(|k| k == "hershey"));
+
+    let case = json!({"kind": "hershey", "text": "Hi", "x": 10.0, "y": 5.0, "speed": 1000, "power": 300,
+                      "horizontal": true, "ton": "M4"});
+    let out = freekerf(home.path())
+        .args(["import-case", "-"])
+        .write_stdin(case.to_string())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let got: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(got["gcode"][0], "M5 S300 F1000");
+
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("case.json");
+    std::fs::write(&file, json!({"kind": "nope"}).to_string()).unwrap();
+    freekerf(home.path())
+        .args(["import-case"])
+        .arg(&file)
+        .assert()
+        .failure();
+    freekerf(home.path()).args(["import-case"]).assert().failure();
+    std::fs::write(&file, "not json").unwrap();
+    freekerf(home.path())
+        .args(["import-case"])
+        .arg(&file)
+        .assert()
+        .failure();
+}

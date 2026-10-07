@@ -29,6 +29,7 @@ flowchart TB
     emulator[freekerf-emulator<br/>sans-IO Grbl 1.1 device]
     geometry[freekerf-geometry<br/>paths, booleans, hatch fillings]
     document[freekerf-document<br/>layers, objects, .fkproj]
+    planner[freekerf-planner<br/>document to G-code]
   end
   cli --> service
   cli --> settings
@@ -45,11 +46,14 @@ flowchart TB
   protocol --> gcode
   emulator --> gcode
   document --> geometry
+  planner --> document
+  planner --> gcode
+  service --> planner
 ```
 
 | Layer | Crates | Rule |
 | --- | --- | --- |
-| core | gcode, protocol, emulator, session, geometry, document | no I/O, no threads of their own, no clock; builds for `wasm32-unknown-unknown` |
+| core | gcode, protocol, emulator, session, geometry, document, planner | no I/O, no threads of their own, no clock; builds for `wasm32-unknown-unknown` |
 | config | settings | core only; files through the `SettingsStore` trait |
 | native | transport, platform | core only |
 | runtime | machine, service | core, config, native |

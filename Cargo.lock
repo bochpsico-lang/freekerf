@@ -561,6 +561,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "freekerf-planner"
+version = "0.1.0"
+dependencies = [
+ "freekerf-document",
+ "freekerf-gcode",
+ "freekerf-geometry",
+ "proptest",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "freekerf-platform"
 version = "0.1.0"
 dependencies = [
@@ -590,6 +604,7 @@ dependencies = [
  "freekerf-emulator",
  "freekerf-gcode",
  "freekerf-machine",
+ "freekerf-planner",
  "freekerf-platform",
  "freekerf-protocol",
  "freekerf-session",

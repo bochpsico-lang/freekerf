@@ -96,6 +96,18 @@ enum Command {
         #[arg(long)]
         markdown: bool,
     },
+    /// Runs a conformance importer golden case and prints its JSON result
+    /// (`conformance` compares it with LaserGRBL's golden file).
+    ImportCase {
+        /// Case file (`fixtures/importers/cases/*.json`), `-` for stdin.
+        case: Option<PathBuf>,
+        /// Directory of the cases' input files (default: `../inputs` next to the case).
+        #[arg(long)]
+        inputs: Option<PathBuf>,
+        /// Print the case kinds this build runs, one per line, and exit.
+        #[arg(long)]
+        kinds: bool,
+    },
     /// Runs one action and prints its JSON result.
     Run {
         /// Action name (`state.get`).
@@ -160,6 +172,9 @@ fn run(cli: Cli) -> Result<ExitCode> {
     let home = cli.home.clone();
     match cli.command {
         Command::Analyze { file, json, max_rate } => cmd_analyze(&file, json, max_rate),
+        Command::ImportCase { case, inputs, kinds } => {
+            cmd_import_case(case.as_deref(), inputs.as_deref(), kinds)
+        }
         Command::Send {
             file,
             target,
@@ -218,6 +233,39 @@ fn run(cli: Cli) -> Result<ExitCode> {
 fn open_service(home: Option<&std::path::Path>) -> Result<Service> {
     let stores = Stores::files(home).map_err(|e| anyhow!(e))?;
     Ok(Service::new(stores)?)
+}
+
+fn cmd_import_case(
+    case: Option<&std::path::Path>,
+    inputs: Option<&std::path::Path>,
+    kinds: bool,
+) -> Result<ExitCode> {
+    use freekerf_service::import_case;
+    let mut out = std::io::stdout().lock();
+    if kinds {
+        for k in import_case::SUPPORTED_KINDS {
+            writeln!(out, "{k}")?;
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+    let case = case.ok_or_else(|| anyhow!("a case file is needed (or --kinds)"))?;
+    let text = if case.as_os_str() == "-" {
+        std::io::read_to_string(std::io::stdin())?
+    } else {
+        std::fs::read_to_string(case).with_context(|| format!("cannot read {}", case.display()))?
+    };
+    let value: Value = serde_json::from_str(&text).context("the case is not JSON")?;
+    let dir = match inputs {
+        Some(d) => d.to_path_buf(),
+        None => case
+            .parent()
+            .and_then(std::path::Path::parent)
+            .map_or_else(|| PathBuf::from("inputs"), |p| p.join("inputs")),
+    };
+    let read = |name: &str| std::fs::read(dir.join(name)).map_err(|e| e.to_string());
+    let result = import_case::run(&value, &read)?;
+    writeln!(out, "{}", serde_json::to_string(&result)?)?;
+    Ok(ExitCode::SUCCESS)
 }
 
 fn cmd_analyze(file: &std::path::Path, json: bool, max_rate: i64) -> Result<ExitCode> {

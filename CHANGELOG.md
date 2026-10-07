@@ -32,6 +32,11 @@ All notable changes to FreeKerf are documented here. The format follows
   patterns, identical to LaserGRBL's.
 - `freekerf-document`: the project model (objects on colour layers with cut and
   raster settings) and the versioned `.fkproj` file with a generated JSON schema.
+- `freekerf-planner`: documents to G-code the way LaserGRBL writes it (layer
+  order, hatch fillings, pen and feed handling), the cutting, power/speed and
+  shake test generators and Hershey text; .NET-compatible number formatting in
+  `freekerf-gcode`.
+- `freekerf import-case`: runs `conformance` importer golden cases.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.
 - Setting `machine.accept_broken_ok` (default on): a garbled line containing `ok`
