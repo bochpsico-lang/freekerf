@@ -253,93 +253,35 @@ pub enum Interpolation {
     Bicubic,
 }
 
-fn cubic(t: f64) -> f64 {
-    // Keys, a = -0.5 (Catmull-Rom)
-    let t = t.abs();
-    if t < 1.0 {
-        1.5 * t * t * t - 2.5 * t * t + 1.0
-    } else if t < 2.0 {
-        -0.5 * t * t * t + 2.5 * t * t - 4.0 * t + 2.0
-    } else {
-        0.0
-    }
-}
-
-/// Mirrors an index into `0..n` (`WrapMode.TileFlipXY` at the edges).
-fn mirror(i: i64, n: i64) -> u32 {
-    let period = 2 * n;
-    let mut m = i.rem_euclid(period);
-    if m >= n {
-        m = period - 1 - m;
-    }
-    u32::try_from(m).unwrap_or(0)
-}
-
-/// `ImageTransform.ResizeImage`: the image scaled to `width × height` with pixel
-/// centres aligned (`PixelOffsetMode.HighQuality`) and mirrored edges; over white
-/// when `kill_alpha`. Same size: an unchanged copy.
+/// `ImageTransform.ResizeImage`: the image scaled to `width × height`, over white
+/// when `kill_alpha`, otherwise replacing a transparent bitmap. Same size: an
+/// unchanged copy.
+///
+/// Smooth filters give what LaserGRBL gets on libgdiplus whatever mode it asks
+/// for: Cairo's box filter ([`crate::gdi::draw_scaled`], ADR 0008).
+/// [`Interpolation::NearestNeighbor`] copies the nearest pixel (libgdiplus blends,
+/// DIV-108).
 #[must_use]
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss
-)]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 pub fn resize(img: &Image, width: u32, height: u32, kill_alpha: bool, filter: Interpolation) -> Image {
     if img.width() == width && img.height() == height {
         return img.clone();
     }
-    let (sw, sh) = (i64::from(img.width()), i64::from(img.height()));
+    if filter != Interpolation::NearestNeighbor {
+        return crate::gdi::draw_scaled(img, width, height, kill_alpha);
+    }
     let mut out = Image::new(width, height, if kill_alpha { WHITE } else { 0 });
-    if sw == 0 || sh == 0 {
+    if img.width() == 0 || img.height() == 0 {
         return out;
     }
-    let sx = sw as f64 / f64::from(width.max(1));
-    let sy = sh as f64 / f64::from(height.max(1));
+    let sx = f64::from(img.width()) / f64::from(width.max(1));
+    let sy = f64::from(img.height()) / f64::from(height.max(1));
     for y in 0..height {
         for x in 0..width {
-            let fx = (f64::from(x) + 0.5) * sx - 0.5;
-            let fy = (f64::from(y) + 0.5) * sy - 0.5;
-            // premultiplied accumulation
-            let mut acc = [0.0f64; 4];
-            let mut add = |px: i64, py: i64, wgt: f64| {
-                let (a, r, g, b) = split(img.get(mirror(px, sw), mirror(py, sh)));
-                let af = f64::from(a) / 255.0;
-                acc[0] += wgt * f64::from(a);
-                acc[1] += wgt * f64::from(r) * af;
-                acc[2] += wgt * f64::from(g) * af;
-                acc[3] += wgt * f64::from(b) * af;
-            };
-            match filter {
-                Interpolation::NearestNeighbor => add(fx.round() as i64, fy.round() as i64, 1.0),
-                Interpolation::Bilinear => {
-                    let (x0, y0) = (fx.floor(), fy.floor());
-                    let (tx, ty) = (fx - x0, fy - y0);
-                    let (x0, y0) = (x0 as i64, y0 as i64);
-                    add(x0, y0, (1.0 - tx) * (1.0 - ty));
-                    add(x0 + 1, y0, tx * (1.0 - ty));
-                    add(x0, y0 + 1, (1.0 - tx) * ty);
-                    add(x0 + 1, y0 + 1, tx * ty);
-                }
-                Interpolation::Bicubic => {
-                    let (x0, y0) = (fx.floor() as i64, fy.floor() as i64);
-                    for j in -1..=2 {
-                        for i in -1..=2 {
-                            let w = cubic(fx - (x0 + i) as f64) * cubic(fy - (y0 + j) as f64);
-                            add(x0 + i, y0 + j, w);
-                        }
-                    }
-                }
-            }
-            let a = acc[0].clamp(0.0, 255.0);
-            let un = |v: f64| {
-                if a > 0.0 {
-                    (v * 255.0 / a).round().clamp(0.0, 255.0) as u8
-                } else {
-                    0
-                }
-            };
-            let c = argb(a.round() as u8, un(acc[1]), un(acc[2]), un(acc[3]));
-            out.set(x, y, if kill_alpha { over(c, WHITE) } else { c });
+            let px = (((f64::from(x) + 0.5) * sx) as u32).min(img.width() - 1);
+            let py = (((f64::from(y) + 0.5) * sy) as u32).min(img.height() - 1);
+            let p = img.get(px, py);
+            out.set(x, y, if kill_alpha { over(p, WHITE) } else { p });
         }
     }
     out
@@ -417,7 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn resize_keeps_size_and_mirrors() {
+    fn resize_keeps_size() {
         let i = img(&[BLACK, WHITE, 0, 0xFF80_8080], 2);
         assert_eq!(resize(&i, 2, 2, true, Interpolation::Bicubic), i);
         for f in [
@@ -431,10 +373,15 @@ mod tests {
             let k = resize(&i, 4, 4, false, f);
             assert!(k.pixels().iter().any(|p| p >> 24 != 0xFF));
         }
-        assert_eq!(mirror(-1, 3), 0);
-        assert_eq!(mirror(3, 3), 2);
+        // nearest: the nearest pixel, no blending (DIV-108)
+        let n = resize(&i, 4, 4, true, Interpolation::NearestNeighbor);
+        assert_eq!(n.pixels()[..4], [BLACK, BLACK, WHITE, WHITE]);
         assert_eq!(
             resize(&Image::new(0, 0, 0), 2, 2, false, Interpolation::Bilinear).get(0, 0),
+            0
+        );
+        assert_eq!(
+            resize(&Image::new(0, 0, 0), 2, 2, false, Interpolation::NearestNeighbor).get(0, 0),
             0
         );
     }

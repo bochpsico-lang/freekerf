@@ -18,6 +18,7 @@
 //! ```
 
 pub mod dither;
+pub mod gdi;
 pub mod image;
 pub mod l2l;
 pub mod ops;
