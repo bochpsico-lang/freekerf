@@ -25,7 +25,11 @@ pub struct AnalyzeOptions {
 
 impl Default for AnalyzeOptions {
     fn default() -> Self {
-        Self { max_rate_x_mm_min: Decimal::from(GOLDEN_MAX_RATE), support_pwm: true, host: HostOptions::default() }
+        Self {
+            max_rate_x_mm_min: Decimal::from(GOLDEN_MAX_RATE),
+            support_pwm: true,
+            host: HostOptions::default(),
+        }
     }
 }
 
@@ -33,7 +37,9 @@ impl Default for AnalyzeOptions {
 #[must_use]
 pub fn analyze(name: &str, bytes: &[u8], options: &AnalyzeOptions) -> Report {
     let analysis = AnalysisOptions {
-        timing: TimingConfig { max_rate_x_mm_min: options.max_rate_x_mm_min },
+        timing: TimingConfig {
+            max_rate_x_mm_min: options.max_rate_x_mm_min,
+        },
         support_pwm: options.support_pwm,
     };
     let program = Program::parse_bytes(bytes, &analysis);
@@ -66,7 +72,11 @@ struct Sim {
 
 impl Sim {
     fn new(options: HostOptions) -> Self {
-        Self { host: Host::for_kind(FirmwareKind::Grbl, options), device: Device::new(DeviceConfig::default()), now: 0 }
+        Self {
+            host: Host::for_kind(FirmwareKind::Grbl, options),
+            device: Device::new(DeviceConfig::default()),
+            now: 0,
+        }
     }
 
     fn exchange(&mut self) {
@@ -103,7 +113,10 @@ impl Sim {
         self.host.tick(self.now);
         self.exchange();
         while cond(&self.host) && self.now < end {
-            self.now = self.host.next_deadline().map_or(self.now + 10, |d| d.max(self.now + 1));
+            self.now = self
+                .host
+                .next_deadline()
+                .map_or(self.now + 10, |d| d.max(self.now + 1));
             self.device.tick(self.now);
             self.host.tick(self.now);
             self.exchange();

@@ -506,6 +506,15 @@ dependencies = [
 [[package]]
 name = "freekerf-it"
 version = "0.1.0"
+dependencies = [
+ "freekerf-emulator",
+ "freekerf-service",
+ "freekerf-settings",
+ "freekerf-testkit",
+ "freekerf-transport",
+ "serde_json",
+ "tempfile",
+]
 
 [[package]]
 name = "freekerf-machine"
@@ -594,8 +603,6 @@ dependencies = [
  "freekerf-emulator",
  "freekerf-gcode",
  "freekerf-protocol",
- "nix 0.30.1",
- "regex",
 ]
 
 [[package]]
@@ -605,7 +612,7 @@ dependencies = [
  "crossbeam-channel",
  "freekerf-emulator",
  "freekerf-testkit",
- "nix 0.30.1",
+ "nix 0.31.3",
  "serialport",
  "thiserror",
  "tracing",
@@ -791,18 +798,6 @@ checksum = "598beaf3cc6fdd9a5dfb1630c2800c7acd31df7aaf0f565796fba2b53ca1af1b"
 dependencies = [
  "bitflags 1.3.2",
  "cfg-if",
- "libc",
-]
-
-[[package]]
-name = "nix"
-version = "0.30.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
-dependencies = [
- "bitflags 2.13.2",
- "cfg-if",
- "cfg_aliases",
  "libc",
 ]
 
@@ -1761,6 +1756,13 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 [[package]]
 name = "xtask"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "freekerf-service",
+ "freekerf-settings",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "zerocopy"

@@ -17,7 +17,11 @@ use serde_json::{Value, json};
 mod host;
 
 #[derive(Parser)]
-#[command(name = "freekerf", version, about = "FreeKerf: design jobs and drive laser machines (headless)")]
+#[command(
+    name = "freekerf",
+    version,
+    about = "FreeKerf: design jobs and drive laser machines (headless)"
+)]
 struct Cli {
     /// Directory for settings and data (default: the user's directories; `$FREEKERF_HOME`).
     #[arg(long, global = true, value_name = "DIR")]
@@ -137,8 +141,12 @@ struct Target {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    let filter = tracing_subscriber::EnvFilter::try_new(&cli.log).unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"));
-    tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).init();
+    let filter = tracing_subscriber::EnvFilter::try_new(&cli.log)
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"));
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .init();
     match run(cli) {
         Ok(code) => code,
         Err(e) => {
@@ -152,14 +160,23 @@ fn run(cli: Cli) -> Result<ExitCode> {
     let home = cli.home.clone();
     match cli.command {
         Command::Analyze { file, json, max_rate } => cmd_analyze(&file, json, max_rate),
-        Command::Send { file, target, passes, homing } => cmd_send(home.as_deref(), &file, &target, passes, homing),
+        Command::Send {
+            file,
+            target,
+            passes,
+            homing,
+        } => cmd_send(home.as_deref(), &file, &target, passes, homing),
         Command::Console { target } => cmd_console(home.as_deref(), &target),
         Command::Emulate { pty, instant } => cmd_emulate(pty, !instant),
         Command::Host { stdio, persistent } => {
             if !stdio {
                 bail!("only `--stdio` is supported");
             }
-            let service = if persistent { open_service(home.as_deref())? } else { Service::in_memory()? };
+            let service = if persistent {
+                open_service(home.as_deref())?
+            } else {
+                Service::in_memory()?
+            };
             host::serve(&service, std::io::stdin().lock(), std::io::stdout().lock())?;
             Ok(ExitCode::SUCCESS)
         }
@@ -173,7 +190,13 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 write!(out, "{}", service.registry().to_markdown())?;
             } else {
                 for s in service.specs() {
-                    writeln!(out, "{:<24} {:<8} {}", s.name, s.tier, s.description.lines().next().unwrap_or(""))?;
+                    writeln!(
+                        out,
+                        "{:<24} {:<8} {}",
+                        s.name,
+                        s.tier,
+                        s.description.lines().next().unwrap_or("")
+                    )?;
                 }
             }
             Ok(ExitCode::SUCCESS)
@@ -182,7 +205,11 @@ fn run(cli: Cli) -> Result<ExitCode> {
             let service = open_service(home.as_deref())?;
             let params: Value = serde_json::from_str(&params).context("parameters must be JSON")?;
             let result = service.dispatch(&Caller::user(), &action, params)?;
-            writeln!(std::io::stdout().lock(), "{}", serde_json::to_string_pretty(&result)?)?;
+            writeln!(
+                std::io::stdout().lock(),
+                "{}",
+                serde_json::to_string_pretty(&result)?
+            )?;
             Ok(ExitCode::SUCCESS)
         }
     }
@@ -195,14 +222,26 @@ fn open_service(home: Option<&std::path::Path>) -> Result<Service> {
 
 fn cmd_analyze(file: &std::path::Path, json: bool, max_rate: i64) -> Result<ExitCode> {
     let bytes = std::fs::read(file).with_context(|| format!("cannot read {}", file.display()))?;
-    let name = file.file_name().map_or_else(|| file.display().to_string(), |n| n.to_string_lossy().into_owned());
-    let opts = AnalyzeOptions { max_rate_x_mm_min: max_rate.into(), ..AnalyzeOptions::default() };
+    let name = file.file_name().map_or_else(
+        || file.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    let opts = AnalyzeOptions {
+        max_rate_x_mm_min: max_rate.into(),
+        ..AnalyzeOptions::default()
+    };
     let report = analyze(&name, &bytes, &opts);
     let mut out = std::io::stdout().lock();
     if json {
         writeln!(out, "{}", serde_json::to_string_pretty(&report)?)?;
     } else {
-        writeln!(out, "{}: {} commands, estimated {:.1} s", report.input, report.commands.len(), report.estimated_time_s)?;
+        writeln!(
+            out,
+            "{}: {} commands, estimated {:.1} s",
+            report.input,
+            report.commands.len(),
+            report.estimated_time_s
+        )?;
         match report.drawing_range {
             Some([x0, y0, x1, y1]) => writeln!(
                 out,
@@ -224,8 +263,10 @@ fn connect(service: &Service, target: &Target) -> Result<()> {
     let user = Caller::user();
     let params = json!({"port": target.port, "baud": target.baud, "emulator": target.emulator});
     service.dispatch(&user, "machine.connect", params)?;
-    wait(service, Duration::from_secs(15), |st| st["machine"]["ready"] == true)
-        .context("the machine did not become ready")?;
+    wait(service, Duration::from_secs(15), |st| {
+        st["machine"]["ready"] == true
+    })
+    .context("the machine did not become ready")?;
     Ok(())
 }
 
@@ -259,14 +300,26 @@ fn install_stop_on_ctrl_c(service: &Service) {
     });
 }
 
-fn cmd_send(home: Option<&std::path::Path>, file: &std::path::Path, target: &Target, passes: u32, homing: bool) -> Result<ExitCode> {
+fn cmd_send(
+    home: Option<&std::path::Path>,
+    file: &std::path::Path,
+    target: &Target,
+    passes: u32,
+    homing: bool,
+) -> Result<ExitCode> {
     let service = open_service(home)?;
     install_stop_on_ctrl_c(&service);
     let user = Caller::user();
     connect(&service, target)?;
     let info = service.dispatch(&user, "job.load", json!({"path": file.to_string_lossy()}))?;
     let mut err = std::io::stderr().lock();
-    writeln!(err, "{}: {} lines, estimated {:.1} s", info["name"].as_str().unwrap_or(""), info["lines"], info["estimated_ms"].as_f64().unwrap_or(0.0) / 1000.0)?;
+    writeln!(
+        err,
+        "{}: {} lines, estimated {:.1} s",
+        info["name"].as_str().unwrap_or(""),
+        info["lines"],
+        info["estimated_ms"].as_f64().unwrap_or(0.0) / 1000.0
+    )?;
     let events = service.subscribe();
     service.dispatch(&user, "job.run", json!({"passes": passes, "homing": homing}))?;
     let mut result = None;
@@ -288,17 +341,35 @@ fn cmd_send(home: Option<&std::path::Path>, file: &std::path::Path, target: &Tar
             last_print = Instant::now();
             let st = state(&service)?;
             let m = &st["machine"];
-            writeln!(err, "{} {}/{} lines", m["status"].as_str().unwrap_or(""), m["job_executed"], m["job_target"])?;
+            writeln!(
+                err,
+                "{} {}/{} lines",
+                m["status"].as_str().unwrap_or(""),
+                m["job_executed"],
+                m["job_target"]
+            )?;
         }
     }
     let r = result.unwrap_or(Value::Null);
     // wait for the board to finish what it buffered
-    let _ = wait(&service, Duration::from_secs(3600), |st| st["machine"]["status"] == "Idle");
+    let _ = wait(&service, Duration::from_secs(3600), |st| {
+        st["machine"]["status"] == "Idle"
+    });
     let errors = r["errors"].as_u64().unwrap_or(0);
-    writeln!(err, "done: {} lines, {} errors, {:.1} s", r["lines"], errors, r["time_ms"].as_f64().unwrap_or(0.0) / 1000.0)?;
+    writeln!(
+        err,
+        "done: {} lines, {} errors, {:.1} s",
+        r["lines"],
+        errors,
+        r["time_ms"].as_f64().unwrap_or(0.0) / 1000.0
+    )?;
     let issues = state(&service)?["issues"].as_array().map_or(0, Vec::len);
     service.dispatch(&user, "machine.disconnect", Value::Null)?;
-    Ok(if errors > 0 || issues > 0 { ExitCode::from(1) } else { ExitCode::SUCCESS })
+    Ok(if errors > 0 || issues > 0 {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    })
 }
 
 const CONSOLE_HELP: &str = "\
@@ -385,7 +456,11 @@ fn cmd_emulate(pty: bool, timed: bool) -> Result<ExitCode> {
         writeln!(out, "{}", emu.path())?;
         out.flush()?;
     }
-    let _ = writeln!(std::io::stderr(), "Grbl 1.1 emulator on {} (close stdin or press Ctrl-C to stop)", emu.path());
+    let _ = writeln!(
+        std::io::stderr(),
+        "Grbl 1.1 emulator on {} (close stdin or press Ctrl-C to stop)",
+        emu.path()
+    );
     // runs until stdin closes
     let mut sink = String::new();
     while std::io::stdin().lock().read_line(&mut sink)? > 0 {

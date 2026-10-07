@@ -108,7 +108,11 @@ pub struct Point3 {
 
 impl Point3 {
     /// The origin.
-    pub const ZERO: Self = Self { x: 0.0, y: 0.0, z: 0.0 };
+    pub const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
 
     /// A point.
     #[must_use]
@@ -207,7 +211,11 @@ pub fn parse_report(body: &str, version: &FirmwareVersion) -> StatusReport {
 fn parse_v11(body: &str) -> StatusReport {
     let mut parts = body.split('|');
     let state = parts.next().unwrap_or("").to_owned();
-    let mut report = StatusReport { state, fields: Vec::new(), complete: true };
+    let mut report = StatusReport {
+        state,
+        fields: Vec::new(),
+        complete: true,
+    };
     for part in parts {
         let field = if let Some(v) = part.strip_prefix("Ov:") {
             let n: Vec<Option<i32>> = v.split(',').map(|x| x.trim().parse().ok()).collect();
@@ -218,7 +226,10 @@ fn parse_v11(body: &str) -> StatusReport {
         } else if let Some(v) = part.strip_prefix("Bf:") {
             let n: Vec<Option<i32>> = v.split(',').map(|x| x.trim().parse().ok()).collect();
             match n.as_slice() {
-                [Some(a), Some(b), ..] => Some(StatusField::Buffer { blocks: *a, bytes: *b }),
+                [Some(a), Some(b), ..] => Some(StatusField::Buffer {
+                    blocks: *a,
+                    bytes: *b,
+                }),
                 _ => None,
             }
         } else if let Some(v) = part.strip_prefix("WPos:") {
@@ -251,7 +262,11 @@ fn parse_v11(body: &str) -> StatusReport {
 /// `<Idle,MPos:0.000,0.000,0.000,WPos:0.000,0.000,0.000>` of Grbl 0.9.
 fn parse_legacy(body: &str) -> StatusReport {
     let arr: Vec<&str> = body.split(',').collect();
-    let mut report = StatusReport { state: arr[0].to_owned(), fields: Vec::new(), complete: true };
+    let mut report = StatusReport {
+        state: arr[0].to_owned(),
+        fields: Vec::new(),
+        complete: true,
+    };
     let point = |a: &str, b: &str, c: &str| -> Option<Point3> {
         Some(Point3::new(parse_f32(a.get(5..)?)?, parse_f32(b)?, parse_f32(c)?))
     };
@@ -305,14 +320,20 @@ mod tests {
     #[test]
     fn parses_every_v11_field() {
         let v = FirmwareVersion::new(1, 1);
-        let r = parse_report("Run|MPos:1.000,2.000,3.000|Bf:15,128|FS:500,250|WCO:1,1,0|Ov:100,50,120|Pn:X", &v);
+        let r = parse_report(
+            "Run|MPos:1.000,2.000,3.000|Bf:15,128|FS:500,250|WCO:1,1,0|Ov:100,50,120|Pn:X",
+            &v,
+        );
         assert_eq!(r.state, "Run");
         assert!(r.complete);
         assert_eq!(
             r.fields,
             vec![
                 StatusField::MachinePosition(Point3::new(1.0, 2.0, 3.0)),
-                StatusField::Buffer { blocks: 15, bytes: 128 },
+                StatusField::Buffer {
+                    blocks: 15,
+                    bytes: 128
+                },
                 StatusField::FeedSpeed(500.0, 250.0),
                 StatusField::WorkOffset(Point3::new(1.0, 1.0, 0.0)),
                 StatusField::Overrides(100, 50, 120),
@@ -347,9 +368,18 @@ mod tests {
 
     #[test]
     fn version_is_guessed_from_the_report_shape() {
-        assert_eq!(report_version(None, "Idle|MPos:0,0,0"), FirmwareVersion::new(1, 1));
-        assert_eq!(report_version(None, "Idle|Pin:000"), FirmwareVersion::with_build(1, 0, 'c'));
-        assert_eq!(report_version(None, "Idle,MPos:0,0,0"), FirmwareVersion::new(0, 9));
+        assert_eq!(
+            report_version(None, "Idle|MPos:0,0,0"),
+            FirmwareVersion::new(1, 1)
+        );
+        assert_eq!(
+            report_version(None, "Idle|Pin:000"),
+            FirmwareVersion::with_build(1, 0, 'c')
+        );
+        assert_eq!(
+            report_version(None, "Idle,MPos:0,0,0"),
+            FirmwareVersion::new(0, 9)
+        );
         let known = FirmwareVersion::with_build(1, 1, 'f');
         assert_eq!(report_version(Some(&known), "x"), known);
     }

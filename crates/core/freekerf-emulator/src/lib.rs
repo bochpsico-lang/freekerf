@@ -214,7 +214,10 @@ impl Device {
     }
 
     fn welcome_line(&self) -> String {
-        self.cfg.welcome.clone().unwrap_or_else(|| format!("Grbl {} ['$' for help]", self.cfg.version))
+        self.cfg
+            .welcome
+            .clone()
+            .unwrap_or_else(|| format!("Grbl {} ['$' for help]", self.cfg.version))
     }
 
     fn emit(&mut self, text: &str) {
@@ -251,7 +254,9 @@ impl Device {
             self.partial.push(b);
             if b == b'\n' {
                 let line = std::mem::take(&mut self.partial);
-                let text = String::from_utf8_lossy(&line).trim_end_matches(['\r', '\n']).to_owned();
+                let text = String::from_utf8_lossy(&line)
+                    .trim_end_matches(['\r', '\n'])
+                    .to_owned();
                 self.lines.push(text);
                 self.rxq.push_back(line);
             }
@@ -334,7 +339,11 @@ impl Device {
             RT_RESUME => {
                 if self.hold {
                     self.hold = false;
-                    self.state = if self.rxq.is_empty() && self.planner.is_empty() { "Idle" } else { "Run" };
+                    self.state = if self.rxq.is_empty() && self.planner.is_empty() {
+                        "Idle"
+                    } else {
+                        "Run"
+                    };
                     // simplified: the planner clock keeps running during a hold
                     self.pump();
                 }
@@ -423,7 +432,12 @@ impl Device {
     }
 
     fn mpos(&self) -> [f64; 3] {
-        [self.gstate.x().value(), self.gstate.y().value(), self.gstate.z().value()].map(f64_from_decimal)
+        [
+            self.gstate.x().value(),
+            self.gstate.y().value(),
+            self.gstate.z().value(),
+        ]
+        .map(f64_from_decimal)
     }
 
     // ------------------------------------------------------------------ execution
@@ -460,11 +474,20 @@ impl Device {
         let up = text.to_uppercase();
         match up.as_str() {
             "$$" => {
-                let data = self.cfg.settings.iter().map(|(k, v)| format!("${k}={v}")).collect();
+                let data = self
+                    .cfg
+                    .settings
+                    .iter()
+                    .map(|(k, v)| format!("${k}={v}"))
+                    .collect();
                 return self.data_reply(data);
             }
             "$I" => {
-                let ver = self.cfg.ver_line.clone().unwrap_or_else(|| format!("[VER:{}.20170801:]", self.cfg.version));
+                let ver = self
+                    .cfg
+                    .ver_line
+                    .clone()
+                    .unwrap_or_else(|| format!("[VER:{}.20170801:]", self.cfg.version));
                 let data = vec![ver, self.cfg.opt_line.clone()];
                 return self.data_reply(data);
             }
@@ -485,7 +508,15 @@ impl Device {
             "$C" => {
                 self.check_mode = !self.check_mode;
                 self.state = if self.check_mode { "Check" } else { "Idle" };
-                return vec![(if self.check_mode { "[MSG:Enabled]" } else { "[MSG:Disabled]" }).into(), "ok".into()];
+                return vec![
+                    (if self.check_mode {
+                        "[MSG:Enabled]"
+                    } else {
+                        "[MSG:Disabled]"
+                    })
+                    .into(),
+                    "ok".into(),
+                ];
             }
             "$G" => return vec!["[GC:G0 G54 G17 G21 G90 G94 M5 M9 T0 F0 S0]".into(), "ok".into()],
             _ => {}
@@ -668,7 +699,10 @@ mod tests {
         d.connected();
         assert_eq!(out(&mut d), "Grbl 1.1f ['$' for help]\r\n");
         d.receive(b"?", 0);
-        assert_eq!(out(&mut d), "<Idle|MPos:0.000,0.000,0.000|Bf:15,128|FS:0,0|Ov:100,100,100>\r\n");
+        assert_eq!(
+            out(&mut d),
+            "<Idle|MPos:0.000,0.000,0.000|Bf:15,128|FS:0,0|Ov:100,100,100>\r\n"
+        );
         d.receive(b"$$\n", 0);
         let o = out(&mut d);
         assert!(o.starts_with("$0=10\r\n") && o.ends_with("$132=200.000\r\nok\r\n"));
@@ -681,7 +715,11 @@ mod tests {
 
     #[test]
     fn manual_ack_and_buffer_accounting() {
-        let mut d = Device::new(DeviceConfig { auto_ack: false, rx_size: 10, ..DeviceConfig::default() });
+        let mut d = Device::new(DeviceConfig {
+            auto_ack: false,
+            rx_size: 10,
+            ..DeviceConfig::default()
+        });
         d.receive(b"G1X1\nG1X2\nG1X3\n", 0);
         assert_eq!(d.rx_used(), 15);
         assert_eq!(d.overflows(), 5);
@@ -746,7 +784,10 @@ mod tests {
 
     #[test]
     fn timed_execution_and_jog_cancel() {
-        let mut d = Device::new(DeviceConfig { timed: true, ..DeviceConfig::default() });
+        let mut d = Device::new(DeviceConfig {
+            timed: true,
+            ..DeviceConfig::default()
+        });
         d.receive(b"G1 X10 F600\n", 0); // 1 s
         assert_eq!(d.state(), "Run");
         assert_eq!(d.next_deadline(), Some(1000));
@@ -785,7 +826,10 @@ mod tests {
         d.announce();
         assert_eq!(out(&mut d), "Grbl 1.1h ['$' for help]\r\n");
         d.receive(b"G1X5\n\n$I\n", 0);
-        assert_eq!(out(&mut d), "error:33\r\nok\r\nok\r\n[VER:1.1f.20170801:]\r\n[OPT:V,15,128]\r\n");
+        assert_eq!(
+            out(&mut d),
+            "error:33\r\nok\r\nok\r\n[VER:1.1f.20170801:]\r\n[OPT:V,15,128]\r\n"
+        );
         assert_eq!(d.status_report(), "<Idle|MPos:0.000,0.000,0.000|FS:0,0>");
         d.push("[MSG:hi]");
         assert_eq!(out(&mut d), "[MSG:hi]\r\n");

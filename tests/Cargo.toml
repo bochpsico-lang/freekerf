@@ -12,7 +12,18 @@ publish.workspace = true
 [lib]
 path = "lib.rs"
 
-[dependencies]
+[[test]]
+name = "it"
+path = "it/main.rs"
+
+[dev-dependencies]
+freekerf-emulator.workspace = true
+freekerf-service.workspace = true
+freekerf-settings.workspace = true
+freekerf-testkit.workspace = true
+freekerf-transport.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

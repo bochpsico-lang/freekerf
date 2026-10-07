@@ -27,13 +27,22 @@ impl GrblSettings {
     /// An empty table for `version`.
     #[must_use]
     pub const fn new(version: Option<FirmwareVersion>) -> Self {
-        Self { version, values: BTreeMap::new() }
+        Self {
+            version,
+            values: BTreeMap::new(),
+        }
     }
 
     /// A table with values.
     #[must_use]
-    pub fn with_values<I: IntoIterator<Item = (u32, String)>>(version: Option<FirmwareVersion>, values: I) -> Self {
-        Self { version, values: values.into_iter().collect() }
+    pub fn with_values<I: IntoIterator<Item = (u32, String)>>(
+        version: Option<FirmwareVersion>,
+        values: I,
+    ) -> Self {
+        Self {
+            version,
+            values: values.into_iter().collect(),
+        }
     }
 
     /// Version the values belong to.
@@ -88,7 +97,9 @@ impl GrblSettings {
     /// `$22` (`$17` before 0.9): homing cycle enabled.
     #[must_use]
     pub fn homing_enabled(&self) -> bool {
-        !self.read(Some(if self.v09() { 22 } else { 17 }), 1, 0, 1).is_zero()
+        !self
+            .read(Some(if self.v09() { 22 } else { 17 }), 1, 0, 1)
+            .is_zero()
     }
 
     /// `$110`: maximum X rate, mm/min.
@@ -183,7 +194,9 @@ impl GrblSettings {
     /// The limits the time estimate needs.
     #[must_use]
     pub fn timing(&self) -> TimingConfig {
-        TimingConfig { max_rate_x_mm_min: self.max_rate_x() }
+        TimingConfig {
+            max_rate_x_mm_min: self.max_rate_x(),
+        }
     }
 
     fn read_string(&self, n: u32) -> Option<&str> {
@@ -285,7 +298,15 @@ mod tests {
     #[test]
     fn reads_v11_keys_and_clamps() {
         let mut s = GrblSettings::new(v11());
-        for l in ["$110=6000", "$111=5000.5", "$32=1", "$30=1000", "$31=0", "$22=1", "$20=1"] {
+        for l in [
+            "$110=6000",
+            "$111=5000.5",
+            "$32=1",
+            "$30=1000",
+            "$31=0",
+            "$22=1",
+            "$20=1",
+        ] {
             s.add_or_update(l);
         }
         s.add_or_update("$130=400 (x travel, mm)");
@@ -317,7 +338,10 @@ mod tests {
         assert!(!s.homing_enabled());
         assert!(!s.laser_mode());
         assert_eq!(s.table_width(), Decimal::from(300));
-        assert_eq!(GrblSettings::new(Some(FirmwareVersion::new(0, 9))).expected_count(), 31);
+        assert_eq!(
+            GrblSettings::new(Some(FirmwareVersion::new(0, 9))).expected_count(),
+            31
+        );
     }
 
     #[test]
@@ -342,7 +366,14 @@ mod tests {
         assert!(s.has_changes(1, "31") && !s.has_changes(1, "30") && s.has_changes(2, "x"));
         assert_eq!(s.iter().count(), 1);
         assert_eq!(s.validate(33), None);
-        let ortur = GrblSettings::new(Some(FirmwareVersion::with_vendor(1, 1, 'f', Some("Ortur".into()), None, false)));
+        let ortur = GrblSettings::new(Some(FirmwareVersion::with_vendor(
+            1,
+            1,
+            'f',
+            Some("Ortur".into()),
+            None,
+            false,
+        )));
         assert!(ortur.validate(33).is_some());
         assert_eq!(ortur.version().unwrap().major, 1);
     }

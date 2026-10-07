@@ -1,5 +1,5 @@
 //! Load and analyze a synthetic raster of ~1M lines (see `doc/benchmarks.md`).
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use freekerf_gcode::{AnalysisOptions, Program};

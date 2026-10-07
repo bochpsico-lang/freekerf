@@ -61,7 +61,11 @@ pub struct MemoryStore(std::sync::Mutex<Option<String>>);
 
 impl SettingsStore for MemoryStore {
     fn load(&self) -> Result<Option<String>, SettingsError> {
-        Ok(self.0.lock().map_err(|e| SettingsError::Storage(e.to_string()))?.clone())
+        Ok(self
+            .0
+            .lock()
+            .map_err(|e| SettingsError::Storage(e.to_string()))?
+            .clone())
     }
 
     fn save(&self, text: &str) -> Result<(), SettingsError> {
@@ -172,7 +176,11 @@ pub struct AutoCoolingSettings {
 
 impl Default for AutoCoolingSettings {
     fn default() -> Self {
-        Self { enabled: false, on_s: 600, off_s: 60 }
+        Self {
+            enabled: false,
+            on_s: 600,
+            off_s: 60,
+        }
     }
 }
 
@@ -190,7 +198,11 @@ pub struct JobSettings {
 
 impl Default for JobSettings {
     fn default() -> Self {
-        Self { header: DEFAULT_HEADER.into(), passes: DEFAULT_PASSES.into(), footer: DEFAULT_FOOTER.into() }
+        Self {
+            header: DEFAULT_HEADER.into(),
+            passes: DEFAULT_PASSES.into(),
+            footer: DEFAULT_FOOTER.into(),
+        }
     }
 }
 
@@ -206,7 +218,10 @@ pub struct JogSettings {
 
 impl Default for JogSettings {
     fn default() -> Self {
-        Self { step_mm: 1.0, speed_mm_min: 1000.0 }
+        Self {
+            step_mm: 1.0,
+            speed_mm_min: 1000.0,
+        }
     }
 }
 
@@ -265,18 +280,26 @@ impl Settings {
     /// # Errors
     /// Invalid TOML, unknown keys, or a version newer than [`VERSION`].
     pub fn from_toml(text: &str) -> Result<Self, SettingsError> {
-        let mut value: toml::Table = text.parse().map_err(|e: toml::de::Error| SettingsError::Invalid(e.to_string()))?;
+        let mut value: toml::Table = text
+            .parse()
+            .map_err(|e: toml::de::Error| SettingsError::Invalid(e.to_string()))?;
         let found = match value.get("version") {
             None => 0,
-            Some(v) => v.as_integer().and_then(|v| u32::try_from(v).ok()).ok_or_else(|| {
-                SettingsError::Invalid("`version` must be a positive integer".into())
-            })?,
+            Some(v) => v
+                .as_integer()
+                .and_then(|v| u32::try_from(v).ok())
+                .ok_or_else(|| SettingsError::Invalid("`version` must be a positive integer".into()))?,
         };
         if found > VERSION {
-            return Err(SettingsError::TooNew { found, supported: VERSION });
+            return Err(SettingsError::TooNew {
+                found,
+                supported: VERSION,
+            });
         }
         migrate(&mut value, found);
-        let s: Self = toml::Value::Table(value).try_into().map_err(|e: toml::de::Error| SettingsError::Invalid(e.to_string()))?;
+        let s: Self = toml::Value::Table(value)
+            .try_into()
+            .map_err(|e: toml::de::Error| SettingsError::Invalid(e.to_string()))?;
         Ok(s)
     }
 
@@ -293,7 +316,9 @@ impl Settings {
     /// # Errors
     /// Invalid or too new file, storage errors.
     pub fn load(store: &dyn SettingsStore) -> Result<Self, SettingsError> {
-        store.load()?.map_or_else(|| Ok(Self::default()), |t| Self::from_toml(&t))
+        store
+            .load()?
+            .map_or_else(|| Ok(Self::default()), |t| Self::from_toml(&t))
     }
 
     /// Saves to a store.
@@ -318,10 +343,10 @@ impl Settings {
             custom_passes: self.job.passes.clone(),
             custom_footer: self.job.footer.clone(),
             support_pwm: m.support_pwm,
-            auto_cooling: m
-                .auto_cooling
-                .enabled
-                .then(|| AutoCooling { on_ms: m.auto_cooling.on_s * 1000, off_ms: m.auto_cooling.off_s * 1000 }),
+            auto_cooling: m.auto_cooling.enabled.then(|| AutoCooling {
+                on_ms: m.auto_cooling.on_s * 1000,
+                off_ms: m.auto_cooling.off_s * 1000,
+            }),
             last_known_version: None,
             last_known_settings: None,
         }
@@ -351,7 +376,9 @@ impl Settings {
         let mut root = serde_json::to_value(&*self).map_err(|e| SettingsError::Invalid(e.to_string()))?;
         let mut slot = &mut root;
         for part in key.split('.') {
-            slot = slot.get_mut(part).ok_or_else(|| SettingsError::UnknownKey(key.to_owned()))?;
+            slot = slot
+                .get_mut(part)
+                .ok_or_else(|| SettingsError::UnknownKey(key.to_owned()))?;
         }
         *slot = value;
         *self = serde_json::from_value(root).map_err(|e| SettingsError::Invalid(format!("{key}: {e}")))?;
@@ -365,7 +392,11 @@ impl Settings {
             match v {
                 serde_json::Value::Object(map) => {
                     for (k, v) in map {
-                        let p = if prefix.is_empty() { k.clone() } else { format!("{prefix}.{k}") };
+                        let p = if prefix.is_empty() {
+                            k.clone()
+                        } else {
+                            format!("{prefix}.{k}")
+                        };
                         walk(&p, v, out);
                     }
                 }
@@ -384,10 +415,10 @@ impl Settings {
 fn migrate(table: &mut toml::Table, from: u32) {
     if from < 1 {
         // version 0 (unversioned drafts): `[machine] streaming = ...` was renamed
-        if let Some(toml::Value::Table(m)) = table.get_mut("machine") {
-            if let Some(v) = m.remove("streaming") {
-                m.insert("streaming_mode".into(), v);
-            }
+        if let Some(toml::Value::Table(m)) = table.get_mut("machine")
+            && let Some(v) = m.remove("streaming")
+        {
+            m.insert("streaming_mode".into(), v);
         }
     }
     table.insert("version".into(), toml::Value::Integer(i64::from(VERSION)));
@@ -460,10 +491,22 @@ mod tests {
 
     #[test]
     fn errors() {
-        assert!(matches!(Settings::from_toml("version = 99"), Err(SettingsError::TooNew { found: 99, .. })));
-        assert!(matches!(Settings::from_toml("version = -1"), Err(SettingsError::Invalid(_))));
-        assert!(matches!(Settings::from_toml("nope = 1"), Err(SettingsError::Invalid(_))));
-        assert!(matches!(Settings::from_toml("[machine"), Err(SettingsError::Invalid(_))));
+        assert!(matches!(
+            Settings::from_toml("version = 99"),
+            Err(SettingsError::TooNew { found: 99, .. })
+        ));
+        assert!(matches!(
+            Settings::from_toml("version = -1"),
+            Err(SettingsError::Invalid(_))
+        ));
+        assert!(matches!(
+            Settings::from_toml("nope = 1"),
+            Err(SettingsError::Invalid(_))
+        ));
+        assert!(matches!(
+            Settings::from_toml("[machine"),
+            Err(SettingsError::Invalid(_))
+        ));
         let e = Settings::from_toml("version = 99").unwrap_err();
         assert!(e.to_string().contains("newer"));
     }
@@ -472,15 +515,27 @@ mod tests {
     fn get_and_set_dotted_keys() {
         let mut s = Settings::default();
         assert_eq!(s.get("machine.baud").unwrap(), serde_json::json!(115_200));
-        s.set("machine.streaming_mode", serde_json::json!("RepeatOnError"), false).unwrap();
+        s.set(
+            "machine.streaming_mode",
+            serde_json::json!("RepeatOnError"),
+            false,
+        )
+        .unwrap();
         assert_eq!(s.machine.streaming_mode, Streaming::RepeatOnError);
-        assert!(matches!(s.set("machine.nope", serde_json::json!(1), false), Err(SettingsError::UnknownKey(_))));
-        assert!(matches!(s.set("machine.baud", serde_json::json!("fast"), false), Err(SettingsError::Invalid(_))));
+        assert!(matches!(
+            s.set("machine.nope", serde_json::json!(1), false),
+            Err(SettingsError::UnknownKey(_))
+        ));
+        assert!(matches!(
+            s.set("machine.baud", serde_json::json!("fast"), false),
+            Err(SettingsError::Invalid(_))
+        ));
         assert!(matches!(
             s.set("automation.mcp.enabled", serde_json::json!(true), false),
             Err(SettingsError::UserOnly(_))
         ));
-        s.set("automation.mcp.enabled", serde_json::json!(true), true).unwrap();
+        s.set("automation.mcp.enabled", serde_json::json!(true), true)
+            .unwrap();
         assert!(s.automation.mcp.enabled);
         assert!(s.get("nope").is_err());
         assert!(s.keys().contains(&"machine.auto_cooling.on_s".to_owned()));
@@ -493,7 +548,13 @@ mod tests {
         s.machine.status_query_ms = 1;
         s.machine.firmware = Firmware::Marlin;
         let o = s.host_options();
-        assert_eq!(o.auto_cooling, Some(AutoCooling { on_ms: 600_000, off_ms: 60_000 }));
+        assert_eq!(
+            o.auto_cooling,
+            Some(AutoCooling {
+                on_ms: 600_000,
+                off_ms: 60_000
+            })
+        );
         assert_eq!(o.status_query_ms, 50);
         assert_eq!(FirmwareKind::from(s.machine.firmware), FirmwareKind::Marlin);
         for (f, k) in [
@@ -522,7 +583,8 @@ mod tests {
         assert_eq!(Settings::load(&store).unwrap().jog.step_mm, 0.5);
         let mut c = MachineCache::default();
         c.extra.insert("a".into(), "b".into());
-        c.laser_life.push(freekerf_protocol::LaserLifeCounter::new("id", "Default"));
+        c.laser_life
+            .push(freekerf_protocol::LaserLifeCounter::new("id", "Default"));
         c.version = Some(freekerf_protocol::FirmwareVersion::with_build(1, 1, 'f'));
         let mut table = freekerf_protocol::GrblSettings::new(c.version.clone());
         table.set(110, "6000");

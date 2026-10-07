@@ -1,5 +1,5 @@
 //! Every conformance golden file (minus `stream`) is reproduced by the analysis.
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::Path;
 
@@ -8,7 +8,12 @@ use freekerf_gcode::{AnalysisOptions, Decimal, Program, TimingConfig};
 
 /// `golden.py` CONFIG: $110 = 6000 mm/min.
 fn options() -> AnalysisOptions {
-    AnalysisOptions { timing: TimingConfig { max_rate_x_mm_min: Decimal::from(6000) }, support_pwm: true }
+    AnalysisOptions {
+        timing: TimingConfig {
+            max_rate_x_mm_min: Decimal::from(6000),
+        },
+        support_pwm: true,
+    }
 }
 
 #[test]

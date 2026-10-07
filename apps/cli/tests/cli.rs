@@ -1,5 +1,11 @@
 //! End-to-end tests of the `freekerf` binary.
-#![allow(missing_docs)]
+#![allow(
+    missing_docs,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::needless_pass_by_value
+)]
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command as StdCommand, Stdio};
@@ -27,8 +33,10 @@ fn analyze_json_matches_the_golden_files() {
             .unwrap();
         assert!(out.status.success());
         let got: Value = serde_json::from_slice(&out.stdout).unwrap();
-        let golden: Value =
-            serde_json::from_str(&std::fs::read_to_string(gcode_fixture(&format!("golden/{name}.json"))).unwrap()).unwrap();
+        let golden: Value = serde_json::from_str(
+            &std::fs::read_to_string(gcode_fixture(&format!("golden/{name}.json"))).unwrap(),
+        )
+        .unwrap();
         assert_eq!(got, golden, "{name}");
     }
 }
@@ -41,7 +49,9 @@ fn analyze_summary_and_errors() {
         .arg(gcode_fixture("gcode/square.nc"))
         .assert()
         .success()
-        .stdout(predicate::str::contains("square.nc: 11 commands").and(predicate::str::contains("quadrant I")));
+        .stdout(
+            predicate::str::contains("square.nc: 11 commands").and(predicate::str::contains("quadrant I")),
+        );
     freekerf(home.path())
         .arg("analyze")
         .arg(gcode_fixture("gcode/malformed.nc"))
@@ -81,25 +91,57 @@ fn send_without_a_port_fails() {
 #[test]
 fn config_get_set_path_schema() {
     let home = tempfile::tempdir().unwrap();
-    freekerf(home.path()).args(["config", "path"]).assert().success().stdout(predicate::str::contains("settings.toml"));
-    freekerf(home.path()).args(["config", "get", "machine.baud"]).assert().success().stdout("115200\n");
-    freekerf(home.path()).args(["config", "set", "machine.port", "COM7"]).assert().success();
-    freekerf(home.path()).args(["config", "set", "automation.mcp.enabled", "true"]).assert().success();
+    freekerf(home.path())
+        .args(["config", "path"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("settings.toml"));
+    freekerf(home.path())
+        .args(["config", "get", "machine.baud"])
+        .assert()
+        .success()
+        .stdout("115200\n");
+    freekerf(home.path())
+        .args(["config", "set", "machine.port", "COM7"])
+        .assert()
+        .success();
+    freekerf(home.path())
+        .args(["config", "set", "automation.mcp.enabled", "true"])
+        .assert()
+        .success();
     freekerf(home.path())
         .args(["config", "get"])
         .assert()
         .success()
         .stdout(predicate::str::contains("port = \"COM7\"").and(predicate::str::contains("enabled = true")));
-    freekerf(home.path()).args(["config", "set", "machine.nope", "1"]).assert().code(2);
-    freekerf(home.path()).args(["config", "schema"]).assert().success().stdout(predicate::str::contains("\"$schema\""));
+    freekerf(home.path())
+        .args(["config", "set", "machine.nope", "1"])
+        .assert()
+        .code(2);
+    freekerf(home.path())
+        .args(["config", "schema"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"$schema\""));
 }
 
 #[test]
 fn actions_and_run() {
     let home = tempfile::tempdir().unwrap();
-    freekerf(home.path()).arg("actions").assert().success().stdout(predicate::str::contains("machine.stop"));
-    freekerf(home.path()).args(["actions", "--markdown"]).assert().success().stdout(predicate::str::starts_with("# Actions"));
-    let out = freekerf(home.path()).args(["actions", "--json"]).output().unwrap();
+    freekerf(home.path())
+        .arg("actions")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("machine.stop"));
+    freekerf(home.path())
+        .args(["actions", "--markdown"])
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("# Actions"));
+    let out = freekerf(home.path())
+        .args(["actions", "--json"])
+        .output()
+        .unwrap();
     let specs: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert!(specs.as_array().unwrap().len() >= 25);
     freekerf(home.path())
@@ -107,10 +149,21 @@ fn actions_and_run() {
         .assert()
         .success()
         .stdout(predicate::str::contains("\"status\": \"Disconnected\""));
-    freekerf(home.path()).args(["run", "job.run"]).assert().code(2).stderr(predicate::str::contains("not connected"));
-    freekerf(home.path()).args(["run", "state.get", "{"]).assert().code(2);
+    freekerf(home.path())
+        .args(["run", "job.run"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("not connected"));
+    freekerf(home.path())
+        .args(["run", "state.get", "{"])
+        .assert()
+        .code(2);
     freekerf(home.path()).args(["host"]).assert().code(2);
-    freekerf(home.path()).args(["--log", "bogus", "run", "job.info"]).assert().success().stdout("null\n");
+    freekerf(home.path())
+        .args(["--log", "bogus", "run", "job.info"])
+        .assert()
+        .success()
+        .stdout("null\n");
 }
 
 #[test]
@@ -122,7 +175,10 @@ fn console_session_on_the_emulator() {
         .timeout(Duration::from_secs(30))
         .assert()
         .success()
-        .stdout(predicate::str::contains("> G0 X1").and(predicate::str::contains("\"firmware_version\": \"1.1f\"")));
+        .stdout(
+            predicate::str::contains("> G0 X1")
+                .and(predicate::str::contains("\"firmware_version\": \"1.1f\"")),
+        );
 }
 
 struct Host {
@@ -144,13 +200,23 @@ impl Host {
             .unwrap();
         let stdin = child.stdin.take().unwrap();
         let stdout = BufReader::new(child.stdout.take().unwrap());
-        Self { child, stdin, stdout, next: 1 }
+        Self {
+            child,
+            stdin,
+            stdout,
+            next: 1,
+        }
     }
 
     fn call(&mut self, action: &str, params: Value) -> Value {
         let id = self.next;
         self.next += 1;
-        writeln!(self.stdin, "{}", json!({"id": id, "action": action, "params": params})).unwrap();
+        writeln!(
+            self.stdin,
+            "{}",
+            json!({"id": id, "action": action, "params": params})
+        )
+        .unwrap();
         let mut line = String::new();
         self.stdout.read_line(&mut line).unwrap();
         let v: Value = serde_json::from_str(&line).unwrap();
@@ -183,7 +249,9 @@ fn host_stdio_drives_the_emulator_on_a_pty() {
         .spawn()
         .unwrap();
     let mut path = String::new();
-    BufReader::new(emu.stdout.take().unwrap()).read_line(&mut path).unwrap();
+    BufReader::new(emu.stdout.take().unwrap())
+        .read_line(&mut path)
+        .unwrap();
     let path = path.trim().to_owned();
     assert!(path.starts_with("/dev/"));
 
@@ -192,7 +260,10 @@ fn host_stdio_drives_the_emulator_on_a_pty() {
     h.wait(|st| st["machine"]["ready"] == true && st["machine"]["status"] == "Idle");
     let job = home.path().join("job.nc");
     std::fs::write(&job, "G0 X1\nM3 S100\nG1 X2 F600\nM5\n").unwrap();
-    assert_eq!(h.call("job.load", json!({"path": job.to_string_lossy()}))["result"]["lines"], 4);
+    assert_eq!(
+        h.call("job.load", json!({"path": job.to_string_lossy()}))["result"]["lines"],
+        4
+    );
     assert_eq!(h.call("job.run", Value::Null)["ok"], true);
     let st = h.wait(|st| st["machine"]["in_program"] == false && st["machine"]["status"] == "Idle");
     assert_eq!(st["firmware_version"], "1.1f");

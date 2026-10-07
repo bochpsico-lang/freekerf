@@ -13,10 +13,6 @@ publish.workspace = true
 freekerf-emulator.workspace = true
 freekerf-gcode.workspace = true
 freekerf-protocol.workspace = true
-regex.workspace = true
-
-[target.'cfg(unix)'.dependencies]
-nix.workspace = true
 
 [lints]
 workspace = true

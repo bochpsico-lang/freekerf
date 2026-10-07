@@ -42,7 +42,11 @@ pub fn parse_number(s: &str) -> Option<Decimal> {
     }
     text.push_str(body.strip_suffix('.').unwrap_or(body));
     let value = Decimal::from_str(&text).ok()?;
-    Some(if negative && !value.is_zero() { -value } else { value })
+    Some(if negative && !value.is_zero() {
+        -value
+    } else {
+        value
+    })
 }
 
 /// `(decimal)double` of .NET Framework: at most 15 significant digits, `None` for
@@ -68,7 +72,9 @@ pub fn decimal_from_f64(value: f64) -> Option<Decimal> {
         if scale > 28 {
             // smaller than the smallest decimal step: rounds to zero (or to fewer digits)
             let shift = u32::try_from(scale - 28).ok()?;
-            number = number.checked_div(Decimal::from(10u64.checked_pow(shift.min(19))?))?.round_dp(0);
+            number = number
+                .checked_div(Decimal::from(10u64.checked_pow(shift.min(19))?))?
+                .round_dp(0);
             number.set_scale(28).ok()?;
         } else {
             number.set_scale(u32::try_from(scale).ok()?).ok()?;
@@ -164,7 +170,9 @@ mod tests {
 
     #[test]
     fn parse_number_rejects_what_dotnet_rejects() {
-        for s in ["", "-", ".", "-.", "1..5", "-4-2", "--5", "5--", "1.2.3", "٣", "1-2"] {
+        for s in [
+            "", "-", ".", "-.", "1..5", "-4-2", "--5", "5--", "1.2.3", "٣", "1-2",
+        ] {
             assert_eq!(parse_number(s), None, "{s:?}");
         }
     }
@@ -172,10 +180,16 @@ mod tests {
     #[test]
     fn decimal_from_f64_keeps_15_significant_digits() {
         assert_eq!(decimal_from_f64(0.1).unwrap().to_string(), "0.1");
-        assert_eq!(decimal_from_f64(1.0 / 3.0).unwrap().to_string(), "0.333333333333333");
+        assert_eq!(
+            decimal_from_f64(1.0 / 3.0).unwrap().to_string(),
+            "0.333333333333333"
+        );
         assert_eq!(decimal_from_f64(-2.5).unwrap().to_string(), "-2.5");
         assert_eq!(decimal_from_f64(1234.5678).unwrap().to_string(), "1234.5678");
-        assert_eq!(decimal_from_f64(1e20).unwrap().to_string(), "100000000000000000000");
+        assert_eq!(
+            decimal_from_f64(1e20).unwrap().to_string(),
+            "100000000000000000000"
+        );
         assert_eq!(decimal_from_f64(0.0).unwrap(), Decimal::ZERO);
         assert_eq!(decimal_from_f64(1e-30).unwrap(), Decimal::ZERO);
         assert_eq!(decimal_from_f64(f64::NAN), None);
@@ -198,7 +212,10 @@ mod tests {
         assert_eq!(round_half_even(2.5, 0), 2.0);
         assert_eq!(round_half_even(3.5, 0), 4.0);
         assert_eq!(round_half_even(1e17, 2), 1e17);
-        assert_eq!(round_half_even(0.123_456_789_012_345_67, 14), 0.123_456_789_012_35);
+        assert_eq!(
+            round_half_even(0.123_456_789_012_345_67, 14),
+            0.123_456_789_012_35
+        );
     }
 
     #[test]

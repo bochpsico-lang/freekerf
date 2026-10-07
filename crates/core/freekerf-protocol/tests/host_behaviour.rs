@@ -1,13 +1,13 @@
 //! Behaviour of the host beyond the conformance protocol scenarios (the white-box
 //! characterization of `GrblCore` in `conformance/tests/whitebox`).
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use freekerf_emulator::DeviceConfig;
 use freekerf_gcode::Decimal;
 use freekerf_protocol::firmware::FirmwareKind;
 use freekerf_protocol::{
-    AutoCooling, ConsoleRow, Event, Host, HostError, HostOptions, Issue, JogDirection, MachineStatus, MessageKind,
-    Output, Point3, StreamingMode, SystemOpKind,
+    AutoCooling, ConsoleRow, Event, Host, HostError, HostOptions, Issue, JogDirection, MachineStatus,
+    MessageKind, Output, Point3, StreamingMode, SystemOpKind,
 };
 use freekerf_testkit::{Bench, job_lines};
 
@@ -55,7 +55,10 @@ fn run_program_preconditions() {
     b.device.alarm_now(1);
     b.exchange();
     b.advance(600);
-    assert!(matches!(b.host.run_program(false, b.now), Err(HostError::NotAllowed(_))));
+    assert!(matches!(
+        b.host.run_program(false, b.now),
+        Err(HostError::NotAllowed(_))
+    ));
 }
 
 #[test]
@@ -79,8 +82,18 @@ fn loop_count_repeats_the_program_with_the_passes_code() {
     // default passes code: four comment lines streamed as empty lines, twice
     assert_eq!(l.iter().filter(|x| x.is_empty()).count(), 8);
     assert_eq!(l.last().unwrap(), "G0X0Y0Z0");
-    assert!(b.events.iter().any(|e| matches!(e, Event::PassEnded { remaining: 1 })));
-    assert_eq!(b.events.iter().filter(|e| matches!(e, Event::JobEnded { .. })).count(), 1);
+    assert!(
+        b.events
+            .iter()
+            .any(|e| matches!(e, Event::PassEnded { remaining: 1 }))
+    );
+    assert_eq!(
+        b.events
+            .iter()
+            .filter(|e| matches!(e, Event::JobEnded { .. }))
+            .count(),
+        1
+    );
 }
 
 #[test]
@@ -116,14 +129,25 @@ fn errors_are_counted_and_decoded_in_the_console() {
     assert!(b.run_until(|b| !b.host.in_program(), 5000));
     assert!(b.events.iter().any(|e| matches!(e,
         Event::Console(ConsoleRow::Result { result, decoded: Some(d), .. }) if result == "ERROR:2" && d == "Bad number format")));
-    assert!(b.events.iter().any(|e| matches!(e, Event::JobEnded { errors: 1, .. })));
-    assert!(console_texts(&b).iter().any(|t| t.starts_with("[3 lines, 1 errors")));
+    assert!(
+        b.events
+            .iter()
+            .any(|e| matches!(e, Event::JobEnded { errors: 1, .. }))
+    );
+    assert!(
+        console_texts(&b)
+            .iter()
+            .any(|t| t.starts_with("[3 lines, 1 errors"))
+    );
 }
 
 #[test]
 fn abort_without_job_is_refused() {
     let mut b = connected();
-    assert!(matches!(b.host.abort_program(b.now), Err(HostError::NotAllowed(_))));
+    assert!(matches!(
+        b.host.abort_program(b.now),
+        Err(HostError::NotAllowed(_))
+    ));
 }
 
 #[test]
@@ -133,7 +157,18 @@ fn resume_from_position_rebuilds_state() {
     b.host.resume_program(5, false, false, b.now).unwrap();
     assert!(b.run_until(|b| !b.host.in_program(), 5000));
     // no header on resume; the footer follows as after any job
-    assert_eq!(b.lines(), ["G90", "M5G0X20Y10Z0F800S500", "G91M3", "G1Y5", "G1X-3", "M5", "G0X0Y0Z0"]);
+    assert_eq!(
+        b.lines(),
+        [
+            "G90",
+            "M5G0X20Y10Z0F800S500",
+            "G91M3",
+            "G1Y5",
+            "G1X-3",
+            "M5",
+            "G0X0Y0Z0"
+        ]
+    );
 }
 
 #[test]
@@ -150,8 +185,14 @@ fn resume_adds_the_motion_mode_homing_and_work_offset() {
     b2.load("G1 X5 F600\nX6\nX7");
     b2.host.resume_program(1, true, false, b2.now).unwrap();
     assert!(b2.run_until(|b| !b.host.in_program(), 5000));
-    assert_eq!(b2.lines(), ["$H", "G90", "M5G0X5Y0Z0F600S0", "G1X6", "X7", "G0X0Y0Z0"]);
-    assert!(b.host.snapshot().last_issue == Issue::Unknown || b.host.snapshot().last_issue == Issue::UnexpectedDisconnect);
+    assert_eq!(
+        b2.lines(),
+        ["$H", "G90", "M5G0X5Y0Z0F600S0", "G1X6", "X7", "G0X0Y0Z0"]
+    );
+    assert!(
+        b.host.snapshot().last_issue == Issue::Unknown
+            || b.host.snapshot().last_issue == Issue::UnexpectedDisconnect
+    );
 }
 
 #[test]
@@ -232,14 +273,25 @@ fn buffer_stuck_is_unlocked_when_the_board_reports_an_empty_buffer() {
     b.device.release(n);
     b.device.take_output();
     b.now += 11_000;
-    b.host.receive(b"<Run|MPos:0.000,0.000,0.000|Bf:15,128|FS:0,0>\n", b.now);
+    b.host
+        .receive(b"<Run|MPos:0.000,0.000,0.000|Bf:15,128|FS:0,0>\n", b.now);
     b.exchange();
-    assert!(b.events.iter().any(|e| matches!(e, Event::BufferStuckUnlocked { .. })));
+    assert!(
+        b.events
+            .iter()
+            .any(|e| matches!(e, Event::BufferStuckUnlocked { .. }))
+    );
 }
 
 #[test]
 fn manual_buffer_stuck_unlock() {
-    let mut b = Bench::with(HostOptions::default(), DeviceConfig { report_buffer: false, ..DeviceConfig::default() });
+    let mut b = Bench::with(
+        HostOptions::default(),
+        DeviceConfig {
+            report_buffer: false,
+            ..DeviceConfig::default()
+        },
+    );
     b.connect();
     b.load(&job_lines(30).join("\n"));
     b.device.set_auto_ack(false);
@@ -251,11 +303,25 @@ fn manual_buffer_stuck_unlock() {
 
 #[test]
 fn auto_cooling_holds_and_resumes() {
-    let opts = HostOptions { auto_cooling: Some(AutoCooling { on_ms: 1000, off_ms: 500 }), ..HostOptions::default() };
-    let mut b = Bench::with(opts, DeviceConfig { timed: true, ..DeviceConfig::default() });
+    let opts = HostOptions {
+        auto_cooling: Some(AutoCooling {
+            on_ms: 1000,
+            off_ms: 500,
+        }),
+        ..HostOptions::default()
+    };
+    let mut b = Bench::with(
+        opts,
+        DeviceConfig {
+            timed: true,
+            ..DeviceConfig::default()
+        },
+    );
     b.connect();
     // 40 one-second moves: the job lasts longer than the 15-block planner
-    let moves: Vec<String> = (0..40).map(|i| format!("G1 X{} F600", if i % 2 == 0 { 10 } else { 0 })).collect();
+    let moves: Vec<String> = (0..40)
+        .map(|i| format!("G1 X{} F600", if i % 2 == 0 { 10 } else { 0 }))
+        .collect();
     b.load(&format!("M3 S100\n{}\nM5", moves.join("\n")));
     b.host.run_program(false, b.now).unwrap();
     assert!(b.run_until(|b| b.host.status() == MachineStatus::Cooling, 3000));
@@ -267,9 +333,17 @@ fn auto_cooling_holds_and_resumes() {
 
 #[test]
 fn time_projection_follows_the_job() {
-    let mut b = Bench::with(HostOptions::default(), DeviceConfig { timed: true, ..DeviceConfig::default() });
+    let mut b = Bench::with(
+        HostOptions::default(),
+        DeviceConfig {
+            timed: true,
+            ..DeviceConfig::default()
+        },
+    );
     b.connect();
-    let moves: Vec<String> = (0..30).map(|i| format!("G1 X{} F600", if i % 2 == 0 { 10 } else { 0 })).collect();
+    let moves: Vec<String> = (0..30)
+        .map(|i| format!("G1 X{} F600", if i % 2 == 0 { 10 } else { 0 }))
+        .collect();
     b.load(&moves.join("\n"));
     b.host.run_program(false, b.now).unwrap();
     b.advance(500);
@@ -315,14 +389,23 @@ fn manual_commands_are_refused_during_a_job() {
     b.load(&job_lines(30).join("\n"));
     b.host.run_program(false, b.now).unwrap();
     b.exchange();
-    assert!(matches!(b.host.send_command("G0", b.now), Err(HostError::NotAllowed(_))));
+    assert!(matches!(
+        b.host.send_command("G0", b.now),
+        Err(HostError::NotAllowed(_))
+    ));
     assert!(b.host.set_program(freekerf_gcode::Program::new()).is_err());
     assert!(b.host.write_settings(&[(1, "1".into())], b.now).is_err());
 }
 
 #[test]
 fn soft_reset_works_while_connecting() {
-    let mut b = Bench::with(HostOptions { reset_on_connect: false, ..HostOptions::default() }, DeviceConfig::default());
+    let mut b = Bench::with(
+        HostOptions {
+            reset_on_connect: false,
+            ..HostOptions::default()
+        },
+        DeviceConfig::default(),
+    );
     b.open = true;
     b.host.open(b.now);
     b.host.soft_reset(b.now).unwrap();
@@ -335,7 +418,10 @@ fn soft_reset_works_while_connecting() {
 #[test]
 fn status_report_fields() {
     let mut b = connected();
-    b.host.receive(b"<Idle|WPos:1.000,2.000,3.000|WCO:1,1,1|FS:300,20|Bf:10,100|Ov:110,50,90|A:S>\n", b.now);
+    b.host.receive(
+        b"<Idle|WPos:1.000,2.000,3.000|WCO:1,1,1|FS:300,20|Bf:10,100|Ov:110,50,90|A:S>\n",
+        b.now,
+    );
     let s = b.host.snapshot();
     assert_eq!(s.work_offset, Point3::new(1.0, 1.0, 1.0));
     assert_eq!(s.machine_position, Point3::new(1.0, 2.0, 3.0)); // WPos used the previous WCO (zero)
@@ -351,7 +437,11 @@ fn status_report_fields() {
 
 #[test]
 fn legacy_status_reports_without_version() {
-    let opts = HostOptions { reset_on_connect: false, query_machine_info: false, ..HostOptions::default() };
+    let opts = HostOptions {
+        reset_on_connect: false,
+        query_machine_info: false,
+        ..HostOptions::default()
+    };
     let mut h = Host::for_kind(FirmwareKind::Grbl, opts);
     h.open(0);
     h.receive(b"<Idle,MPos:5.000,6.000,7.000,WPos:1.000,2.000,3.000>\n", 10);
@@ -381,15 +471,47 @@ fn hold_states_depend_on_who_requested_them() {
 fn firmware_banners_and_vendors() {
     let cases: &[(&[&str], &str, Option<&str>, bool)] = &[
         (&["GrblHAL 1.1f ['$' or '$HELP' for help]"], "1.1f", None, true),
-        (&["Grbl-Vigo:1.1f|Build:G-20170131-V3.0-20200720"], "1.1f", Some("Grbl-Vigo"), false),
-        (&["Ortur Laser Master 3 Ready!", "OLF 170.", "Grbl 1.1f ['$' for help]"], "1.1f", Some("Ortur Laser Master 3"), false),
-        (&["Aufero AL1 Ready!", "Grbl 1.1h"], "1.1h", Some("Aufero AL1"), false),
-        (&["[Machine:Longer Nano]", "[Software:1.2]"], "1.1f", Some("Longer Nano"), false),
-        (&["SimpleLaser 1.1f ['$' for help]"], "1.1f", Some("SimpleLaser"), false),
+        (
+            &["Grbl-Vigo:1.1f|Build:G-20170131-V3.0-20200720"],
+            "1.1f",
+            Some("Grbl-Vigo"),
+            false,
+        ),
+        (
+            &[
+                "Ortur Laser Master 3 Ready!",
+                "OLF 170.",
+                "Grbl 1.1f ['$' for help]",
+            ],
+            "1.1f",
+            Some("Ortur Laser Master 3"),
+            false,
+        ),
+        (
+            &["Aufero AL1 Ready!", "Grbl 1.1h"],
+            "1.1h",
+            Some("Aufero AL1"),
+            false,
+        ),
+        (
+            &["[Machine:Longer Nano]", "[Software:1.2]"],
+            "1.1f",
+            Some("Longer Nano"),
+            false,
+        ),
+        (
+            &["SimpleLaser 1.1f ['$' for help]"],
+            "1.1f",
+            Some("SimpleLaser"),
+            false,
+        ),
         (&["Fluid 3.4a (wifi)"], "3.4a", Some("Fluid"), false),
     ];
     for (lines, version, vendor, hal) in cases {
-        let opts = HostOptions { reset_on_connect: false, ..HostOptions::default() };
+        let opts = HostOptions {
+            reset_on_connect: false,
+            ..HostOptions::default()
+        };
         let mut h = Host::for_kind(FirmwareKind::Grbl, opts);
         h.open(0);
         for l in *lines {
@@ -411,12 +533,19 @@ fn firmware_banners_and_vendors() {
 #[test]
 fn ip_messages_alarms_and_broken_oks() {
     let mut b = connected();
-    b.host.receive(b"[MSG:Get IP 192.168.1.182]\n[MSG:Connected with 10.0.0.2]\nALARM:1\nALARM:99\n", b.now);
+    b.host.receive(
+        b"[MSG:Get IP 192.168.1.182]\n[MSG:Connected with 10.0.0.2]\nALARM:1\nALARM:99\n",
+        b.now,
+    );
     assert_eq!(b.host.snapshot().detected_ip.as_deref(), Some("10.0.0.2"));
     while let Some(e) = b.host.poll_event() {
         b.events.push(e);
     }
-    assert!(b.events.iter().any(|e| matches!(e, Event::IpDetected(ip) if ip == "192.168.1.182")));
+    assert!(
+        b.events
+            .iter()
+            .any(|e| matches!(e, Event::IpDetected(ip) if ip == "192.168.1.182"))
+    );
     assert!(b.events.iter().any(|e| matches!(e,
         Event::Console(ConsoleRow::Message { kind: MessageKind::Alarm, decoded: Some(d), .. }) if d == "Hard limit")));
     // a garbled ok still acknowledges a line
@@ -434,7 +563,13 @@ fn ip_messages_alarms_and_broken_oks() {
 fn eeprom_writes_go_one_at_a_time_and_update_the_table() {
     let mut b = connected();
     b.device.set_auto_ack(false);
-    let id = b.host.write_settings(&[(110, "1000".into()), (111, "1000".into()), (999, "1".into())], b.now).unwrap();
+    let id = b
+        .host
+        .write_settings(
+            &[(110, "1000".into()), (111, "1000".into()), (999, "1".into())],
+            b.now,
+        )
+        .unwrap();
     b.exchange();
     assert_eq!(b.device.pending_lines(), 1);
     b.device.release(1);
@@ -452,14 +587,22 @@ fn settings_refresh_and_timeouts() {
     let mut b = connected();
     let id = b.host.refresh_settings(b.now).unwrap();
     b.exchange();
-    assert!(b.events.iter().any(|e| matches!(e, Event::SystemOpFinished { id: i, result: Ok(()), .. } if *i == id)));
+    assert!(
+        b.events
+            .iter()
+            .any(|e| matches!(e, Event::SystemOpFinished { id: i, result: Ok(()), .. } if *i == id))
+    );
     // a board that never answers: the query fails after 10 s, the late answer is absorbed
     b.device.set_auto_ack(false);
     let id = b.host.refresh_settings(b.now).unwrap();
     b.exchange();
     assert!(!b.host.ready());
     b.advance(10_100);
-    assert!(b.events.iter().any(|e| matches!(e, Event::SystemOpFinished { id: i, result: Err(_), .. } if *i == id)));
+    assert!(
+        b.events
+            .iter()
+            .any(|e| matches!(e, Event::SystemOpFinished { id: i, result: Err(_), .. } if *i == id))
+    );
     b.device.set_auto_ack(true);
     b.exchange();
     assert_eq!(b.host.snapshot().pending, 0);
@@ -467,7 +610,13 @@ fn settings_refresh_and_timeouts() {
 
 #[test]
 fn settings_read_when_ok_comes_first() {
-    let mut b = Bench::with(HostOptions::default(), DeviceConfig { ok_first: true, ..DeviceConfig::default() });
+    let mut b = Bench::with(
+        HostOptions::default(),
+        DeviceConfig {
+            ok_first: true,
+            ..DeviceConfig::default()
+        },
+    );
     b.connect();
     assert_eq!(b.host.settings().len(), 34);
     assert_eq!(b.host.buffer_size(), 128);
@@ -480,22 +629,33 @@ fn settings_query_rejected_keeps_the_old_table() {
     let id = b.host.refresh_settings(b.now).unwrap();
     b.exchange();
     b.advance(20);
-    assert!(b.events.iter().any(|e| matches!(e, Event::SystemOpFinished { id: i, result: Err(_), .. } if *i == id)));
+    assert!(
+        b.events
+            .iter()
+            .any(|e| matches!(e, Event::SystemOpFinished { id: i, result: Err(_), .. } if *i == id))
+    );
     assert_eq!(b.host.settings().len(), 34);
 }
 
 #[test]
 fn wifi_configuration_by_vendor() {
     let mut b = connected();
-    assert!(matches!(b.host.write_wifi("net", "pw", b.now), Err(HostError::Unsupported(_))));
-    b.host.receive(b"Ortur Laser Master 3 Ready!\nGrbl 1.1f ['$' for help]\n", b.now);
+    assert!(matches!(
+        b.host.write_wifi("net", "pw", b.now),
+        Err(HostError::Unsupported(_))
+    ));
+    b.host
+        .receive(b"Ortur Laser Master 3 Ready!\nGrbl 1.1f ['$' for help]\n", b.now);
     b.exchange();
     b.device.config_mut().settings.insert(74, String::new());
     b.device.config_mut().settings.insert(75, String::new());
     b.advance(600);
     assert!(b.host.write_wifi("net", "pw", b.now).unwrap().is_some());
     b.exchange();
-    assert!(b.lines().ends_with(&["$74=net".to_owned(), "$75=pw".to_owned(), "$WRS".to_owned()]));
+    assert!(
+        b.lines()
+            .ends_with(&["$74=net".to_owned(), "$75=pw".to_owned(), "$WRS".to_owned()])
+    );
     b.host.receive(b"[Machine:Longer Nano]\n", b.now);
     assert!(b.host.write_wifi("net", "pw", b.now).unwrap().is_none());
     b.exchange();
@@ -507,11 +667,19 @@ fn wifi_configuration_by_vendor() {
 #[test]
 fn jog_variants_v11() {
     let mut b = connected();
-    b.host.jog(JogDirection::Home, 1000.0, Decimal::ONE, b.now).unwrap();
-    b.host.jog(JogDirection::Zdown, 100.0, Decimal::new(25, 2), b.now).unwrap();
+    b.host
+        .jog(JogDirection::Home, 1000.0, Decimal::ONE, b.now)
+        .unwrap();
+    b.host
+        .jog(JogDirection::Zdown, 100.0, Decimal::new(25, 2), b.now)
+        .unwrap();
     b.host.jog_to(10.0, 20.5, 600.0, b.now).unwrap();
     b.exchange();
-    assert!(b.lines().ends_with(&["$J=G90X0Y0F1000".to_owned(), "$J=G91Z-0.25F100".to_owned(), "$J=G90X10.00Y20.50F600".to_owned()]));
+    assert!(b.lines().ends_with(&[
+        "$J=G90X0Y0F1000".to_owned(),
+        "$J=G91Z-0.25F100".to_owned(),
+        "$J=G90X10.00Y20.50F600".to_owned()
+    ]));
 }
 
 #[test]
@@ -526,11 +694,23 @@ fn jog_to_is_clamped_by_soft_limits() {
 
 #[test]
 fn jog_on_grbl_09_uses_plain_gcode() {
-    let opts = HostOptions { reset_on_connect: false, query_machine_info: false, ..HostOptions::default() };
-    let mut b = Bench::with(opts, DeviceConfig { version: "0.9j".into(), ..DeviceConfig::default() });
+    let opts = HostOptions {
+        reset_on_connect: false,
+        query_machine_info: false,
+        ..HostOptions::default()
+    };
+    let mut b = Bench::with(
+        opts,
+        DeviceConfig {
+            version: "0.9j".into(),
+            ..DeviceConfig::default()
+        },
+    );
     b.connect();
     b.host.jog(JogDirection::SW, 500.0, Decimal::ONE, b.now).unwrap();
-    b.host.jog(JogDirection::Home, 500.0, Decimal::ONE, b.now).unwrap();
+    b.host
+        .jog(JogDirection::Home, 500.0, Decimal::ONE, b.now)
+        .unwrap();
     b.host.jog_to(1.0, 2.0, 500.0, b.now).unwrap();
     b.exchange();
     assert!(b.lines().ends_with(&[
@@ -547,7 +727,10 @@ fn jog_on_grbl_09_uses_plain_gcode() {
 
 #[test]
 fn continuous_jog_sends_targets_and_aborts() {
-    let opts = HostOptions { continuous_jog: true, ..HostOptions::default() };
+    let opts = HostOptions {
+        continuous_jog: true,
+        ..HostOptions::default()
+    };
     let mut b = Bench::with(opts, DeviceConfig::default());
     b.connect();
     b.host.jog(JogDirection::NE, 1000.0, Decimal::ONE, b.now).unwrap();
@@ -564,7 +747,9 @@ fn continuous_jog_sends_targets_and_aborts() {
     b.exchange();
     assert_eq!(b.device.realtime().iter().filter(|r| **r == 0x85).count(), 2);
     b.host.jog_to(5.0, 5.0, 300.0, b.now).unwrap();
-    b.host.jog(JogDirection::Home, 300.0, Decimal::ONE, b.now).unwrap();
+    b.host
+        .jog(JogDirection::Home, 300.0, Decimal::ONE, b.now)
+        .unwrap();
     b.host.jog(JogDirection::Zup, 300.0, Decimal::ONE, b.now).unwrap();
     b.exchange();
     assert!(b.lines().contains(&"$J=G91Z1.0F300".to_owned()));
@@ -626,7 +811,11 @@ fn marlin_polls_with_m114_and_reports_idle_at_the_end() {
     assert!(h.ready()); // no $$/$I on Marlin
     h.tick(600);
     assert!(h.refresh_settings(600).is_err());
-    h.set_program(freekerf_gcode::Program::parse("G1 X1", &freekerf_gcode::AnalysisOptions::default())).unwrap();
+    h.set_program(freekerf_gcode::Program::parse(
+        "G1 X1",
+        &freekerf_gcode::AnalysisOptions::default(),
+    ))
+    .unwrap();
     h.run_program(false, 700).unwrap();
     while h.poll_output().is_some() {}
     h.receive(b"ok\nok\nok\n", 800);
@@ -642,18 +831,32 @@ fn marlin_polls_with_m114_and_reports_idle_at_the_end() {
 
 #[test]
 fn vigo_wraps_jobs_and_uses_sbuf_counters() {
-    let mut h = Host::for_kind(FirmwareKind::VigoWork, HostOptions { reset_on_connect: false, query_machine_info: false, ..HostOptions::default() });
+    let mut h = Host::for_kind(
+        FirmwareKind::VigoWork,
+        HostOptions {
+            reset_on_connect: false,
+            query_machine_info: false,
+            ..HostOptions::default()
+        },
+    );
     h.open(0);
     let first: Vec<Output> = std::iter::from_fn(|| h.poll_output()).collect();
     assert_eq!(first, vec![Output::Write(vec![0x88])]);
-    h.receive(b"Grbl-Vigo:1.1f|Build:G-20170131-V3.0-20200720\n<Idle|MPos:0,0,0>\n", 10);
+    h.receive(
+        b"Grbl-Vigo:1.1f|Build:G-20170131-V3.0-20200720\n<Idle|MPos:0,0,0>\n",
+        10,
+    );
     h.tick(600);
     while h.poll_output().is_some() {}
     h.receive(b"$0=1\nok\n", 620);
     h.tick(1200);
     assert!(h.ready(), "{:?}", h.snapshot());
     assert_eq!(h.buffer_size(), 127);
-    h.set_program(freekerf_gcode::Program::parse("G1 X1\nG1 X2", &freekerf_gcode::AnalysisOptions::default())).unwrap();
+    h.set_program(freekerf_gcode::Program::parse(
+        "G1 X1\nG1 X2",
+        &freekerf_gcode::AnalysisOptions::default(),
+    ))
+    .unwrap();
     h.run_program(false, 1300).unwrap();
     let sent: Vec<String> = std::iter::from_fn(|| h.poll_output())
         .filter_map(|o| match o {
@@ -705,15 +908,25 @@ fn next_deadline_follows_the_timers() {
     b.device.set_auto_ack(false);
     b.host.run_program(false, b.now).unwrap();
     assert!(b.host.next_deadline().unwrap() <= b.now + 500);
-    b.host.set_options(HostOptions { status_query_ms: 250, ..b.host.options().clone() });
+    b.host.set_options(HostOptions {
+        status_query_ms: 250,
+        ..b.host.options().clone()
+    });
     assert_eq!(b.host.options().status_query_ms, 250);
 }
 
 #[test]
 fn laser_life_counters_follow_the_run_state() {
     let mut life = freekerf_protocol::LaserLife::default();
-    life.counters.push(freekerf_protocol::LaserLifeCounter::new("a", "Default"));
-    let mut b = Bench::with(HostOptions::default(), DeviceConfig { timed: true, ..DeviceConfig::default() });
+    life.counters
+        .push(freekerf_protocol::LaserLifeCounter::new("a", "Default"));
+    let mut b = Bench::with(
+        HostOptions::default(),
+        DeviceConfig {
+            timed: true,
+            ..DeviceConfig::default()
+        },
+    );
     b.host.set_laser_life(life);
     b.connect();
     assert!(b.host.select_laser("a"));
@@ -728,8 +941,10 @@ fn laser_life_counters_follow_the_run_state() {
 #[test]
 fn several_laser_modules_ask_the_user() {
     let mut life = freekerf_protocol::LaserLife::default();
-    life.counters.push(freekerf_protocol::LaserLifeCounter::new("a", "A"));
-    life.counters.push(freekerf_protocol::LaserLifeCounter::new("b", "B"));
+    life.counters
+        .push(freekerf_protocol::LaserLifeCounter::new("a", "A"));
+    life.counters
+        .push(freekerf_protocol::LaserLifeCounter::new("b", "B"));
     let mut b = Bench::new();
     b.host.set_laser_life(life);
     b.open();

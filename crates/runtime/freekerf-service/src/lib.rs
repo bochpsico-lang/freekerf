@@ -55,7 +55,9 @@ impl ServiceEvent {
             Self::Machine(MachineEvent::Connected { transport }) => {
                 serde_json::json!({"event": "connected", "transport": transport})
             }
-            Self::Machine(MachineEvent::Disconnected { user }) => serde_json::json!({"event": "disconnected", "user": user}),
+            Self::Machine(MachineEvent::Disconnected { user }) => {
+                serde_json::json!({"event": "disconnected", "user": user})
+            }
             Self::Machine(MachineEvent::Host(e)) => {
                 serde_json::json!({"event": "host", "data": serde_json::to_value(e).unwrap_or(Value::Null)})
             }
@@ -69,7 +71,12 @@ impl ServiceEvent {
         match self {
             Self::Machine(MachineEvent::Host(Event::Console(row))) => Some(match row {
                 ConsoleRow::Command { text, .. } => format!("> {text}"),
-                ConsoleRow::Result { result, status, decoded, .. } => match (status, decoded) {
+                ConsoleRow::Result {
+                    result,
+                    status,
+                    decoded,
+                    ..
+                } => match (status, decoded) {
                     (CommandStatus::ResponseGood, _) => return None,
                     (_, Some(d)) => format!("  {result} ({d})"),
                     _ => format!("  {result}"),
@@ -78,9 +85,14 @@ impl ServiceEvent {
             }),
             Self::Machine(MachineEvent::Host(Event::Issue(i))) => Some(format!("! issue: {i}")),
             Self::Machine(MachineEvent::Host(Event::StatusChanged { new, .. })) => Some(format!("# {new}")),
-            Self::Machine(MachineEvent::Host(Event::JobEnded { lines, errors, time_ms })) => {
-                Some(format!("# job ended: {lines} lines, {errors} errors, {:.1} s", *time_ms as f64 / 1000.0))
-            }
+            Self::Machine(MachineEvent::Host(Event::JobEnded {
+                lines,
+                errors,
+                time_ms,
+            })) => Some(format!(
+                "# job ended: {lines} lines, {errors} errors, {:.1} s",
+                *time_ms as f64 / 1000.0
+            )),
             Self::Machine(MachineEvent::Connected { transport }) => Some(format!("# connected: {transport}")),
             Self::Machine(MachineEvent::Disconnected { .. }) => Some("# disconnected".into()),
             _ => None,
@@ -98,7 +110,10 @@ pub mod emulator {
     /// # Errors
     /// No PTY available.
     pub fn serve_pty(timed: bool) -> Result<PtyEmulator, String> {
-        let cfg = freekerf_emulator::DeviceConfig { timed, ..freekerf_emulator::DeviceConfig::default() };
+        let cfg = freekerf_emulator::DeviceConfig {
+            timed,
+            ..freekerf_emulator::DeviceConfig::default()
+        };
         freekerf_transport::pty::serve_emulator(cfg).map_err(|e| e.to_string())
     }
 }
@@ -114,7 +129,10 @@ pub struct Stores {
 
 impl std::fmt::Debug for Stores {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Stores").field("settings", &self.settings.is_some()).field("cache", &self.cache.is_some()).finish()
+        f.debug_struct("Stores")
+            .field("settings", &self.settings.is_some())
+            .field("cache", &self.cache.is_some())
+            .finish()
     }
 }
 
@@ -182,7 +200,9 @@ pub struct Inner {
 
 impl std::fmt::Debug for Inner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Inner").field("machine", &self.machine).finish_non_exhaustive()
+        f.debug_struct("Inner")
+            .field("machine", &self.machine)
+            .finish_non_exhaustive()
     }
 }
 
@@ -195,7 +215,9 @@ pub struct Service {
 
 impl std::fmt::Debug for Service {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Service").field("registry", &self.registry).finish_non_exhaustive()
+        f.debug_struct("Service")
+            .field("registry", &self.registry)
+            .finish_non_exhaustive()
     }
 }
 
@@ -245,7 +267,10 @@ impl Service {
             subscribers: Arc::new(Mutex::new(Vec::new())),
         });
         start_collector(&inner);
-        Ok(Self { inner, registry: Arc::new(build_registry()) })
+        Ok(Self {
+            inner,
+            registry: Arc::new(build_registry()),
+        })
     }
 
     /// A service in memory (no files).
@@ -304,28 +329,32 @@ fn start_collector(inner: &Arc<Inner>) {
     let issues = Arc::clone(&inner.issues);
     let subscribers = Arc::clone(&inner.subscribers);
     let weak = Arc::downgrade(inner);
-    let spawned = thread::Builder::new().name("freekerf-service-events".into()).spawn(move || {
-        for e in events {
-            match &e {
-                MachineEvent::Host(Event::Console(row)) => {
-                    let mut c = lock(&console);
-                    c.push_back(row.clone());
-                    while c.len() > CONSOLE_ROWS {
-                        c.pop_front();
+    let spawned = thread::Builder::new()
+        .name("freekerf-service-events".into())
+        .spawn(move || {
+            for e in events {
+                match &e {
+                    MachineEvent::Host(Event::Console(row)) => {
+                        let mut c = lock(&console);
+                        c.push_back(row.clone());
+                        while c.len() > CONSOLE_ROWS {
+                            c.pop_front();
+                        }
                     }
-                }
-                MachineEvent::Host(Event::ConsoleCleared) => lock(&console).clear(),
-                MachineEvent::Host(Event::Issue(i)) => lock(&issues).push(*i),
-                MachineEvent::Host(Event::VersionDetected(_) | Event::SettingsChanged | Event::JobEnded { .. }) => {
-                    if let Some(inner) = weak.upgrade() {
-                        inner.save_cache();
+                    MachineEvent::Host(Event::ConsoleCleared) => lock(&console).clear(),
+                    MachineEvent::Host(Event::Issue(i)) => lock(&issues).push(*i),
+                    MachineEvent::Host(
+                        Event::VersionDetected(_) | Event::SettingsChanged | Event::JobEnded { .. },
+                    ) => {
+                        if let Some(inner) = weak.upgrade() {
+                            inner.save_cache();
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
+                lock(&subscribers).retain(|s| s.send(ServiceEvent::Machine(e.clone())).is_ok());
             }
-            lock(&subscribers).retain(|s| s.send(ServiceEvent::Machine(e.clone())).is_ok());
-        }
-    });
+        });
     if let Err(e) = spawned {
         tracing::error!("cannot start the event collector: {e}");
     }
@@ -339,7 +368,11 @@ impl Inner {
     fn save_cache(&self) {
         let Some(store) = &self.stores.cache else { return };
         let Ok((version, table, life)) = self.machine.call(|h, _| {
-            (h.version().cloned(), h.settings().clone(), h.laser_life().counters.clone())
+            (
+                h.version().cloned(),
+                h.settings().clone(),
+                h.laser_life().counters.clone(),
+            )
         }) else {
             return;
         };
@@ -356,13 +389,20 @@ impl Inner {
 
     fn save_settings(&self) -> Result<(), ActionError> {
         if let Some(store) = &self.stores.settings {
-            lock(&self.settings).save(store.as_ref()).map_err(|e| ActionError::Failed(e.to_string()))?;
+            lock(&self.settings)
+                .save(store.as_ref())
+                .map_err(|e| ActionError::Failed(e.to_string()))?;
         }
         Ok(())
     }
 
-    fn host<R: Send + 'static>(&self, f: impl FnOnce(&mut Host, u64) -> R + Send + 'static) -> Result<R, ActionError> {
-        self.machine.call(f).map_err(|e| ActionError::Failed(e.to_string()))
+    fn host<R: Send + 'static>(
+        &self,
+        f: impl FnOnce(&mut Host, u64) -> R + Send + 'static,
+    ) -> Result<R, ActionError> {
+        self.machine
+            .call(f)
+            .map_err(|e| ActionError::Failed(e.to_string()))
     }
 
     fn host_result(
@@ -394,11 +434,15 @@ impl Inner {
 
     fn analysis_options(&self) -> AnalysisOptions {
         let support_pwm = lock(&self.settings).machine.support_pwm;
-        let timing = self.machine.call(|h, _| h.settings().timing()).unwrap_or_default();
+        let timing = self
+            .machine
+            .call(|h, _| h.settings().timing())
+            .unwrap_or_default();
         AnalysisOptions { timing, support_pwm }
     }
 }
 
+#[allow(clippy::needless_pass_by_value)] // used as `map_err(host_err)`
 fn host_err(e: HostError) -> ActionError {
     match e {
         HostError::NotConnected | HostError::NotAllowed(_) | HostError::NoProgram | HostError::Busy => {
@@ -615,31 +659,46 @@ fn build_registry() -> Registry<Inner> {
     };
 
     // ---- state
-    add(r.register("state.get", "Machine state, loaded program, issues and resume offer.", Tier::Read, |s: &Inner, _: NoParams| {
-        let machine = s.machine.snapshot();
-        let resume = s.host(|h, _| h.resume_suggestion())?;
-        Ok(State {
-            firmware_version: machine.version.as_ref().map(ToString::to_string),
-            machine,
-            issues: lock(&s.issues).clone(),
-            program: lock(&s.loaded).as_ref().map(program_info),
-            resume,
-        })
-    }));
-    add(r.register("console.get", "Console rows (sent commands, answers, messages).", Tier::Read, |s: &Inner, p: ConsoleParams| {
-        let c = lock(&s.console);
-        let skip = p.last.map_or(0, |n| c.len().saturating_sub(n));
-        Ok(c.iter().skip(skip).cloned().collect::<Vec<_>>())
-    }));
+    add(r.register(
+        "state.get",
+        "Machine state, loaded program, issues and resume offer.",
+        Tier::Read,
+        |s: &Inner, _: NoParams| {
+            let machine = s.machine.snapshot();
+            let resume = s.host(|h, _| h.resume_suggestion())?;
+            Ok(State {
+                firmware_version: machine.version.as_ref().map(ToString::to_string),
+                machine,
+                issues: lock(&s.issues).clone(),
+                program: lock(&s.loaded).as_ref().map(program_info),
+                resume,
+            })
+        },
+    ));
+    add(r.register(
+        "console.get",
+        "Console rows (sent commands, answers, messages).",
+        Tier::Read,
+        |s: &Inner, p: ConsoleParams| {
+            let c = lock(&s.console);
+            let skip = p.last.map_or(0, |n| c.len().saturating_sub(n));
+            Ok(c.iter().skip(skip).cloned().collect::<Vec<_>>())
+        },
+    ));
 
     // ---- settings
-    add(r.register("settings.get", "Reads the settings (all, or one dotted key).", Tier::Read, |s: &Inner, p: SettingsGetParams| {
-        let st = lock(&s.settings);
-        match p.key {
-            Some(k) => st.get(&k).map_err(|e| ActionError::InvalidParams(e.to_string())),
-            None => serde_json::to_value(&*st).map_err(|e| ActionError::Failed(e.to_string())),
-        }
-    }));
+    add(r.register(
+        "settings.get",
+        "Reads the settings (all, or one dotted key).",
+        Tier::Read,
+        |s: &Inner, p: SettingsGetParams| {
+            let st = lock(&s.settings);
+            match p.key {
+                Some(k) => st.get(&k).map_err(|e| ActionError::InvalidParams(e.to_string())),
+                None => serde_json::to_value(&*st).map_err(|e| ActionError::Failed(e.to_string())),
+            }
+        },
+    ));
     add(r.register(
         "settings.set",
         "Changes one setting and saves the file. Automation settings are user-only and refused here.",
@@ -647,7 +706,8 @@ fn build_registry() -> Registry<Inner> {
         |s: &Inner, p: SettingsSetParams| {
             let options = {
                 let mut st = lock(&s.settings);
-                st.set(&p.key, p.value, false).map_err(|e| ActionError::Refused(e.to_string()))?;
+                st.set(&p.key, p.value, false)
+                    .map_err(|e| ActionError::Refused(e.to_string()))?;
                 st.host_options()
             };
             s.save_settings()?;
@@ -662,9 +722,12 @@ fn build_registry() -> Registry<Inner> {
     ));
 
     // ---- machine: connection
-    add(r.register("machine.list_ports", "Serial ports found on this computer.", Tier::Read, |_: &Inner, _: NoParams| {
-        Ok(freekerf_transport::serial::available_ports())
-    }));
+    add(r.register(
+        "machine.list_ports",
+        "Serial ports found on this computer.",
+        Tier::Read,
+        |_: &Inner, _: NoParams| Ok(freekerf_transport::serial::available_ports()),
+    ));
     add(r.register(
         "machine.connect",
         "Connects to the machine on a serial port, or to the built-in emulator.",
@@ -675,14 +738,17 @@ fn build_registry() -> Registry<Inner> {
                 let transport: Box<dyn Transport> = if p.emulator {
                     Box::new(EmulatorTransport::default())
                 } else {
-                    let port = p
-                        .port
-                        .or_else(|| st.machine.port.clone())
-                        .ok_or_else(|| ActionError::InvalidParams("no port given and no port in the settings".into()))?;
+                    let port = p.port.or_else(|| st.machine.port.clone()).ok_or_else(|| {
+                        ActionError::InvalidParams("no port given and no port in the settings".into())
+                    })?;
                     st.machine.port = Some(port.clone());
                     Box::new(SerialTransport::new(port, p.baud.unwrap_or(st.machine.baud)))
                 };
-                (FirmwareKind::from(st.machine.firmware), st.host_options(), transport)
+                (
+                    FirmwareKind::from(st.machine.firmware),
+                    st.host_options(),
+                    transport,
+                )
             };
             let _ = s.save_settings();
             // a different firmware needs a new host (only while disconnected)
@@ -696,12 +762,21 @@ fn build_registry() -> Registry<Inner> {
                     h.set_laser_life(life);
                 }
             })?;
-            s.machine.connect(transport).map_err(|e| ActionError::Failed(e.to_string()))
+            s.machine
+                .connect(transport)
+                .map_err(|e| ActionError::Failed(e.to_string()))
         },
     ));
-    add(r.register("machine.disconnect", "Closes the connection.", Tier::Machine, |s: &Inner, _: NoParams| {
-        s.machine.disconnect().map_err(|e| ActionError::Failed(e.to_string()))
-    }));
+    add(r.register(
+        "machine.disconnect",
+        "Closes the connection.",
+        Tier::Machine,
+        |s: &Inner, _: NoParams| {
+            s.machine
+                .disconnect()
+                .map_err(|e| ActionError::Failed(e.to_string()))
+        },
+    ));
 
     // ---- machine: safety
     add(r.register(
@@ -713,52 +788,88 @@ fn build_registry() -> Registry<Inner> {
             Ok(())
         },
     ));
-    add(r.register("machine.feed_hold", "Feed hold (pause the motion). Always allowed.", Tier::Safety, |s: &Inner, _: NoParams| {
-        s.host_result(|h, now| h.feed_hold(now))
-    }));
-    add(r.register("machine.jog_stop", "Stops a continuous jog. Always allowed.", Tier::Safety, |s: &Inner, _: NoParams| {
-        s.host(|h, now| h.jog_abort(now))
-    }));
+    add(r.register(
+        "machine.feed_hold",
+        "Feed hold (pause the motion). Always allowed.",
+        Tier::Safety,
+        |s: &Inner, _: NoParams| s.host_result(Host::feed_hold),
+    ));
+    add(r.register(
+        "machine.jog_stop",
+        "Stops a continuous jog. Always allowed.",
+        Tier::Safety,
+        |s: &Inner, _: NoParams| s.host(Host::jog_abort),
+    ));
 
     // ---- machine: motion and settings
-    add(r.register("machine.resume", "Resumes after a feed hold or a door (cycle start).", Tier::Machine, |s: &Inner, _: NoParams| {
-        s.host_result(|h, now| h.cycle_start(now))
-    }));
-    add(r.register("machine.unlock", "Unlocks the alarm state (`$X`).", Tier::Machine, |s: &Inner, _: NoParams| {
-        s.host_result(|h, now| h.unlock(now))
-    }));
-    add(r.register("machine.home", "Runs the homing cycle (`$H`).", Tier::Machine, |s: &Inner, _: NoParams| {
-        s.host_result(|h, now| h.home(now))
-    }));
-    add(r.register("machine.set_zero", "Sets the current position as work zero (`G92 X0 Y0 Z0`).", Tier::Machine, |s: &Inner, _: NoParams| {
-        s.host_result(|h, now| h.set_new_zero(now))
-    }));
-    add(r.register("machine.jog", "Jogs one step in a direction (laser off).", Tier::Machine, |s: &Inner, p: JogParams| {
-        let dir = JogDirection::parse(&p.direction)
-            .ok_or_else(|| ActionError::InvalidParams(format!("unknown direction `{}`", p.direction)))?;
-        let (step, feed) = {
-            let st = lock(&s.settings);
-            (p.step_mm.unwrap_or(st.jog.step_mm), p.feed_mm_min.unwrap_or(st.jog.speed_mm_min))
-        };
-        #[allow(clippy::cast_possible_truncation)]
-        let feed = feed as f32;
-        s.host_result(move |h, now| h.jog(dir, feed, decimal(step), now))
-    }));
-    add(r.register("machine.jog_to", "Jogs to a work position (laser off).", Tier::Machine, |s: &Inner, p: JogToParams| {
-        let feed = p.feed_mm_min.unwrap_or_else(|| lock(&s.settings).jog.speed_mm_min);
-        #[allow(clippy::cast_possible_truncation)]
-        let (x, y, feed) = (p.x as f32, p.y as f32, feed as f32);
-        s.host_result(move |h, now| h.jog_to(x, y, feed, now))
-    }));
+    add(r.register(
+        "machine.resume",
+        "Resumes after a feed hold or a door (cycle start).",
+        Tier::Machine,
+        |s: &Inner, _: NoParams| s.host_result(Host::cycle_start),
+    ));
+    add(r.register(
+        "machine.unlock",
+        "Unlocks the alarm state (`$X`).",
+        Tier::Machine,
+        |s: &Inner, _: NoParams| s.host_result(Host::unlock),
+    ));
+    add(r.register(
+        "machine.home",
+        "Runs the homing cycle (`$H`).",
+        Tier::Machine,
+        |s: &Inner, _: NoParams| s.host_result(Host::home),
+    ));
+    add(r.register(
+        "machine.set_zero",
+        "Sets the current position as work zero (`G92 X0 Y0 Z0`).",
+        Tier::Machine,
+        |s: &Inner, _: NoParams| s.host_result(Host::set_new_zero),
+    ));
+    add(r.register(
+        "machine.jog",
+        "Jogs one step in a direction (laser off).",
+        Tier::Machine,
+        |s: &Inner, p: JogParams| {
+            let dir = JogDirection::parse(&p.direction)
+                .ok_or_else(|| ActionError::InvalidParams(format!("unknown direction `{}`", p.direction)))?;
+            let (step, feed) = {
+                let st = lock(&s.settings);
+                (
+                    p.step_mm.unwrap_or(st.jog.step_mm),
+                    p.feed_mm_min.unwrap_or(st.jog.speed_mm_min),
+                )
+            };
+            #[allow(clippy::cast_possible_truncation)]
+            let feed = feed as f32;
+            s.host_result(move |h, now| h.jog(dir, feed, decimal(step), now))
+        },
+    ));
+    add(r.register(
+        "machine.jog_to",
+        "Jogs to a work position (laser off).",
+        Tier::Machine,
+        |s: &Inner, p: JogToParams| {
+            let feed = p
+                .feed_mm_min
+                .unwrap_or_else(|| lock(&s.settings).jog.speed_mm_min);
+            #[allow(clippy::cast_possible_truncation)]
+            let (x, y, feed) = (p.x as f32, p.y as f32, feed as f32);
+            s.host_result(move |h, now| h.jog_to(x, y, feed, now))
+        },
+    ));
     add(r.register(
         "machine.overrides",
         "Sets the override targets; the host steps the board towards them.",
         Tier::Machine,
         |s: &Inner, p: OverrideParams| s.host(move |h, _| h.set_override_targets(p.feed, p.rapid, p.power)),
     ));
-    add(r.register("machine.read_settings", "Reads the board settings again (`$$`).", Tier::Machine, |s: &Inner, _: NoParams| {
-        s.system_op(|h, now| h.refresh_settings(now))
-    }));
+    add(r.register(
+        "machine.read_settings",
+        "Reads the board settings again (`$$`).",
+        Tier::Machine,
+        |s: &Inner, _: NoParams| s.system_op(Host::refresh_settings),
+    ));
     add(r.register(
         "machine.write_settings",
         "Writes board settings (`$N=V`), one at a time; returns when the board answered all of them.",
@@ -780,22 +891,45 @@ fn build_registry() -> Registry<Inner> {
         Tier::Laser,
         |s: &Inner, p: CustomCodeParams| s.host_result(move |h, now| h.execute_custom_code(&p.code, now)),
     ));
-    add(r.register("machine.select_laser", "Selects the laser module in use (life counters).", Tier::Edit, |s: &Inner, p: SelectLaserParams| {
-        if s.host(move |h, _| h.select_laser(&p.id))? { Ok(()) } else { Err(ActionError::InvalidParams("unknown laser id".into())) }
-    }));
+    add(r.register(
+        "machine.select_laser",
+        "Selects the laser module in use (life counters).",
+        Tier::Edit,
+        |s: &Inner, p: SelectLaserParams| {
+            if s.host(move |h, _| h.select_laser(&p.id))? {
+                Ok(())
+            } else {
+                Err(ActionError::InvalidParams("unknown laser id".into()))
+            }
+        },
+    ));
 
     // ---- job
-    add(r.register("job.load", "Loads and analyzes a G-code file.", Tier::Edit, |s: &Inner, p: LoadParams| {
-        let bytes = freekerf_platform::read(Path::new(&p.path)).map_err(|e| ActionError::Failed(e.to_string()))?;
-        let name = Path::new(&p.path).file_name().map_or_else(|| p.path.clone(), |n| n.to_string_lossy().into_owned());
-        load_program(s, name, &bytes)
-    }));
-    add(r.register("job.load_text", "Loads and analyzes G-code given as text.", Tier::Edit, |s: &Inner, p: LoadTextParams| {
-        load_program(s, p.name, p.gcode.as_bytes())
-    }));
-    add(r.register("job.info", "The loaded program (name, lines, estimated time, range).", Tier::Read, |s: &Inner, _: NoParams| {
-        Ok(lock(&s.loaded).as_ref().map(program_info))
-    }));
+    add(r.register(
+        "job.load",
+        "Loads and analyzes a G-code file.",
+        Tier::Edit,
+        |s: &Inner, p: LoadParams| {
+            let bytes = freekerf_platform::read(Path::new(&p.path))
+                .map_err(|e| ActionError::Failed(e.to_string()))?;
+            let name = Path::new(&p.path)
+                .file_name()
+                .map_or_else(|| p.path.clone(), |n| n.to_string_lossy().into_owned());
+            load_program(s, name, &bytes)
+        },
+    ));
+    add(r.register(
+        "job.load_text",
+        "Loads and analyzes G-code given as text.",
+        Tier::Edit,
+        |s: &Inner, p: LoadTextParams| load_program(s, p.name, p.gcode.as_bytes()),
+    ));
+    add(r.register(
+        "job.info",
+        "The loaded program (name, lines, estimated time, range).",
+        Tier::Read,
+        |s: &Inner, _: NoParams| Ok(lock(&s.loaded).as_ref().map(program_info)),
+    ));
     add(r.register(
         "job.run",
         "Runs the loaded program from the start (header, program, footer, passes). Fires the laser.",
@@ -818,7 +952,7 @@ fn build_registry() -> Registry<Inner> {
         "job.abort",
         "Stops streaming the job and sends `M5` (lines already in the board still run; use machine.stop to stop at once). Always allowed.",
         Tier::Safety,
-        |s: &Inner, _: NoParams| s.host_result(|h, now| h.abort_program(now)),
+        |s: &Inner, _: NoParams| s.host_result(Host::abort_program),
     ));
     r
 }

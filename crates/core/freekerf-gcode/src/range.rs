@@ -219,8 +219,15 @@ mod tests {
         r.update_xy(Some(d(-1)), Some(d(1)), true);
         assert_eq!(r.quadrant(), Quadrant::Mix);
         assert_eq!(
-            [Quadrant::I, Quadrant::II, Quadrant::III, Quadrant::IV, Quadrant::Mix, Quadrant::Unknown]
-                .map(|q| q.to_string()),
+            [
+                Quadrant::I,
+                Quadrant::II,
+                Quadrant::III,
+                Quadrant::IV,
+                Quadrant::Mix,
+                Quadrant::Unknown
+            ]
+            .map(|q| q.to_string()),
             ["I", "II", "III", "IV", "Mix", "Unknown"]
         );
     }

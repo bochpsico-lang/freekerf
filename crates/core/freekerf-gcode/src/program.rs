@@ -16,7 +16,10 @@ pub struct AnalysisOptions {
 
 impl Default for AnalysisOptions {
     fn default() -> Self {
-        Self { timing: TimingConfig::default(), support_pwm: true }
+        Self {
+            timing: TimingConfig::default(),
+            support_pwm: true,
+        }
     }
 }
 
@@ -63,13 +66,23 @@ impl Program {
 
     /// Adds the lines of `text` without analyzing (call [`Program::analyze`] after).
     pub fn append_text(&mut self, text: &str) {
-        let lines: Vec<&str> = split_lines(text).map(str::trim).filter(|l| !l.is_empty()).collect();
-        self.lines.extend(parse_lines(&lines).into_iter().map(|command| ProgramLine { command, offset_ms: 0 }));
+        let lines: Vec<&str> = split_lines(text)
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect();
+        self.lines
+            .extend(parse_lines(&lines).into_iter().map(|command| ProgramLine {
+                command,
+                offset_ms: 0,
+            }));
     }
 
     /// Appends commands (not analyzed until [`Program::analyze`]).
     pub fn extend<I: IntoIterator<Item = Command>>(&mut self, commands: I) {
-        self.lines.extend(commands.into_iter().map(|command| ProgramLine { command, offset_ms: 0 }));
+        self.lines.extend(commands.into_iter().map(|command| ProgramLine {
+            command,
+            offset_ms: 0,
+        }));
     }
 
     /// Recomputes ranges and times from the first command.
@@ -85,7 +98,11 @@ impl Program {
                 let b = arc.bbox;
                 range.update_rect(b.x, b.y, b.width, b.height, state.laser_burning());
             } else {
-                range.update_xy(Some(state.x().value()), Some(state.y().value()), state.laser_burning());
+                range.update_xy(
+                    Some(state.x().value()),
+                    Some(state.y().value()),
+                    state.laser_burning(),
+                );
             }
             total = total.saturating_add(delay);
             line.offset_ms = total;
@@ -218,7 +235,9 @@ mod tests {
 
     #[test]
     fn parallel_and_sequential_parsing_agree() {
-        let text: String = (0..5000).map(|i| format!("G1 X{} Y{} S{}\n", i % 50, i % 7, i % 255)).collect();
+        let text: String = (0..5000)
+            .map(|i| format!("G1 X{} Y{} S{}\n", i % 50, i % 7, i % 255))
+            .collect();
         let mut a = Program::new();
         a.append_text(&text);
         let mut b = Program::new();

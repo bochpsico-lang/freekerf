@@ -140,19 +140,28 @@ fn tables() -> &'static Tables {
 /// `(brief, description)` of `error:N`.
 #[must_use]
 pub fn describe_error(code: &str) -> Option<(&'static str, &'static str)> {
-    tables().errors.get(code).and_then(|v| Some((v.first()?.as_str(), v.get(1)?.as_str())))
+    tables()
+        .errors
+        .get(code)
+        .and_then(|v| Some((v.first()?.as_str(), v.get(1)?.as_str())))
 }
 
 /// `(brief, description)` of `ALARM:N`.
 #[must_use]
 pub fn describe_alarm(code: &str) -> Option<(&'static str, &'static str)> {
-    tables().alarms.get(code).and_then(|v| Some((v.first()?.as_str(), v.get(1)?.as_str())))
+    tables()
+        .alarms
+        .get(code)
+        .and_then(|v| Some((v.first()?.as_str(), v.get(1)?.as_str())))
 }
 
 /// `(name, unit, description)` of setting `$N`.
 #[must_use]
 pub fn describe_setting(number: &str) -> Option<(&'static str, &'static str, &'static str)> {
-    tables().settings.get(number).and_then(|v| Some((v.first()?.as_str(), v.get(1)?.as_str(), v.get(2)?.as_str())))
+    tables()
+        .settings
+        .get(number)
+        .and_then(|v| Some((v.first()?.as_str(), v.get(1)?.as_str(), v.get(2)?.as_str())))
 }
 
 /// Readable form of a received line (only for Grbl 1.1, which uses these codes).

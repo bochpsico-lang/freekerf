@@ -1,1 +1,1 @@
-//! Cross-crate integration tests live in `tests/it/`.
+//! Cross-crate integration tests of FreeKerf; the tests are in `it/`.

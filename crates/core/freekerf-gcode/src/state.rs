@@ -21,7 +21,9 @@ pub struct TimingConfig {
 impl Default for TimingConfig {
     /// LaserGRBL's default when no configuration was read: 4000 mm/min.
     fn default() -> Self {
-        Self { max_rate_x_mm_min: Decimal::from(4000) }
+        Self {
+            max_rate_x_mm_min: Decimal::from(4000),
+        }
     }
 }
 
@@ -37,15 +39,20 @@ impl ModalGroup {
     fn new(options: &[&str]) -> Self {
         let options: Vec<Word> = options.iter().filter_map(|o| Word::parse(o)).collect();
         let current = options.first().copied().unwrap_or(Word::new('G', Decimal::ZERO));
-        Self { options, current, settled: false }
+        Self {
+            options,
+            current,
+            settled: false,
+        }
     }
 
     fn update(&mut self, word: Option<Word>) {
         if let Some(w) = word
-            && self.options.contains(&w) {
-                self.current = w;
-                self.settled = true;
-            }
+            && self.options.contains(&w)
+        {
+            self.current = w;
+            self.settled = true;
+        }
     }
 
     /// The current value of the group.
@@ -76,13 +83,22 @@ pub struct Axis {
 
 impl Axis {
     const fn new(letter: char) -> Self {
-        Self { letter, value: Decimal::ZERO, previous: Decimal::ZERO, settled: false }
+        Self {
+            letter,
+            value: Decimal::ZERO,
+            previous: Decimal::ZERO,
+            settled: false,
+        }
     }
 
     fn update(&mut self, value: Option<Decimal>, absolute: bool, offset: Decimal) {
         self.previous = self.value;
         if let Some(v) = value {
-            let next = if absolute { offset.checked_add(v) } else { self.value.checked_add(v) };
+            let next = if absolute {
+                offset.checked_add(v)
+            } else {
+                self.value.checked_add(v)
+            };
             if let Some(n) = next {
                 self.value = n;
             }
@@ -119,7 +135,11 @@ pub struct LastValue {
 
 impl LastValue {
     const fn new(letter: char) -> Self {
-        Self { letter, value: Decimal::ZERO, settled: false }
+        Self {
+            letter,
+            value: Decimal::ZERO,
+            settled: false,
+        }
     }
 
     fn update(&mut self, value: Option<Decimal>) {
@@ -188,7 +208,9 @@ impl MachineState {
     #[must_use]
     pub fn new(support_pwm: bool) -> Self {
         Self {
-            motion_mode: ModalGroup::new(&["G0", "G1", "G2", "G3", "G38.2", "G38.3", "G38.4", "G38.5", "G80"]),
+            motion_mode: ModalGroup::new(&[
+                "G0", "G1", "G2", "G3", "G38.2", "G38.3", "G38.4", "G38.5", "G80",
+            ]),
             coordinate_select: ModalGroup::new(&["G54", "G55", "G56", "G57", "G58", "G59"]),
             plane_select: ModalGroup::new(&["G17", "G18", "G19"]),
             distance_mode: ModalGroup::new(&["G90", "G91"]),
@@ -244,9 +266,10 @@ impl MachineState {
         if cmd.is_set_wco() {
             for (i, (axis, letter)) in [self.x, self.y, self.z].iter().zip(['X', 'Y', 'Z']).enumerate() {
                 if let Some(v) = cmd.get(letter)
-                    && let Some(w) = axis.value.checked_sub(v) {
-                        self.wco[i] = w;
-                    }
+                    && let Some(w) = axis.value.checked_sub(v)
+                {
+                    self.wco[i] = w;
+                }
             }
         }
     }
@@ -327,7 +350,8 @@ impl MachineState {
     #[must_use]
     pub fn laser_burning(&self) -> bool {
         (!self.support_pwm || self.s.value > Decimal::ZERO)
-            && (self.spindle_state.number_is(3) || (self.spindle_state.number_is(4) && !self.motion_mode.number_is(0)))
+            && (self.spindle_state.number_is(3)
+                || (self.spindle_state.number_is(4) && !self.motion_mode.number_is(0)))
     }
 
     /// True in G90.
@@ -434,8 +458,11 @@ impl MachineState {
 pub fn linear_distance(x0: Decimal, y0: Decimal, x1: Decimal, y1: Decimal) -> Decimal {
     let dx = x1 - x0;
     let dy = y1 - y0;
-    let sq = dx.checked_mul(dx).and_then(|a| dy.checked_mul(dy).and_then(|b| a.checked_add(b)));
-    sq.and_then(|v| decimal_from_f64(f64_from_decimal(v).sqrt())).unwrap_or(Decimal::ZERO)
+    let sq = dx
+        .checked_mul(dx)
+        .and_then(|a| dy.checked_mul(dy).and_then(|b| a.checked_add(b)));
+    sq.and_then(|v| decimal_from_f64(f64_from_decimal(v).sqrt()))
+        .unwrap_or(Decimal::ZERO)
 }
 
 #[cfg(test)]
@@ -444,8 +471,13 @@ mod tests {
 
     fn run(lines: &[&str]) -> (MachineState, Vec<i64>) {
         let mut st = MachineState::default();
-        let timing = TimingConfig { max_rate_x_mm_min: Decimal::from(6000) };
-        let times = lines.iter().map(|l| st.analyze(&Command::new(l), Some(&timing))).collect();
+        let timing = TimingConfig {
+            max_rate_x_mm_min: Decimal::from(6000),
+        };
+        let times = lines
+            .iter()
+            .map(|l| st.analyze(&Command::new(l), Some(&timing)))
+            .collect();
         (st, times)
     }
 
@@ -517,6 +549,9 @@ mod tests {
         assert!(st.f().is_settled());
         assert!(!st.s().is_settled());
         assert_eq!(st.z().previous(), Decimal::ZERO);
-        assert_eq!(linear_distance(Decimal::ZERO, Decimal::ZERO, Decimal::from(3), Decimal::from(4)), Decimal::from(5));
+        assert_eq!(
+            linear_distance(Decimal::ZERO, Decimal::ZERO, Decimal::from(3), Decimal::from(4)),
+            Decimal::from(5)
+        );
     }
 }

@@ -32,7 +32,10 @@ impl Issue {
     /// True for issues the user caused (not reported as problems).
     #[must_use]
     pub const fn is_user_action(self) -> bool {
-        matches!(self, Self::ManualReset | Self::ManualDisconnect | Self::ManualAbort)
+        matches!(
+            self,
+            Self::ManualReset | Self::ManualDisconnect | Self::ManualAbort
+        )
     }
 
     /// Name as in LaserGRBL (`MachineAlarm`).
@@ -140,7 +143,14 @@ impl TimeProjection {
     }
 
     /// A job resumes from `position`; `added` commands were queued to rebuild the state.
-    pub fn job_continue(&mut self, estimated_ms: i64, file_len: usize, position: usize, added: usize, now: u64) {
+    pub fn job_continue(
+        &mut self,
+        estimated_ms: i64,
+        file_len: usize,
+        position: usize,
+        added: usize,
+        now: u64,
+    ) {
         if !self.started {
             if self.estimated_target_ms == 0 {
                 self.estimated_target_ms = estimated_ms;
@@ -301,7 +311,11 @@ impl TimeProjection {
     }
 
     fn total_pauses(&self, now: u64) -> u64 {
-        if self.in_pause { self.cumulated_pause + now.saturating_sub(self.pause_begin) } else { self.cumulated_pause }
+        if self.in_pause {
+            self.cumulated_pause + now.saturating_sub(self.pause_begin)
+        } else {
+            self.cumulated_pause
+        }
     }
 
     /// Projected total time of the job, from the real speed so far.
@@ -316,8 +330,8 @@ impl TimeProjection {
             return self.estimated_target_ms;
         }
         #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)] // ms values far below 2^53
-        let projected =
-            (real as f64 * self.estimated_target_ms as f64 / self.estimated_progress_ms as f64).round() as i64;
+        let projected = (real as f64 * self.estimated_target_ms as f64 / self.estimated_progress_ms as f64)
+            .round() as i64;
         projected.saturating_add(i64::try_from(pauses).unwrap_or(i64::MAX))
     }
 }

@@ -1,7 +1,7 @@
 //! The black-box protocol scenarios of `conformance/tests/protocol`, run in memory
 //! against the emulator with a simulated clock (the same scenarios also run over a
 //! real PTY through `freekerf host --stdio` and the conformance suite).
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use freekerf_emulator::DeviceConfig;
 use freekerf_gcode::Decimal;
@@ -15,12 +15,16 @@ const HEADER: &str = "G90";
 const FOOTER: &str = "G0X0Y0Z0";
 
 fn classic() -> DeviceConfig {
-    DeviceConfig { report_buffer: false, opt_line: "[OPT:V,15,127]".into(), ..DeviceConfig::default() }
+    DeviceConfig {
+        report_buffer: false,
+        opt_line: "[OPT:V,15,127]".into(),
+        ..DeviceConfig::default()
+    }
 }
 
 fn next_fits(b: &Bench, expected: &[String], budget: usize) -> bool {
     let i = b.device.lines().len();
-    i < expected.len() && b.device.rx_used() + expected[i].len() + 1 <= budget
+    i < expected.len() && b.device.rx_used() + expected[i].len() < budget
 }
 
 // ---------------------------------------------------------------- connection
@@ -29,7 +33,10 @@ fn next_fits(b: &Bench, expected: &[String], budget: usize) -> bool {
 fn connect_sends_soft_reset_then_status_query_then_reads_settings() {
     let mut b = Bench::new();
     b.open();
-    assert!(b.run_until(|b| b.host.snapshot().connected && b.lines().contains(&"$I".to_owned()), 10_000));
+    assert!(b.run_until(
+        |b| b.host.snapshot().connected && b.lines().contains(&"$I".to_owned()),
+        10_000
+    ));
     assert_eq!(b.device.realtime()[0], 0x18);
     assert_eq!(b.device.realtime()[1], 0x3F);
     assert_eq!(b.lines()[..2], ["$$".to_owned(), "$I".to_owned()]);
@@ -42,8 +49,18 @@ fn connect_sends_soft_reset_then_status_query_then_reads_settings() {
 
 #[test]
 fn connect_without_soft_reset_waits_for_the_board_banner() {
-    let opts = HostOptions { reset_on_connect: false, query_machine_info: false, ..HostOptions::default() };
-    let mut b = Bench::with(opts, DeviceConfig { send_welcome_on_open: false, ..DeviceConfig::default() });
+    let opts = HostOptions {
+        reset_on_connect: false,
+        query_machine_info: false,
+        ..HostOptions::default()
+    };
+    let mut b = Bench::with(
+        opts,
+        DeviceConfig {
+            send_welcome_on_open: false,
+            ..DeviceConfig::default()
+        },
+    );
     b.open();
     assert!(b.device.realtime().contains(&0x3F));
     assert!(!b.device.realtime().contains(&0x18));
@@ -87,7 +104,14 @@ fn stream_sends_header_job_and_footer_in_order() {
     expected.push(FOOTER.to_owned());
     assert_eq!(b.lines(), expected);
     assert!(b.run_until(|b| !b.host.in_program(), 5000));
-    assert!(b.events.iter().any(|e| matches!(e, Event::JobEnded { lines: 120, errors: 0, .. })));
+    assert!(b.events.iter().any(|e| matches!(
+        e,
+        Event::JobEnded {
+            lines: 120,
+            errors: 0,
+            ..
+        }
+    )));
 }
 
 fn stream_with_budget(b: &mut Bench, n: usize, budget: usize) {
@@ -156,7 +180,10 @@ fn stream_waits_when_rx_buffer_full() {
 
 #[test]
 fn synchronous_mode_keeps_one_line_in_flight() {
-    let opts = HostOptions { streaming_mode: StreamingMode::Synchronous, ..HostOptions::default() };
+    let opts = HostOptions {
+        streaming_mode: StreamingMode::Synchronous,
+        ..HostOptions::default()
+    };
     let mut b = Bench::with(opts, DeviceConfig::default());
     b.connect();
     b.device.set_auto_ack(false);
@@ -244,7 +271,10 @@ fn error_mid_job_is_counted_and_streaming_continues() {
 
 #[test]
 fn error_mid_job_is_retried_in_repeat_on_error_mode() {
-    let opts = HostOptions { streaming_mode: StreamingMode::RepeatOnError, ..HostOptions::default() };
+    let opts = HostOptions {
+        streaming_mode: StreamingMode::RepeatOnError,
+        ..HostOptions::default()
+    };
     let mut b = Bench::with(opts, DeviceConfig::default());
     b.connect();
     let lines = job_lines(8);
@@ -272,7 +302,11 @@ fn unlock_and_home() {
     b.connect();
     let id = b.host.write_settings(&[(22, "1".into())], b.now).unwrap();
     b.exchange();
-    assert!(b.events.iter().any(|e| matches!(e, Event::SystemOpFinished { id: i, result: Ok(()), .. } if *i == id)));
+    assert!(
+        b.events
+            .iter()
+            .any(|e| matches!(e, Event::SystemOpFinished { id: i, result: Ok(()), .. } if *i == id))
+    );
     b.host.unlock(b.now).unwrap();
     b.host.home(b.now).unwrap();
     b.exchange();
@@ -295,7 +329,9 @@ fn manual_command_is_sent_compressed() {
 fn jog_uses_dollar_j_relative() {
     let mut b = Bench::new();
     b.connect();
-    b.host.jog(JogDirection::NE, 800.0, Decimal::new(25, 1), b.now).unwrap();
+    b.host
+        .jog(JogDirection::NE, 800.0, Decimal::new(25, 1), b.now)
+        .unwrap();
     b.exchange();
     assert_eq!(b.lines().last().unwrap(), "$J=G91X2.5Y2.5F800");
 }
@@ -320,18 +356,32 @@ fn overrides_converge_to_targets() {
 fn write_settings_sends_one_dollar_line_per_setting() {
     let mut b = Bench::new();
     b.connect();
-    b.host.write_settings(&[(110, "4000".into()), (111, "4500".into())], b.now).unwrap();
+    b.host
+        .write_settings(&[(110, "4000".into()), (111, "4500".into())], b.now)
+        .unwrap();
     b.exchange();
     let l = b.lines();
     assert_eq!(l[l.len() - 2..], ["$110=4000".to_owned(), "$111=4500".to_owned()]);
     assert_eq!(b.device.settings()[&110], "4000");
     assert_eq!(b.host.settings().get(111), Some("4500"));
-    assert!(b.events.iter().any(|e| matches!(e, Event::SystemOpFinished { kind: SystemOpKind::WriteSettings, result: Ok(()), .. })));
+    assert!(b.events.iter().any(|e| matches!(
+        e,
+        Event::SystemOpFinished {
+            kind: SystemOpKind::WriteSettings,
+            result: Ok(()),
+            ..
+        }
+    )));
 }
 
 #[test]
 fn host_uses_the_rx_buffer_size_reported_by_the_board() {
-    let dev = DeviceConfig { rx_size: 256, opt_line: "[OPT:V,15,256]".into(), report_buffer: false, ..DeviceConfig::default() };
+    let dev = DeviceConfig {
+        rx_size: 256,
+        opt_line: "[OPT:V,15,256]".into(),
+        report_buffer: false,
+        ..DeviceConfig::default()
+    };
     let mut b = Bench::with(HostOptions::default(), dev);
     b.connect();
     assert_eq!(b.host.buffer_size(), 256);

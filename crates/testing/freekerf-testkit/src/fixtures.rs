@@ -11,5 +11,7 @@ pub fn workspace_root() -> PathBuf {
 /// `crates/core/freekerf-gcode/tests/fixtures/<rel>` (conformance G-code and goldens).
 #[must_use]
 pub fn gcode_fixture(rel: &str) -> PathBuf {
-    workspace_root().join("crates/core/freekerf-gcode/tests/fixtures").join(rel)
+    workspace_root()
+        .join("crates/core/freekerf-gcode/tests/fixtures")
+        .join(rel)
 }

@@ -22,7 +22,10 @@ pub enum PlatformError {
 }
 
 fn io(path: &Path) -> impl FnOnce(std::io::Error) -> PlatformError + '_ {
-    move |source| PlatformError::Io { path: path.to_path_buf(), source }
+    move |source| PlatformError::Io {
+        path: path.to_path_buf(),
+        source,
+    }
 }
 
 /// Directories of the application.
@@ -43,16 +46,26 @@ impl Dirs {
     pub fn user() -> Result<Self, PlatformError> {
         if let Some(home) = std::env::var_os("FREEKERF_HOME") {
             let home = PathBuf::from(home);
-            return Ok(Self { config: home.clone(), data: home });
+            return Ok(Self {
+                config: home.clone(),
+                data: home,
+            });
         }
-        let p = directories::ProjectDirs::from("org", "FreeKerf", "freekerf").ok_or(PlatformError::NoConfigDir)?;
-        Ok(Self { config: p.config_dir().to_path_buf(), data: p.data_dir().to_path_buf() })
+        let p = directories::ProjectDirs::from("org", "FreeKerf", "freekerf")
+            .ok_or(PlatformError::NoConfigDir)?;
+        Ok(Self {
+            config: p.config_dir().to_path_buf(),
+            data: p.data_dir().to_path_buf(),
+        })
     }
 
     /// Both directories under `root` (tests, portable installs).
     #[must_use]
     pub fn under(root: &Path) -> Self {
-        Self { config: root.to_path_buf(), data: root.to_path_buf() }
+        Self {
+            config: root.to_path_buf(),
+            data: root.to_path_buf(),
+        }
     }
 
     /// `settings.toml`.
@@ -74,9 +87,14 @@ impl Dirs {
 /// # Errors
 /// On any I/O error (the target is then unchanged).
 pub fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), PlatformError> {
-    let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+    let dir = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(dir).map_err(io(dir))?;
-    let name = path.file_name().map_or_else(|| "file".into(), |n| n.to_string_lossy().into_owned());
+    let name = path
+        .file_name()
+        .map_or_else(|| "file".into(), |n| n.to_string_lossy().into_owned());
     let tmp = dir.join(format!(".{name}.tmp{}", std::process::id()));
     let result = (|| {
         let mut f = fs::File::create(&tmp)?;

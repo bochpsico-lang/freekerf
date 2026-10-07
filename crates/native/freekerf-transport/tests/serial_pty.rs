@@ -1,6 +1,6 @@
 //! The serial transport against the emulator served on a PTY (no real hardware).
 #![cfg(unix)]
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::time::Duration;
 

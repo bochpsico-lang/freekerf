@@ -96,13 +96,21 @@ impl Caller {
     /// The person in front of the machine: everything allowed.
     #[must_use]
     pub fn user() -> Self {
-        Self { kind: CallerKind::User, name: "user".into(), max_tier: Tier::Laser }
+        Self {
+            kind: CallerKind::User,
+            name: "user".into(),
+            max_tier: Tier::Laser,
+        }
     }
 
     /// A caller with a limit.
     #[must_use]
     pub fn new(kind: CallerKind, name: impl Into<String>, max_tier: Tier) -> Self {
-        Self { kind, name: name.into(), max_tier }
+        Self {
+            kind,
+            name: name.into(),
+            max_tier,
+        }
     }
 
     /// True when the caller may run an action of `tier`.
@@ -179,7 +187,9 @@ pub struct Registry<C> {
 
 impl<C> fmt::Debug for Registry<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Registry").field("actions", &self.actions.keys().collect::<Vec<_>>()).finish()
+        f.debug_struct("Registry")
+            .field("actions", &self.actions.keys().collect::<Vec<_>>())
+            .finish()
     }
 }
 
@@ -195,7 +205,8 @@ pub fn valid_name(name: &str) -> bool {
     let ok = |s: &str| {
         !s.is_empty()
             && s.starts_with(|c: char| c.is_ascii_lowercase())
-            && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+            && s.chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
     };
     matches!(name.split_once('.'), Some((ns, n)) if ok(ns) && ok(n))
 }
@@ -204,14 +215,22 @@ impl<C> Registry<C> {
     /// An empty registry.
     #[must_use]
     pub fn new() -> Self {
-        Self { actions: BTreeMap::new() }
+        Self {
+            actions: BTreeMap::new(),
+        }
     }
 
     /// Registers an action with typed parameters `P` and result `R`.
     ///
     /// # Errors
     /// Duplicate or malformed name, missing description.
-    pub fn register<P, R, F>(&mut self, name: &str, description: &str, tier: Tier, f: F) -> Result<(), RegistryError>
+    pub fn register<P, R, F>(
+        &mut self,
+        name: &str,
+        description: &str,
+        tier: Tier,
+        f: F,
+    ) -> Result<(), RegistryError>
     where
         P: DeserializeOwned + JsonSchema,
         R: Serialize,
@@ -229,12 +248,22 @@ impl<C> Registry<C> {
         let params = serde_json::to_value(schemars::schema_for!(P)).unwrap_or(Value::Null);
         let handler: Handler<C> = Box::new(move |ctx, value| {
             // `null` means "no parameters" for parameter structs with defaults
-            let value = if value.is_null() { Value::Object(serde_json::Map::new()) } else { value };
-            let p: P = serde_json::from_value(value).map_err(|e| ActionError::InvalidParams(e.to_string()))?;
+            let value = if value.is_null() {
+                Value::Object(serde_json::Map::new())
+            } else {
+                value
+            };
+            let p: P =
+                serde_json::from_value(value).map_err(|e| ActionError::InvalidParams(e.to_string()))?;
             let r = f(ctx, p)?;
             serde_json::to_value(r).map_err(|e| ActionError::Failed(e.to_string()))
         });
-        let spec = ActionSpec { name: name.into(), description: description.trim().into(), tier, params };
+        let spec = ActionSpec {
+            name: name.into(),
+            description: description.trim().into(),
+            tier,
+            params,
+        };
         self.actions.insert(name.into(), Entry { spec, handler });
         Ok(())
     }
@@ -243,10 +272,22 @@ impl<C> Registry<C> {
     ///
     /// # Errors
     /// Unknown action, permission denied, invalid parameters, or the action's error.
-    pub fn dispatch(&self, ctx: &C, caller: &Caller, name: &str, params: Value) -> Result<Value, ActionError> {
-        let entry = self.actions.get(name).ok_or_else(|| ActionError::Unknown(name.into()))?;
+    pub fn dispatch(
+        &self,
+        ctx: &C,
+        caller: &Caller,
+        name: &str,
+        params: Value,
+    ) -> Result<Value, ActionError> {
+        let entry = self
+            .actions
+            .get(name)
+            .ok_or_else(|| ActionError::Unknown(name.into()))?;
         if !caller.allows(entry.spec.tier) {
-            return Err(ActionError::PermissionDenied { action: name.into(), needed: entry.spec.tier });
+            return Err(ActionError::PermissionDenied {
+                action: name.into(),
+                needed: entry.spec.tier,
+            });
         }
         (entry.handler)(ctx, params)
     }
@@ -285,7 +326,12 @@ impl<C> Registry<C> {
         );
         for spec in self.specs() {
             let summary = spec.description.lines().next().unwrap_or("");
-            s.push_str(&format!("| `{}` | {} | {} |\n", spec.name, spec.tier, summary.replace('|', "\\|")));
+            s.push_str(&format!(
+                "| `{}` | {} | {} |\n",
+                spec.name,
+                spec.tier,
+                summary.replace('|', "\\|")
+            ));
         }
         s.push_str("\n## Parameters\n");
         for spec in self.specs() {
@@ -301,8 +347,16 @@ impl<C> Registry<C> {
                         .unwrap_or_default();
                     s.push_str("| Parameter | Required | Description |\n| --- | --- | --- |\n");
                     for (k, v) in p {
-                        let desc = v.get("description").and_then(Value::as_str).unwrap_or("").replace('\n', " ");
-                        let req = if required.contains(&k.as_str()) { "yes" } else { "no" };
+                        let desc = v
+                            .get("description")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .replace('\n', " ");
+                        let req = if required.contains(&k.as_str()) {
+                            "yes"
+                        } else {
+                            "no"
+                        };
                         s.push_str(&format!("| `{k}` | {req} | {desc} |\n"));
                     }
                 }
@@ -333,15 +387,27 @@ mod tests {
 
     fn registry() -> Registry<()> {
         let mut r = Registry::new();
-        r.register("test.echo", "Echoes text.\nMore details.", Tier::Read, |_: &(), p: Echo| {
-            Ok(p.text.repeat(p.times.unwrap_or(1) as usize))
+        r.register(
+            "test.echo",
+            "Echoes text.\nMore details.",
+            Tier::Read,
+            |_: &(), p: Echo| Ok(p.text.repeat(p.times.unwrap_or(1) as usize)),
+        )
+        .unwrap();
+        r.register("machine.fire", "Fires.", Tier::Laser, |_: &(), _: NoParams| {
+            Ok(true)
         })
         .unwrap();
-        r.register("machine.fire", "Fires.", Tier::Laser, |_: &(), _: NoParams| Ok(true)).unwrap();
-        r.register("machine.stop", "Stops.", Tier::Safety, |_: &(), _: NoParams| Ok(true)).unwrap();
-        r.register("test.fail", "Fails.", Tier::Read, |_: &(), _: NoParams| -> Result<(), _> {
-            Err(ActionError::Refused("no".into()))
+        r.register("machine.stop", "Stops.", Tier::Safety, |_: &(), _: NoParams| {
+            Ok(true)
         })
+        .unwrap();
+        r.register(
+            "test.fail",
+            "Fails.",
+            Tier::Read,
+            |_: &(), _: NoParams| -> Result<(), _> { Err(ActionError::Refused("no".into())) },
+        )
         .unwrap();
         r
     }
@@ -350,12 +416,28 @@ mod tests {
     fn dispatch_and_errors() {
         let r = registry();
         let u = Caller::user();
-        assert_eq!(r.dispatch(&(), &u, "test.echo", serde_json::json!({"text": "a", "times": 3})).unwrap(), "aaa");
-        assert!(matches!(r.dispatch(&(), &u, "test.nope", Value::Null), Err(ActionError::Unknown(_))));
-        assert!(matches!(r.dispatch(&(), &u, "test.echo", serde_json::json!({})), Err(ActionError::InvalidParams(_))));
-        assert_eq!(r.dispatch(&(), &u, "test.fail", Value::Null), Err(ActionError::Refused("no".into())));
+        assert_eq!(
+            r.dispatch(&(), &u, "test.echo", serde_json::json!({"text": "a", "times": 3}))
+                .unwrap(),
+            "aaa"
+        );
+        assert!(matches!(
+            r.dispatch(&(), &u, "test.nope", Value::Null),
+            Err(ActionError::Unknown(_))
+        ));
+        assert!(matches!(
+            r.dispatch(&(), &u, "test.echo", serde_json::json!({})),
+            Err(ActionError::InvalidParams(_))
+        ));
+        assert_eq!(
+            r.dispatch(&(), &u, "test.fail", Value::Null),
+            Err(ActionError::Refused("no".into()))
+        );
         assert_eq!(r.dispatch(&(), &u, "machine.stop", Value::Null).unwrap(), true);
-        assert!(r.dispatch(&(), &u, "machine.stop", serde_json::json!({"x": 1})).is_err());
+        assert!(
+            r.dispatch(&(), &u, "machine.stop", serde_json::json!({"x": 1}))
+                .is_err()
+        );
     }
 
     #[test]
@@ -363,7 +445,13 @@ mod tests {
         let r = registry();
         let agent = Caller::new(CallerKind::Agent, "bot", Tier::Edit);
         let e = r.dispatch(&(), &agent, "machine.fire", Value::Null).unwrap_err();
-        assert_eq!(e, ActionError::PermissionDenied { action: "machine.fire".into(), needed: Tier::Laser });
+        assert_eq!(
+            e,
+            ActionError::PermissionDenied {
+                action: "machine.fire".into(),
+                needed: Tier::Laser
+            }
+        );
         assert!(e.to_string().contains("laser"));
         // STOP is always allowed
         let reader = Caller::new(CallerKind::Macro, "m", Tier::Read);
@@ -404,7 +492,14 @@ mod tests {
         assert!(md.contains("| `text` | yes | Text to echo. |"));
         assert!(md.contains("| `times` | no | Times. |"));
         assert!(md.contains("No parameters."));
-        for t in [Tier::Safety, Tier::Read, Tier::Ui, Tier::Edit, Tier::Machine, Tier::Laser] {
+        for t in [
+            Tier::Safety,
+            Tier::Read,
+            Tier::Ui,
+            Tier::Edit,
+            Tier::Machine,
+            Tier::Laser,
+        ] {
             assert_eq!(t.to_string(), t.as_str());
         }
         assert!(Registry::<()>::default().is_empty());

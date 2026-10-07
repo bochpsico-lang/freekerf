@@ -56,7 +56,11 @@ fn format_value(v: f64) -> Option<String> {
 #[must_use]
 pub fn evaluate(text: &str, vars: &Variables) -> Option<f64> {
     let cleaned: String = text.chars().filter(|c| *c != ' ').collect();
-    let mut p = Parser { s: cleaned.as_bytes(), pos: 0, vars };
+    let mut p = Parser {
+        s: cleaned.as_bytes(),
+        pos: 0,
+        vars,
+    };
     let v = p.sum()?;
     (p.pos == p.s.len() && v.is_finite()).then_some(v)
 }
@@ -126,9 +130,11 @@ impl Parser<'_> {
         if self.eat(b'+') {
             return self.unary();
         }
-        for (name, f) in [("abs", f64::abs as fn(f64) -> f64), ("neg", |v: f64| -v), ("sign", |v: f64| {
-            if v >= 0.0 { 1.0 } else { -1.0 }
-        })] {
+        for (name, f) in [
+            ("abs", f64::abs as fn(f64) -> f64),
+            ("neg", |v: f64| -v),
+            ("sign", |v: f64| if v >= 0.0 { 1.0 } else { -1.0 }),
+        ] {
             if self.s[self.pos..].starts_with(name.as_bytes()) {
                 let save = self.pos;
                 self.pos += name.len();
@@ -168,7 +174,8 @@ impl Parser<'_> {
                 std::str::from_utf8(&self.s[start..self.pos]).ok()?.parse().ok()
             }
             c if c.is_ascii_alphabetic() || c == b'$' || c == b'_' => {
-                while matches!(self.peek(), Some(c) if c.is_ascii_alphanumeric() || matches!(c, b'.' | b'$' | b'_')) {
+                while matches!(self.peek(), Some(c) if c.is_ascii_alphanumeric() || matches!(c, b'.' | b'$' | b'_'))
+                {
                     self.pos += 1;
                 }
                 let name = std::str::from_utf8(&self.s[start..self.pos]).ok()?;
@@ -219,7 +226,10 @@ mod tests {
     #[test]
     fn brackets_are_replaced_and_formatted() {
         let v = vars();
-        assert_eq!(evaluate_brackets("G0 X[left] Y[width/2]", &v), "G0 X10.000 Y10.250");
+        assert_eq!(
+            evaluate_brackets("G0 X[left] Y[width/2]", &v),
+            "G0 X10.000 Y10.250"
+        );
         assert_eq!(evaluate_brackets("S[$30*0.0005]", &v), "S0.500");
         assert_eq!(evaluate_brackets("  X[nope] ", &v), "X[nope]");
         assert_eq!(evaluate_brackets("[] [ok", &v), "[] [ok");

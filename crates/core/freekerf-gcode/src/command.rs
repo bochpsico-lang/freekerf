@@ -74,8 +74,18 @@ impl Command {
     #[must_use]
     pub fn with_options(line: &str, repeat: u32, preserve_case: bool) -> Self {
         let trimmed = line.trim();
-        let text = if preserve_case { trimmed.to_owned() } else { to_upper(trimmed) };
-        let mut cmd = Self { text, words: Vec::new(), parse_error: false, repeat, jog: false };
+        let text = if preserve_case {
+            trimmed.to_owned()
+        } else {
+            to_upper(trimmed)
+        };
+        let mut cmd = Self {
+            text,
+            words: Vec::new(),
+            parse_error: false,
+            repeat,
+            jog: false,
+        };
         cmd.build();
         cmd
     }
@@ -146,11 +156,12 @@ impl Command {
             if !comment {
                 if c.is_alphabetic() {
                     if let Some(l) = letter
-                        && !add(l, &num, &mut words) {
-                            self.words = words;
-                            self.parse_error = true;
-                            return; // text left as it was
-                        }
+                        && !add(l, &num, &mut words)
+                    {
+                        self.words = words;
+                        self.parse_error = true;
+                        return; // text left as it was
+                    }
                     letter = Some(c);
                     num.clear();
                 } else if c.is_numeric() || c == '.' || c == '-' {
@@ -163,9 +174,10 @@ impl Command {
         }
         self.text = out;
         if let Some(l) = letter
-            && !add(l, &num, &mut words) {
-                self.parse_error = true;
-            }
+            && !add(l, &num, &mut words)
+        {
+            self.parse_error = true;
+        }
         self.words = words;
     }
 
@@ -180,7 +192,11 @@ impl Command {
     #[must_use]
     pub fn wire(&self) -> String {
         let trimmed = self.text.trim_matches(['\r', '\n', ' ']);
-        let mut s = if self.is_system() { trimmed.to_owned() } else { trimmed.replace(' ', "") };
+        let mut s = if self.is_system() {
+            trimmed.to_owned()
+        } else {
+            trimmed.replace(' ', "")
+        };
         s.push('\n');
         s
     }
@@ -189,7 +205,11 @@ impl Command {
     #[must_use]
     pub fn wire_len(&self) -> usize {
         let trimmed = self.text.trim_matches(['\r', '\n', ' ']);
-        let body = if self.is_system() { trimmed.len() } else { trimmed.bytes().filter(|b| *b != b' ').count() };
+        let body = if self.is_system() {
+            trimmed.len()
+        } else {
+            trimmed.bytes().filter(|b| *b != b' ').count()
+        };
         body + 1
     }
 
@@ -359,7 +379,10 @@ mod tests {
     #[test]
     fn normalizes_spaces_and_comments() {
         assert_eq!(Command::new("g0   x1   y1 ; move").text(), "G0 X1 Y1 ");
-        assert_eq!(Command::new("M3 S100 (inline comment) G1 X2").text(), "M3 S100  G1 X2");
+        assert_eq!(
+            Command::new("M3 S100 (inline comment) G1 X2").text(),
+            "M3 S100  G1 X2"
+        );
         assert_eq!(Command::new("  G1 X4 (two) Y4 (comments)").text(), "G1 X4  Y4 ");
         assert_eq!(Command::new("(header comment line)").text(), "");
         assert_eq!(Command::new(";only").text(), "");

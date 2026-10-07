@@ -81,7 +81,11 @@ impl JogDirection {
 pub fn format_step(step: Decimal) -> String {
     let s = format_fixed(step.abs(), 3);
     let trimmed = s.trim_end_matches('0');
-    if trimmed.ends_with('.') { format!("{trimmed}0") } else { trimmed.to_owned() }
+    if trimmed.ends_with('.') {
+        format!("{trimmed}0")
+    } else {
+        trimmed.to_owned()
+    }
 }
 
 /// A feed or speed as `float.ToString()`, invariant (FINDINGS F-21 fixed: DIV-021).

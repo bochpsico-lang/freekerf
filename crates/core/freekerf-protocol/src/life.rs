@@ -138,14 +138,22 @@ impl LaserLife {
     /// Counters loaded from storage (none selected yet).
     #[must_use]
     pub fn with_counters(counters: Vec<LaserLifeCounter>) -> Self {
-        Self { counters, ..Self::default() }
+        Self {
+            counters,
+            ..Self::default()
+        }
     }
 
     /// Picks the counter on connect: the only one, or the only alive one. Without
     /// counters nothing is tracked (FINDINGS F-07 fixed: DIV-007).
     pub fn on_connect(&mut self) -> Selection {
-        let alive: Vec<usize> =
-            self.counters.iter().enumerate().filter(|(_, c)| c.death_date.is_none()).map(|(i, _)| i).collect();
+        let alive: Vec<usize> = self
+            .counters
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.death_date.is_none())
+            .map(|(i, _)| i)
+            .collect();
         let sel = match (self.counters.len(), alive.as_slice()) {
             (0, _) => Selection::None,
             (1, _) => Selection::Selected(0),
@@ -182,10 +190,13 @@ impl LaserLife {
     pub fn on_status(&mut self, previous: MachineStatus, now: u64) {
         if let Some(last) = self.last_status_ms {
             let delta = now.saturating_sub(last);
-            if delta > 0 && delta < MAX_DELTA_MS && previous == MachineStatus::Run
-                && let Some(c) = self.current.and_then(|i| self.counters.get_mut(i)) {
-                    c.run_ms += delta;
-                }
+            if delta > 0
+                && delta < MAX_DELTA_MS
+                && previous == MachineStatus::Run
+                && let Some(c) = self.current.and_then(|i| self.counters.get_mut(i))
+            {
+                c.run_ms += delta;
+            }
         }
         self.last_status_ms = Some(now);
     }
@@ -225,7 +236,9 @@ mod tests {
 
     fn life(n: usize) -> LaserLife {
         LaserLife {
-            counters: (0..n).map(|i| LaserLifeCounter::new(format!("id{i}"), format!("L{i}"))).collect(),
+            counters: (0..n)
+                .map(|i| LaserLifeCounter::new(format!("id{i}"), format!("L{i}")))
+                .collect(),
             ..LaserLife::default()
         }
     }

@@ -1,5 +1,5 @@
 //! Property tests: the parser never panics and normalization is stable.
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use freekerf_gcode::number::{decimal_from_f64, format_decimal, parse_number};
 use freekerf_gcode::{AnalysisOptions, Command, Program};

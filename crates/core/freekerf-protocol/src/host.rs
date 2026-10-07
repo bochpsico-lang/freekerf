@@ -26,8 +26,7 @@ use crate::version::FirmwareVersion;
 /// Default custom header (`GCODE_STD_HEADER`).
 pub const DEFAULT_HEADER: &str = "G90 (use absolute coordinates)";
 /// Default code between passes (`GCODE_STD_PASSES`).
-pub const DEFAULT_PASSES: &str =
-    ";(Uncomment if you want to sink Z axis)\n;G91 (use relative coordinates)\n;G0 Z-1 (sinks the Z axis, 1mm)\n;G90 (use absolute coordinates)";
+pub const DEFAULT_PASSES: &str = ";(Uncomment if you want to sink Z axis)\n;G91 (use relative coordinates)\n;G0 Z-1 (sinks the Z axis, 1mm)\n;G90 (use absolute coordinates)";
 /// Default custom footer (`GCODE_STD_FOOTER`).
 pub const DEFAULT_FOOTER: &str = "G0 X0 Y0 Z0 (move back to origin)";
 
@@ -462,7 +461,11 @@ impl Core {
 
     /// Queues a command (`EnqueueCommand`).
     pub fn enqueue(&mut self, cmd: Command) {
-        self.queue.push_back(Queued { cmd, offset_ms: 0, origin: Origin::Manual });
+        self.queue.push_back(Queued {
+            cmd,
+            offset_ms: 0,
+            origin: Origin::Manual,
+        });
     }
 
     /// Runs custom code: immediate characters are sent at once, lines are queued,
@@ -570,18 +573,24 @@ impl Core {
 
     fn log(&mut self, kind: MessageKind, text: &str, decoded: Option<String>) {
         self.collect_row(text);
-        self.events.push_back(Event::Console(ConsoleRow::Message { kind, text: text.to_owned(), decoded }));
+        self.events.push_back(Event::Console(ConsoleRow::Message {
+            kind,
+            text: text.to_owned(),
+            decoded,
+        }));
     }
 
     fn collect_row(&mut self, text: &str) {
         let now = self.now;
         if let Some(op) = self.sys.front_mut()
-            && op.started.is_some() && matches!(op.kind, SystemOpKind::ReadSettings | SystemOpKind::ReadInfo) {
-                op.rows.push(text.to_owned());
-                if let OpPhase::Collecting { last_row_at, .. } = &mut op.phase {
-                    *last_row_at = now;
-                }
+            && op.started.is_some()
+            && matches!(op.kind, SystemOpKind::ReadSettings | SystemOpKind::ReadInfo)
+        {
+            op.rows.push(text.to_owned());
+            if let OpPhase::Collecting { last_row_at, .. } = &mut op.phase {
+                *last_row_at = now;
             }
+        }
     }
 
     fn supports_csv(&self) -> bool {
@@ -589,7 +598,11 @@ impl Core {
     }
 
     fn generic_message(&mut self, line: &str) {
-        let decoded = if self.supports_csv() { decode_message(line) } else { None };
+        let decoded = if self.supports_csv() {
+            decode_message(line)
+        } else {
+            None
+        };
         self.log(MessageKind::classify(line), line, decoded);
     }
 
@@ -605,11 +618,16 @@ impl Core {
     }
 
     fn is_connected(&self) -> bool {
-        !matches!(self.status, MachineStatus::Disconnected | MachineStatus::Connecting)
+        !matches!(
+            self.status,
+            MachineStatus::Disconnected | MachineStatus::Connecting
+        )
     }
 
     fn can_read_write_config(&self) -> bool {
-        self.is_connected() && !self.in_program() && matches!(self.status, MachineStatus::Idle | MachineStatus::Alarm)
+        self.is_connected()
+            && !self.in_program()
+            && matches!(self.status, MachineStatus::Idle | MachineStatus::Alarm)
     }
 
     fn clear_queue(&mut self, sent: bool) {
@@ -699,7 +717,10 @@ pub struct Host {
 
 impl std::fmt::Debug for Host {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Host").field("firmware", &self.fw.kind()).field("core", &self.core).finish()
+        f.debug_struct("Host")
+            .field("firmware", &self.fw.kind())
+            .field("core", &self.core)
+            .finish()
     }
 }
 
@@ -767,8 +788,15 @@ impl Host {
     /// The transport was closed, by the user (`user`) or because it failed.
     pub fn close(&mut self, user: bool, now: u64) {
         self.core.now = now;
-        if self.core.tp.last_issue() == Issue::Unknown && self.core.status == MachineStatus::Run && self.core.in_program() {
-            self.core.set_issue(if user { Issue::ManualDisconnect } else { Issue::UnexpectedDisconnect });
+        if self.core.tp.last_issue() == Issue::Unknown
+            && self.core.status == MachineStatus::Run
+            && self.core.in_program()
+        {
+            self.core.set_issue(if user {
+                Issue::ManualDisconnect
+            } else {
+                Issue::UnexpectedDisconnect
+            });
         }
         let c = &mut self.core;
         c.link_open = false;
@@ -856,10 +884,11 @@ impl Host {
             self.manage_cooling();
         }
         if let Some(due) = self.core.query_due
-            && now >= due {
-                self.fw.query_position(&mut self.core);
-                self.core.query_due = Some(now + self.core.opts.status_query_ms);
-            }
+            && now >= due
+        {
+            self.fw.query_position(&mut self.core);
+            self.core.query_due = Some(now + self.core.opts.status_query_ms);
+        }
         self.detect_hang();
     }
 
@@ -1014,10 +1043,17 @@ impl Host {
         }
         static RE: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
         let re = RE
-            .get_or_init(|| regex::Regex::new(r"(?<fw>[a-zA-Z]+)\s+(?<maj>\d+)\.(?<min>\d+)(?<build>\D)(?:$|\s)").ok())
+            .get_or_init(|| {
+                regex::Regex::new(r"(?<fw>[a-zA-Z]+)\s+(?<maj>\d+)\.(?<min>\d+)(?<build>\D)(?:$|\s)").ok()
+            })
             .as_ref()?;
         let c = re.captures(line)?;
-        Some((c["fw"].to_owned(), c["maj"].parse().ok()?, c["min"].parse().ok()?, c["build"].chars().next()?))
+        Some((
+            c["fw"].to_owned(),
+            c["maj"].parse().ok()?,
+            c["min"].parse().ok()?,
+            c["build"].chars().next()?,
+        ))
     }
 
     /// A welcome banner: version at fixed offsets (`Grbl 1.1f`), or parsed already.
@@ -1052,7 +1088,10 @@ impl Host {
     }
 
     fn detect_unexpected_reset(&mut self) {
-        if self.core.tp.last_issue() == Issue::Unknown && self.core.status == MachineStatus::Run && self.core.in_program() {
+        if self.core.tp.last_issue() == Issue::Unknown
+            && self.core.status == MachineStatus::Run
+            && self.core.in_program()
+        {
             self.core.set_issue(Issue::UnexpectedReset);
         }
     }
@@ -1076,7 +1115,9 @@ impl Host {
             version = FirmwareVersion::new(1, 1);
         }
         let report = parse_report(body, &version);
-        let Some(st) = self.fw.parse_status_name(&report.state) else { return };
+        let Some(st) = self.fw.parse_status_name(&report.state) else {
+            return;
+        };
         self.apply_parsed_status(st);
         let legacy = !version.is_v11();
         for field in report.fields {
@@ -1118,7 +1159,11 @@ impl Host {
             let result = line.to_uppercase().trim().to_owned();
             let status = CommandStatus::from_result(&result);
             c.used_buffer = c.used_buffer.saturating_sub(p.wire_len);
-            let decoded = if status == CommandStatus::ResponseBad { decode_result(&result) } else { None };
+            let decoded = if status == CommandStatus::ResponseBad {
+                decode_result(&result)
+            } else {
+                None
+            };
             c.events.push_back(Event::Console(ConsoleRow::Result {
                 id: p.row,
                 result: result.clone(),
@@ -1137,19 +1182,27 @@ impl Host {
                 c.events.push_back(Event::SettingsChanged);
             }
             if let Origin::System(id) = p.q.origin
-                && let Some(op) = c.sys.front_mut().filter(|op| op.id == id) {
-                    op.answered += 1;
-                    if status != CommandStatus::ResponseGood {
-                        op.errors.push(format!("{} {}", p.q.cmd.text(), result));
-                    }
-                    if op.answered == 1 && matches!(op.kind, SystemOpKind::ReadSettings | SystemOpKind::ReadInfo) {
-                        op.phase = if status == CommandStatus::ResponseGood {
-                            OpPhase::Collecting { ok_at: c.now, last_row_at: c.now }
-                        } else {
-                            OpPhase::Collecting { ok_at: 0, last_row_at: 0 }
-                        };
-                    }
+                && let Some(op) = c.sys.front_mut().filter(|op| op.id == id)
+            {
+                op.answered += 1;
+                if status != CommandStatus::ResponseGood {
+                    op.errors.push(format!("{} {}", p.q.cmd.text(), result));
                 }
+                if op.answered == 1 && matches!(op.kind, SystemOpKind::ReadSettings | SystemOpKind::ReadInfo)
+                {
+                    op.phase = if status == CommandStatus::ResponseGood {
+                        OpPhase::Collecting {
+                            ok_at: c.now,
+                            last_row_at: c.now,
+                        }
+                    } else {
+                        OpPhase::Collecting {
+                            ok_at: 0,
+                            last_row_at: 0,
+                        }
+                    };
+                }
+            }
             let mode = self.fw.streaming_mode(self.core.opts.streaming_mode);
             let c = &mut self.core;
             if c.in_program()
@@ -1173,7 +1226,9 @@ impl Host {
     }
 
     fn handle_missing_ok(&mut self) {
-        if self.is_buffer_stuck() && self.core.grbl_buffer >= 0 && self.core.grbl_buffer as usize == self.core.buffer_size()
+        if self.is_buffer_stuck()
+            && self.core.grbl_buffer >= 0
+            && self.core.grbl_buffer as usize == self.core.buffer_size()
         {
             self.unlock_buffer_stuck_inner();
         }
@@ -1200,7 +1255,8 @@ impl Host {
 
     fn unlock_buffer_stuck_inner(&mut self) {
         let count = self.core.pending.len();
-        self.core.log(MessageKind::Warning, "Unlock from buffer stuck!", None);
+        self.core
+            .log(MessageKind::Warning, "Unlock from buffer stuck!", None);
         self.core.events.push_back(Event::BufferStuckUnlocked { count });
         for _ in 0..count {
             self.command_response("ok");
@@ -1218,7 +1274,11 @@ impl Host {
             return None; // EEPROM writes are synchronous
         }
         let sys_active = c.sys.front().is_some_and(|op| op.started.is_some());
-        let (queue, len) = if sys_active { (Source::System, c.sys_cmds.len()) } else { (Source::Main, c.queue.len()) };
+        let (queue, len) = if sys_active {
+            (Source::System, c.sys_cmds.len())
+        } else {
+            (Source::Main, c.queue.len())
+        };
         if mode == StreamingMode::Buffered {
             (len > 0).then_some(queue)
         } else if c.pending.is_empty() {
@@ -1242,7 +1302,8 @@ impl Host {
     }
 
     fn can_send(&self) -> bool {
-        self.peek_next().is_some_and(|q| self.core.used_buffer + q.cmd.wire_len() <= self.core.buffer_size())
+        self.peek_next()
+            .is_some_and(|q| self.core.used_buffer + q.cmd.wire_len() <= self.core.buffer_size())
     }
 
     fn send_lines(&mut self) {
@@ -1264,7 +1325,8 @@ impl Host {
                 format!("{} (Retry {})", q.cmd.text(), q.cmd.repeat_count())
             };
             c.collect_row(&text);
-            c.events.push_back(Event::Console(ConsoleRow::Command { id: row, text }));
+            c.events
+                .push_back(Event::Console(ConsoleRow::Command { id: row, text }));
             let wire_len = q.cmd.wire_len();
             let send = q.cmd.clone();
             c.pending.push_back(Pending { q, row, wire_len });
@@ -1280,15 +1342,16 @@ impl Host {
 
     fn run_housekeeping(&mut self) {
         if let Some(at) = self.core.refresh_at
-            && self.core.now >= at {
-                self.core.refresh_at = None;
-                if self.core.can_read_write_config() {
-                    self.push_system_op(SystemOpKind::ReadSettings, vec![Command::new("$$")]);
-                }
-                if self.core.opts.query_machine_info {
-                    self.push_system_op(SystemOpKind::ReadInfo, vec![Command::new("$I")]);
-                }
+            && self.core.now >= at
+        {
+            self.core.refresh_at = None;
+            if self.core.can_read_write_config() {
+                self.push_system_op(SystemOpKind::ReadSettings, vec![Command::new("$$")]);
             }
+            if self.core.opts.query_machine_info {
+                self.push_system_op(SystemOpKind::ReadInfo, vec![Command::new("$I")]);
+            }
+        }
     }
 
     fn push_system_op(&mut self, kind: SystemOpKind, commands: Vec<Command>) -> u64 {
@@ -1319,7 +1382,14 @@ impl Host {
                 op.started = Some(now);
                 let id = op.id;
                 let cmds = op.commands.clone();
-                c.sys_cmds = cmds.into_iter().map(|cmd| Queued { cmd, offset_ms: 0, origin: Origin::System(id) }).collect();
+                c.sys_cmds = cmds
+                    .into_iter()
+                    .map(|cmd| Queued {
+                        cmd,
+                        offset_ms: 0,
+                        origin: Origin::System(id),
+                    })
+                    .collect();
             }
             let done = match (op.kind.clone(), op.phase) {
                 (SystemOpKind::ReadSettings | SystemOpKind::ReadInfo, OpPhase::Waiting) => {
@@ -1327,7 +1397,11 @@ impl Host {
                 }
                 (kind, OpPhase::Collecting { ok_at, last_row_at }) => {
                     // rows include the query itself (LaserGRBL counts its console rows)
-                    let target = if kind == SystemOpKind::ReadSettings { expected + 1 } else { 3 };
+                    let target = if kind == SystemOpKind::ReadSettings {
+                        expected + 1
+                    } else {
+                        3
+                    };
                     ok_at == 0
                         || op.rows.len() >= target
                         || now.saturating_sub(last_row_at) >= COLLECT_QUIET_MS
@@ -1387,7 +1461,11 @@ impl Host {
                 }
             }
         };
-        c.events.push_back(Event::SystemOpFinished { id: op.id, kind: op.kind, result });
+        c.events.push_back(Event::SystemOpFinished {
+            id: op.id,
+            kind: op.kind,
+            result,
+        });
     }
 
     // ================================================================== job
@@ -1411,7 +1489,9 @@ impl Host {
     /// Number of passes of the next job.
     pub fn set_loop_count(&mut self, count: u32) {
         self.core.loop_count = count.max(1);
-        self.core.events.push_back(Event::LoopCountChanged(self.core.loop_count));
+        self.core
+            .events
+            .push_back(Event::LoopCountChanged(self.core.loop_count));
     }
 
     fn check_can_send_file(&self) -> Result<(), HostError> {
@@ -1459,7 +1539,11 @@ impl Host {
         }
         let c = &mut self.core;
         for line in c.program.lines() {
-            c.queue.push_back(Queued { cmd: line.command.clone(), offset_ms: line.offset_ms, origin: Origin::Job });
+            c.queue.push_back(Queued {
+                cmd: line.command.clone(),
+                offset_ms: line.offset_ms,
+                origin: Origin::Job,
+            });
         }
         let target = c.queue.len();
         c.tp.job_start(c.program.estimated_ms(), target, first, c.now);
@@ -1489,12 +1573,22 @@ impl Host {
 
     /// Runs the program from command `position` (0-based), rebuilding position, feed,
     /// power and modal state first (`ContinueProgramFromKnown`).
-    pub fn resume_program(&mut self, position: usize, homing: bool, set_wco: bool, now: u64) -> Result<(), HostError> {
+    pub fn resume_program(
+        &mut self,
+        position: usize,
+        homing: bool,
+        set_wco: bool,
+        now: u64,
+    ) -> Result<(), HostError> {
         self.core.now = now;
         self.check_can_send_file()?;
         let c = &mut self.core;
         c.clear_queue(false);
-        c.log(MessageKind::Other, &format!("[resume from #{}]", position + 1), None);
+        c.log(
+            MessageKind::Other,
+            &format!("[resume from #{}]", position + 1),
+            None,
+        );
         let mut spb = MachineState::new(c.opts.support_pwm);
         if homing {
             c.enqueue(Command::new("$H"));
@@ -1529,7 +1623,11 @@ impl Host {
             if i == position && cmd.is_movement() && cmd.get('G').is_none() {
                 cmd = Command::prefixed(spb.motion_mode.current(), &cmd);
             }
-            c.queue.push_back(Queued { cmd, offset_ms: l.offset_ms, origin: Origin::Job });
+            c.queue.push_back(Queued {
+                cmd,
+                offset_ms: l.offset_ms,
+                origin: Origin::Job,
+            });
         }
         self.pump(now);
         Ok(())
@@ -1551,7 +1649,11 @@ impl Host {
             self.run_from_start(false, false, true);
         } else {
             self.core.log(MessageKind::Diagnostic, &summary, None);
-            self.core.events.push_back(Event::JobEnded { lines, errors, time_ms });
+            self.core.events.push_back(Event::JobEnded {
+                lines,
+                errors,
+                time_ms,
+            });
             self.fw.on_job_end(&mut self.core);
             if self.fw.force_idle_at_end() {
                 self.set_status(MachineStatus::Idle);
@@ -1590,7 +1692,10 @@ impl Host {
         if !self.core.link_open {
             return Err(HostError::NotConnected);
         }
-        if self.core.tp.last_issue() == Issue::Unknown && self.core.status == MachineStatus::Run && self.core.in_program() {
+        if self.core.tp.last_issue() == Issue::Unknown
+            && self.core.status == MachineStatus::Run
+            && self.core.in_program()
+        {
             self.core.set_issue(Issue::ManualReset);
         }
         self.internal_reset(true);
@@ -1681,7 +1786,9 @@ impl Host {
         self.core.now = now;
         let c = &self.core;
         if !(c.is_connected() && c.status == MachineStatus::Idle && c.mpos - c.wco != Point3::ZERO) {
-            return Err(HostError::NotAllowed("zeroing needs Idle away from the work zero"));
+            return Err(HostError::NotAllowed(
+                "zeroing needs Idle away from the work zero",
+            ));
         }
         self.core.enqueue(Command::new("G92 X0 Y0 Z0"));
         self.pump(now);
@@ -1753,7 +1860,9 @@ impl Host {
         if self.supports_true_jogging() {
             c.is_connected() && matches!(c.status, MachineStatus::Idle | MachineStatus::Jog)
         } else {
-            c.is_connected() && matches!(c.status, MachineStatus::Idle | MachineStatus::Run) && !c.in_program()
+            c.is_connected()
+                && matches!(c.status, MachineStatus::Idle | MachineStatus::Run)
+                && !c.in_program()
         }
     }
 
@@ -1770,14 +1879,16 @@ impl Host {
                 self.core.enqueue(Command::new(&format!("G1X0Y0F{s}")));
             } else {
                 self.core.enqueue(Command::new("G91"));
-                self.core.enqueue(Command::new(&format!("G1{}F{s}", step_axes(dir, step))));
+                self.core
+                    .enqueue(Command::new(&format!("G1{}F{s}", step_axes(dir, step))));
                 self.core.enqueue(Command::new("G90"));
             }
         } else if !self.core.opts.continuous_jog || dir.is_z() {
             if dir == JogDirection::Home {
                 self.core.enqueue(Command::new(&format!("$J=G90X0Y0F{s}")));
             } else {
-                self.core.enqueue(Command::new(&format!("$J=G91{}F{s}", step_axes(dir, step))));
+                self.core
+                    .enqueue(Command::new(&format!("$J=G91{}F{s}", step_axes(dir, step))));
             }
         } else {
             self.set_jog_target(JogTarget::Direction(dir, speed));
@@ -1796,9 +1907,17 @@ impl Host {
         let s = format_speed(speed);
         if !self.supports_true_jogging() {
             self.core.enqueue(Command::new("G90"));
-            self.core.enqueue(Command::new(&format!("G1X{}Y{}F{s}", format_coord(x), format_coord(y))));
+            self.core.enqueue(Command::new(&format!(
+                "G1X{}Y{}F{s}",
+                format_coord(x),
+                format_coord(y)
+            )));
         } else if !self.core.opts.continuous_jog {
-            self.core.enqueue(Command::new(&format!("$J=G90X{}Y{}F{s}", format_coord(x), format_coord(y))));
+            self.core.enqueue(Command::new(&format!(
+                "$J=G90X{}Y{}F{s}",
+                format_coord(x),
+                format_coord(y)
+            )));
         } else {
             self.set_jog_target(JogTarget::Position(x, y, speed));
         }
@@ -1836,7 +1955,9 @@ impl Host {
             return;
         }
         let c = &mut self.core;
-        let Some(curr) = c.cj_curr.filter(|cur| c.cj_prev.map(|p| p.0) != Some(cur.0)) else { return };
+        let Some(curr) = c.cj_curr.filter(|cur| c.cj_prev.map(|p| p.0) != Some(cur.0)) else {
+            return;
+        };
         let abort_previous = c.cj_prev.is_some_and(|p| p.1 != JogTarget::Abort);
         c.cj_prev = Some(curr);
         if abort_previous {
@@ -1845,7 +1966,12 @@ impl Host {
         match curr.1 {
             JogTarget::Abort => {}
             JogTarget::Position(x, y, speed) => {
-                let cmd = format!("$J=G90X{}Y{}F{}", format_coord(x), format_coord(y), format_speed(speed));
+                let cmd = format!(
+                    "$J=G90X{}Y{}F{}",
+                    format_coord(x),
+                    format_coord(y),
+                    format_speed(speed)
+                );
                 c.enqueue(Command::new(&cmd));
             }
             JogTarget::Direction(JogDirection::Home, speed) => {
@@ -1866,9 +1992,14 @@ impl Host {
     pub fn write_settings(&mut self, values: &[(u32, String)], now: u64) -> Result<u64, HostError> {
         self.core.now = now;
         if !self.core.can_read_write_config() {
-            return Err(HostError::NotAllowed("settings can be written only in Idle or Alarm"));
+            return Err(HostError::NotAllowed(
+                "settings can be written only in Idle or Alarm",
+            ));
         }
-        let cmds = values.iter().map(|(n, v)| Command::preserving_case(&format!("${n}={v}"))).collect();
+        let cmds = values
+            .iter()
+            .map(|(n, v)| Command::preserving_case(&format!("${n}={v}")))
+            .collect();
         let id = self.push_system_op(SystemOpKind::WriteSettings, cmds);
         self.pump(now);
         Ok(id)
@@ -1881,7 +2012,9 @@ impl Host {
             return Err(HostError::Unsupported("this firmware has no $$"));
         }
         if !self.core.can_read_write_config() {
-            return Err(HostError::NotAllowed("settings can be read only in Idle or Alarm"));
+            return Err(HostError::NotAllowed(
+                "settings can be read only in Idle or Alarm",
+            ));
         }
         let id = self.push_system_op(SystemOpKind::ReadSettings, vec![Command::new("$$")]);
         self.pump(now);
@@ -1897,7 +2030,9 @@ impl Host {
         self.core.detected_ip = None;
         if v.is_ortur() {
             if !self.core.can_read_write_config() {
-                return Err(HostError::NotAllowed("Wi-Fi can be configured only in Idle or Alarm"));
+                return Err(HostError::NotAllowed(
+                    "Wi-Fi can be configured only in Idle or Alarm",
+                ));
             }
             let cmds = vec![
                 Command::preserving_case(&format!("$74={ssid}")),
@@ -1908,15 +2043,20 @@ impl Host {
             self.pump(now);
             Ok(Some(id))
         } else if v.is_longer() {
-            for line in
-                ["$radio/mode=sta".to_owned(), format!("$sta/ssid={ssid}"), format!("$sta/password={password}"), "$wifi/begin".to_owned()]
-            {
+            for line in [
+                "$radio/mode=sta".to_owned(),
+                format!("$sta/ssid={ssid}"),
+                format!("$sta/password={password}"),
+                "$wifi/begin".to_owned(),
+            ] {
                 self.core.enqueue(Command::preserving_case(&line));
             }
             self.pump(now);
             Ok(None)
         } else {
-            Err(HostError::Unsupported("Wi-Fi configuration needs an Ortur or Longer board"))
+            Err(HostError::Unsupported(
+                "Wi-Fi configuration needs an Ortur or Longer board",
+            ))
         }
     }
 
@@ -1929,10 +2069,16 @@ impl Host {
     // ================================================================== cooling and hang detection
 
     fn manage_cooling(&mut self) {
-        let Some(ac) = self.core.opts.auto_cooling else { return };
+        let Some(ac) = self.core.opts.auto_cooling else {
+            return;
+        };
         let c = &self.core;
         let supported = c.version.as_ref().is_some_and(FirmwareVersion::is_v11) && c.settings.laser_mode();
-        if !(supported && c.in_program() && c.status != MachineStatus::Hold && c.status != MachineStatus::AutoHold) {
+        if !(supported
+            && c.in_program()
+            && c.status != MachineStatus::Hold
+            && c.status != MachineStatus::AutoHold)
+        {
             return;
         }
         let cycle = ac.on_ms + ac.off_ms;
@@ -1952,7 +2098,10 @@ impl Host {
 
     fn detect_hang(&mut self) {
         let c = &self.core;
-        if c.tp.last_issue() == Issue::Unknown && c.status == MachineStatus::Run && c.in_program() && self.fw.hang_detected(c)
+        if c.tp.last_issue() == Issue::Unknown
+            && c.status == MachineStatus::Run
+            && c.in_program()
+            && self.fw.hang_detected(c)
         {
             self.core.set_issue(Issue::StopResponding);
         }
@@ -2065,7 +2214,11 @@ impl Core {
         self.sys_cmds.clear();
         let ops: Vec<SystemOp> = self.sys.drain(..).collect();
         for op in ops {
-            self.events.push_back(Event::SystemOpFinished { id: op.id, kind: op.kind, result: Err(reason.to_owned()) });
+            self.events.push_back(Event::SystemOpFinished {
+                id: op.id,
+                kind: op.kind,
+                result: Err(reason.to_owned()),
+            });
         }
     }
 
@@ -2077,7 +2230,9 @@ impl Core {
 /// `[MSG:Get IP 1.2.3.4]` or `[MSG:Connected with 1.2.3.4]`.
 fn ip_message(line: &str) -> Option<String> {
     let body = line.strip_suffix(']')?;
-    body.strip_prefix("[MSG:Get IP ").or_else(|| body.strip_prefix("[MSG:Connected with ")).map(str::to_owned)
+    body.strip_prefix("[MSG:Get IP ")
+        .or_else(|| body.strip_prefix("[MSG:Connected with "))
+        .map(str::to_owned)
 }
 
 /// `1h 2m 3s` style duration for the job summary.

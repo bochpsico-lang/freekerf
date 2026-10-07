@@ -96,7 +96,9 @@ struct Inner {
 
 impl std::fmt::Debug for Machine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Machine").field("snapshot", &self.snapshot()).finish()
+        f.debug_struct("Machine")
+            .field("snapshot", &self.snapshot())
+            .finish()
     }
 }
 
@@ -132,7 +134,13 @@ impl Machine {
             .spawn(move || io.run(&cmd_rx, &stop_rx))
             .ok();
         Self {
-            inner: Arc::new(Inner { cmd: cmd_tx, stop: stop_tx, snapshot, subscribers, thread: Mutex::new(thread) }),
+            inner: Arc::new(Inner {
+                cmd: cmd_tx,
+                stop: stop_tx,
+                snapshot,
+                subscribers,
+                thread: Mutex::new(thread),
+            }),
         }
     }
 
@@ -142,7 +150,10 @@ impl Machine {
     /// The transport failed to open, or a link is already open.
     pub fn connect(&self, transport: Box<dyn Transport>) -> Result<(), MachineError> {
         let (tx, rx) = bounded(1);
-        self.inner.cmd.send(Cmd::Connect(transport, tx)).map_err(|_| MachineError::Stopped)?;
+        self.inner
+            .cmd
+            .send(Cmd::Connect(transport, tx))
+            .map_err(|_| MachineError::Stopped)?;
         rx.recv().map_err(|_| MachineError::Stopped)?
     }
 
@@ -152,7 +163,10 @@ impl Machine {
     /// The driver stopped.
     pub fn disconnect(&self) -> Result<(), MachineError> {
         let (tx, rx) = bounded(1);
-        self.inner.cmd.send(Cmd::Disconnect(tx)).map_err(|_| MachineError::Stopped)?;
+        self.inner
+            .cmd
+            .send(Cmd::Disconnect(tx))
+            .map_err(|_| MachineError::Stopped)?;
         rx.recv().map_err(|_| MachineError::Stopped)
     }
 
@@ -160,12 +174,18 @@ impl Machine {
     ///
     /// # Errors
     /// The driver stopped.
-    pub fn call<R: Send + 'static>(&self, f: impl FnOnce(&mut Host, u64) -> R + Send + 'static) -> Result<R, MachineError> {
+    pub fn call<R: Send + 'static>(
+        &self,
+        f: impl FnOnce(&mut Host, u64) -> R + Send + 'static,
+    ) -> Result<R, MachineError> {
         let (tx, rx) = bounded(1);
         let job: Job = Box::new(move |h, now| {
             let _ = tx.send(f(h, now));
         });
-        self.inner.cmd.send(Cmd::Call(job)).map_err(|_| MachineError::Stopped)?;
+        self.inner
+            .cmd
+            .send(Cmd::Call(job))
+            .map_err(|_| MachineError::Stopped)?;
         rx.recv().map_err(|_| MachineError::Stopped)
     }
 
@@ -178,14 +198,22 @@ impl Machine {
     /// Latest state (updated after every protocol step).
     #[must_use]
     pub fn snapshot(&self) -> HostSnapshot {
-        self.inner.snapshot.lock().unwrap_or_else(PoisonError::into_inner).clone()
+        self.inner
+            .snapshot
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     /// Receives every event from now on.
     #[must_use]
     pub fn subscribe(&self) -> Receiver<MachineEvent> {
         let (tx, rx) = unbounded();
-        self.inner.subscribers.lock().unwrap_or_else(PoisonError::into_inner).push(tx);
+        self.inner
+            .subscribers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(tx);
         rx
     }
 }
@@ -215,7 +243,10 @@ impl Io {
                 self.flush();
             }
             let now = self.now();
-            let wait = self.host.next_deadline().map_or(50, |d| d.saturating_sub(now).clamp(1, 50));
+            let wait = self
+                .host
+                .next_deadline()
+                .map_or(50, |d| d.saturating_sub(now).clamp(1, 50));
             let never = crossbeam_channel::never();
             let rx = self.rx.clone().unwrap_or(never);
             select! {
@@ -277,23 +308,25 @@ impl Io {
         let stop = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&stop);
         let mut reader = link.reader;
-        let spawned = thread::Builder::new().name("freekerf-reader".into()).spawn(move || {
-            let mut buf = [0u8; 4096];
-            while !flag.load(Ordering::SeqCst) {
-                match reader.read(&mut buf, Duration::from_millis(20)) {
-                    Ok(0) => {}
-                    Ok(n) => {
-                        if tx.send(Rx::Bytes(id, buf[..n].to_vec())).is_err() {
+        let spawned = thread::Builder::new()
+            .name("freekerf-reader".into())
+            .spawn(move || {
+                let mut buf = [0u8; 4096];
+                while !flag.load(Ordering::SeqCst) {
+                    match reader.read(&mut buf, Duration::from_millis(20)) {
+                        Ok(0) => {}
+                        Ok(n) => {
+                            if tx.send(Rx::Bytes(id, buf[..n].to_vec())).is_err() {
+                                return;
+                            }
+                        }
+                        Err(_) => {
+                            let _ = tx.send(Rx::Closed(id));
                             return;
                         }
                     }
-                    Err(_) => {
-                        let _ = tx.send(Rx::Closed(id));
-                        return;
-                    }
                 }
-            }
-        });
+            });
         if let Err(e) = spawned {
             self.host.open_failed(now);
             self.flush();
@@ -302,7 +335,9 @@ impl Io {
         self.writer = Some(link.writer);
         self.rx = Some(rx);
         self.reader_stop = Some(stop);
-        self.publish(MachineEvent::Connected { transport: t.describe() });
+        self.publish(&MachineEvent::Connected {
+            transport: t.describe(),
+        });
         self.host.open(now);
         self.flush();
         Ok(())
@@ -318,14 +353,13 @@ impl Io {
             let now = self.now();
             self.host.close(user, now);
             self.flush();
-            self.publish(MachineEvent::Disconnected { user });
+            self.publish(&MachineEvent::Disconnected { user });
         }
     }
 
     /// Writes pending output, publishes events, updates the snapshot.
     fn flush(&mut self) {
-        loop {
-            let Some(out) = self.host.poll_output() else { break };
+        while let Some(out) = self.host.poll_output() {
             match out {
                 Output::Write(bytes) => {
                     let failed = self.writer.as_mut().is_some_and(|w| w.write_all(&bytes).is_err());
@@ -338,12 +372,12 @@ impl Io {
             }
         }
         while let Some(e) = self.host.poll_event() {
-            self.publish(MachineEvent::Host(e));
+            self.publish(&MachineEvent::Host(e));
         }
         *self.snapshot.lock().unwrap_or_else(PoisonError::into_inner) = self.host.snapshot();
     }
 
-    fn publish(&self, e: MachineEvent) {
+    fn publish(&self, e: &MachineEvent) {
         let mut subs = self.subscribers.lock().unwrap_or_else(PoisonError::into_inner);
         subs.retain(|s| s.send(e.clone()).is_ok());
     }

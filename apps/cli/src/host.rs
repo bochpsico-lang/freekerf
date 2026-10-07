@@ -22,7 +22,9 @@ pub fn serve(service: &Service, input: impl BufRead, mut output: impl Write) -> 
         }
         let response = match serde_json::from_str::<Value>(&line) {
             Ok(req) => handle(service, &caller, &req),
-            Err(e) => json!({"id": Value::Null, "ok": false, "error": {"kind": "invalid_request", "message": e.to_string()}}),
+            Err(e) => {
+                json!({"id": Value::Null, "ok": false, "error": {"kind": "invalid_request", "message": e.to_string()}})
+            }
         };
         writeln!(output, "{response}")?;
         output.flush()?;
@@ -60,12 +62,21 @@ mod tests {
         let input = b"{\"id\":1,\"action\":\"job.info\"}\n\nnot json\n{\"id\":2}\n{\"id\":3,\"action\":\"job.run\"}\n";
         let mut out = Vec::new();
         serve(&service, &input[..], &mut out).unwrap();
-        let lines: Vec<Value> = String::from_utf8(out).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        let lines: Vec<Value> = String::from_utf8(out)
+            .unwrap()
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
         assert_eq!(lines.len(), 4);
         assert_eq!(lines[0], json!({"id": 1, "ok": true, "result": null}));
         assert_eq!(lines[1]["error"]["kind"], "invalid_request");
         assert_eq!(lines[2]["error"]["message"], "missing `action`");
         assert_eq!(lines[3]["error"]["kind"], "refused");
-        assert!(lines[3]["error"]["message"].as_str().unwrap().contains("not connected"));
+        assert!(
+            lines[3]["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("not connected")
+        );
     }
 }

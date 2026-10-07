@@ -25,7 +25,12 @@ pub struct Rect {
 
 impl Rect {
     fn from_points(x0: f64, y0: f64, x1: f64, y1: f64) -> Self {
-        Self { x: x0.min(x1), y: y0.min(y1), width: (x1 - x0).abs(), height: (y1 - y0).abs() }
+        Self {
+            x: x0.min(x1),
+            y: y0.min(y1),
+            width: (x1 - x0).abs(),
+            height: (y1 - y0).abs(),
+        }
     }
 }
 
@@ -62,7 +67,10 @@ impl ArcHelper {
         let (ox, oy) = if cmd.get('R').is_some() {
             ((ax + bx) / 2.0 - ax, (ay + by) / 2.0 - ay)
         } else {
-            (cmd.get('I').map_or(0.0, f64_from_decimal), cmd.get('J').map_or(0.0, f64_from_decimal))
+            (
+                cmd.get('I').map_or(0.0, f64_from_decimal),
+                cmd.get('J').map_or(0.0, f64_from_decimal),
+            )
         };
         let center_x = ax + ox;
         let center_y = ay + oy;
@@ -73,13 +81,27 @@ impl ArcHelper {
         #[allow(clippy::float_cmp)] // exact comparison, as in the original
         let full_circle = ax == bx && ay == by;
         let bbox = if full_circle {
-            Rect { x: center_x - radius, y: center_y - radius, width: 2.0 * radius, height: 2.0 * radius }
+            Rect {
+                x: center_x - radius,
+                y: center_y - radius,
+                width: 2.0 * radius,
+                height: 2.0 * radius,
+            }
         } else if cw {
             arc_bbox(end_angle, start_angle, radius, center_x, center_y)
         } else {
             arc_bbox(start_angle, end_angle, radius, center_x, center_y)
         };
-        Self { center_x, center_y, radius, cw, start_angle, end_angle, angular_width, bbox }
+        Self {
+            center_x,
+            center_y,
+            radius,
+            cw,
+            start_angle,
+            end_angle,
+            angular_width,
+            bbox,
+        }
     }
 
     /// Signed length (angular width × radius).
@@ -145,8 +167,14 @@ pub fn quadrant(angle: f64) -> usize {
 pub fn arc_bbox(start: f64, end: f64, r: f64, cx: f64, cy: f64) -> Rect {
     let sq = quadrant(start) - 1;
     let eq = quadrant(end) - 1;
-    let (sx, sy) = (round_half_even(r * start.cos(), 14), round_half_even(r * start.sin(), 14));
-    let (ex, ey) = (round_half_even(r * end.cos(), 14), round_half_even(r * end.sin(), 14));
+    let (sx, sy) = (
+        round_half_even(r * start.cos(), 14),
+        round_half_even(r * start.sin(), 14),
+    );
+    let (ex, ey) = (
+        round_half_even(r * end.cos(), 14),
+        round_half_even(r * end.sin(), 14),
+    );
     let (mut min_x, mut min_y, mut max_x, mut max_y) = (sx, sy, sx, sy);
     if max_x < ex {
         max_x = ex;
@@ -218,7 +246,15 @@ mod tests {
     #[test]
     fn full_circle_bbox() {
         let a = arc(&["G0 X40 Y40", "G1 F100", "G2 X40 Y40 I0 J-10"]);
-        assert_eq!(a.bbox, Rect { x: 30.0, y: 20.0, width: 20.0, height: 20.0 });
+        assert_eq!(
+            a.bbox,
+            Rect {
+                x: 30.0,
+                y: 20.0,
+                width: 20.0,
+                height: 20.0
+            }
+        );
         assert!((a.abs_length() - 20.0 * PI).abs() < 1e-9);
     }
 
@@ -237,7 +273,10 @@ mod tests {
         assert!((angle(0.0, 0.0, -1.0, 1.0) - 0.75 * PI).abs() < 1e-12);
         assert!((angle(0.0, 0.0, -1.0, -1.0) - 1.25 * PI).abs() < 1e-12);
         assert!((angle(0.0, 0.0, 1.0, -1.0) - 1.75 * PI).abs() < 1e-12);
-        assert_eq!([quadrant(0.1), quadrant(2.0), quadrant(4.0), quadrant(5.0)], [1, 2, 3, 4]);
+        assert_eq!(
+            [quadrant(0.1), quadrant(2.0), quadrant(4.0), quadrant(5.0)],
+            [1, 2, 3, 4]
+        );
         assert_eq!(angular_distance(1.0, 1.0, true), -2.0 * PI);
         assert_eq!(angular_distance(1.0, 0.5, true), -0.5);
         assert_eq!(angular_distance(1.0, 2.0, false), 1.0);

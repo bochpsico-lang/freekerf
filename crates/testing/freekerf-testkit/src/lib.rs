@@ -3,8 +3,11 @@
 //! * [`SimClock`]: a manual clock implementing [`freekerf_protocol::Clock`].
 //! * [`Bench`]: a [`Host`] wired to an emulated [`Device`] in memory, with a
 //!   simulated clock: tests drive both state machines step by step, no threads.
-//! * [`pty`]: a pseudo terminal pair, to test serial code without hardware.
+//! * PTYs: see `freekerf_transport::pty` (the emulator served on a pseudo terminal).
 //! * [`fixtures`]: paths of shared test files.
+//!
+//! Test support may panic: a failed expectation here is a failed test.
+#![allow(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -13,8 +16,6 @@ use freekerf_emulator::{Device, DeviceConfig};
 use freekerf_protocol::{Clock, Event, Host, HostOptions, Output};
 
 pub mod fixtures;
-#[cfg(unix)]
-pub mod pty;
 
 /// A clock that only moves when told to.
 #[derive(Debug, Clone, Default)]
@@ -69,13 +70,22 @@ impl Bench {
     /// A bench with the given host options and device configuration.
     #[must_use]
     pub fn with(options: HostOptions, device: DeviceConfig) -> Self {
-        Self::with_host(Host::for_kind(freekerf_protocol::FirmwareKind::Grbl, options), device)
+        Self::with_host(
+            Host::for_kind(freekerf_protocol::FirmwareKind::Grbl, options),
+            device,
+        )
     }
 
     /// A bench around an existing host.
     #[must_use]
     pub fn with_host(host: Host, device: DeviceConfig) -> Self {
-        Self { host, device: Device::new(device), now: 1000, events: Vec::new(), open: false }
+        Self {
+            host,
+            device: Device::new(device),
+            now: 1000,
+            events: Vec::new(),
+            open: false,
+        }
     }
 
     /// Opens the link (the device prints its banner) and exchanges traffic.
@@ -89,7 +99,10 @@ impl Bench {
     /// Opens and waits until the connect-time queries are done and the host is ready.
     pub fn connect(&mut self) {
         self.open();
-        assert!(self.run_until(|b| b.host.ready() && b.host.status() == freekerf_protocol::MachineStatus::Idle, 30_000));
+        assert!(self.run_until(
+            |b| b.host.ready() && b.host.status() == freekerf_protocol::MachineStatus::Idle,
+            30_000
+        ));
         self.device.clear_lines();
         self.device.clear_realtime();
         self.device.reset_max_rx_used();
@@ -181,7 +194,9 @@ impl Bench {
     /// Loads a program from G-code text.
     pub fn load(&mut self, text: &str) {
         let p = freekerf_gcode::Program::parse(text, &freekerf_gcode::AnalysisOptions::default());
-        self.host.set_program(p).unwrap_or_else(|e| panic!("cannot load: {e}"));
+        self.host
+            .set_program(p)
+            .unwrap_or_else(|e| panic!("cannot load: {e}"));
     }
 }
 
@@ -194,7 +209,9 @@ impl Default for Bench {
 /// `n` job lines of about 20 bytes, as in the conformance protocol tests.
 #[must_use]
 pub fn job_lines(n: usize) -> Vec<String> {
-    (0..n).map(|i| format!("G1 X{}.{} Y{} F{}", i % 50, i % 10, (i * 7) % 40, 1000 + i)).collect()
+    (0..n)
+        .map(|i| format!("G1 X{}.{} Y{} F{}", i % 50, i % 10, (i * 7) % 40, 1000 + i))
+        .collect()
 }
 
 /// A line as it goes on the wire (spaces removed).

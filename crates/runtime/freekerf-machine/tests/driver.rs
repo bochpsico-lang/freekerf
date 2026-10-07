@@ -1,5 +1,5 @@
 //! The driver with the emulator transport (in process) and over a PTY.
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -21,7 +21,10 @@ fn wait(m: &Machine, mut pred: impl FnMut(&freekerf_protocol::HostSnapshot) -> b
 }
 
 fn machine() -> Machine {
-    Machine::start(Host::for_kind(FirmwareKind::Grbl, HostOptions::default()), Arc::new(SystemClock::default()))
+    Machine::start(
+        Host::for_kind(FirmwareKind::Grbl, HostOptions::default()),
+        Arc::new(SystemClock::default()),
+    )
 }
 
 #[test]
@@ -29,7 +32,10 @@ fn runs_a_job_on_the_emulator() {
     let m = machine();
     let events = m.subscribe();
     m.connect(Box::new(EmulatorTransport::default())).unwrap();
-    assert!(matches!(m.connect(Box::new(EmulatorTransport::default())), Err(freekerf_machine::MachineError::AlreadyConnected)));
+    assert!(matches!(
+        m.connect(Box::new(EmulatorTransport::default())),
+        Err(freekerf_machine::MachineError::AlreadyConnected)
+    ));
     assert!(wait(&m, |s| s.ready && s.status == MachineStatus::Idle, 10));
     let program = Program::parse("G0 X1\nM3 S100\nG1 X2 F6000\nM5", &AnalysisOptions::default());
     m.call(move |h, now| {
@@ -41,7 +47,9 @@ fn runs_a_job_on_the_emulator() {
     let end = Instant::now() + Duration::from_secs(10);
     let mut ended = false;
     while Instant::now() < end && !ended {
-        if let Ok(MachineEvent::Host(Event::JobEnded { lines, .. })) = events.recv_timeout(Duration::from_millis(100)) {
+        if let Ok(MachineEvent::Host(Event::JobEnded { lines, .. })) =
+            events.recv_timeout(Duration::from_millis(100))
+        {
             assert_eq!(lines, 4);
             ended = true;
         }
@@ -78,7 +86,8 @@ fn hang_up_on_a_pty_disconnects() {
     let emu = freekerf_transport::pty::serve_emulator(freekerf_emulator::DeviceConfig::default()).unwrap();
     let m = machine();
     let events = m.subscribe();
-    m.connect(Box::new(SerialTransport::new(emu.path(), 115_200))).unwrap();
+    m.connect(Box::new(SerialTransport::new(emu.path(), 115_200)))
+        .unwrap();
     assert!(wait(&m, |s| s.ready, 10));
     emu.stop();
     assert!(wait(&m, |s| s.status == MachineStatus::Disconnected, 5));
@@ -89,7 +98,9 @@ fn hang_up_on_a_pty_disconnects() {
 #[test]
 fn open_failure_is_reported() {
     let m = machine();
-    let e = m.connect(Box::new(SerialTransport::new("/nonexistent/fk-port", 115_200))).unwrap_err();
+    let e = m
+        .connect(Box::new(SerialTransport::new("/nonexistent/fk-port", 115_200)))
+        .unwrap_err();
     assert!(e.to_string().contains("fk-port"));
     assert_eq!(m.snapshot().failed_connections, 1);
 }

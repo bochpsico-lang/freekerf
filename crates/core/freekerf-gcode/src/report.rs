@@ -62,7 +62,11 @@ impl Report {
                     w
                 })
                 .collect(),
-            offsets_s: program.lines().iter().map(|l| millis_to_seconds(l.offset_ms)).collect(),
+            offsets_s: program
+                .lines()
+                .iter()
+                .map(|l| millis_to_seconds(l.offset_ms))
+                .collect(),
             estimated_time_s: millis_to_seconds(program.estimated_ms()),
             drawing_range: to_box(range.drawing.as_box()),
             moving_range: to_box(range.moving.as_box()),
@@ -102,12 +106,22 @@ mod tests {
 
     #[test]
     fn report_of_a_square() {
-        let p = Program::parse("G0 X10 Y10\nM3 S800\nG1 X30 F1200\nM5\n", &AnalysisOptions::default());
+        let p = Program::parse(
+            "G0 X10 Y10\nM3 S800\nG1 X30 F1200\nM5\n",
+            &AnalysisOptions::default(),
+        );
         let r = Report::new("square.nc", &p);
         assert_eq!(r.wire, vec!["G0X10Y10", "M3S800", "G1X30F1200", "M5"]);
         assert_eq!(r.drawing_range, Some([10.0, 10.0, 30.0, 10.0]));
         assert_eq!(r.moving_range, Some([0.0, 0.0, 30.0, 10.0]));
-        assert_eq!(r.spindle_range, Some(SpindleRange { min: 0.0, max: 800.0, valid: true }));
+        assert_eq!(
+            r.spindle_range,
+            Some(SpindleRange {
+                min: 0.0,
+                max: 800.0,
+                valid: true
+            })
+        );
         assert_eq!(r.quadrant, "I");
         let json = serde_json::to_value(&r).unwrap();
         assert!(json.get("stream").is_some());

@@ -1,5 +1,5 @@
 //! The service through its action registry, with the emulator transport.
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -15,7 +15,8 @@ fn user() -> Caller {
 }
 
 fn call(s: &Service, action: &str, params: Value) -> Value {
-    s.dispatch(&user(), action, params).unwrap_or_else(|e| panic!("{action}: {e}"))
+    s.dispatch(&user(), action, params)
+        .unwrap_or_else(|e| panic!("{action}: {e}"))
 }
 
 fn wait_state(s: &Service, pred: impl Fn(&Value) -> bool, secs: u64) -> Value {
@@ -33,7 +34,11 @@ fn wait_state(s: &Service, pred: impl Fn(&Value) -> bool, secs: u64) -> Value {
 fn connected() -> Service {
     let s = Service::in_memory().unwrap();
     call(&s, "machine.connect", json!({"emulator": true}));
-    wait_state(&s, |st| st["machine"]["ready"] == true && st["machine"]["status"] == "Idle", 10);
+    wait_state(
+        &s,
+        |st| st["machine"]["ready"] == true && st["machine"]["status"] == "Idle",
+        10,
+    );
     s
 }
 
@@ -68,7 +73,11 @@ fn registry_invariants() {
 fn job_runs_end_to_end_on_the_emulator() {
     let s = connected();
     let events = s.subscribe();
-    let info = call(&s, "job.load_text", json!({"name": "square.nc", "gcode": "G0 X10 Y10\nM3 S800\nG1 X20 F6000\nG1 Y20\nM5"}));
+    let info = call(
+        &s,
+        "job.load_text",
+        json!({"name": "square.nc", "gcode": "G0 X10 Y10\nM3 S800\nG1 X20 F6000\nG1 Y20\nM5"}),
+    );
     assert_eq!(info["lines"], 5);
     assert_eq!(call(&s, "job.info", Value::Null)["name"], "square.nc");
     call(&s, "job.run", json!({"passes": 2}));
@@ -84,36 +93,79 @@ fn job_runs_end_to_end_on_the_emulator() {
     }
     assert!(ended, "job did not end");
     let console = call(&s, "console.get", json!({"last": 50}));
-    assert!(console.as_array().unwrap().iter().any(|r| r.to_string().contains("G1 X20 F6000")));
-    assert!(call(&s, "console.get", Value::Null).as_array().unwrap().len() >= console.as_array().unwrap().len());
+    assert!(
+        console
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r.to_string().contains("G1 X20 F6000"))
+    );
+    assert!(
+        call(&s, "console.get", Value::Null).as_array().unwrap().len() >= console.as_array().unwrap().len()
+    );
     call(&s, "machine.disconnect", Value::Null);
-    assert_eq!(call(&s, "state.get", Value::Null)["machine"]["status"], "Disconnected");
+    assert_eq!(
+        call(&s, "state.get", Value::Null)["machine"]["status"],
+        "Disconnected"
+    );
 }
 
 #[test]
 fn manual_commands_settings_and_jog() {
     let s = connected();
-    call(&s, "machine.write_settings", json!({"settings": {"22": "1", "20": "0"}}));
+    call(
+        &s,
+        "machine.write_settings",
+        json!({"settings": {"22": "1", "20": "0"}}),
+    );
     call(&s, "machine.unlock", Value::Null);
     call(&s, "machine.home", Value::Null);
     call(&s, "machine.send", json!({"line": "G0 X5 Y5"}));
-    call(&s, "machine.jog", json!({"direction": "NE", "step_mm": 2.5, "feed_mm_min": 800}));
-    let st = wait_state(&s, |st| st["machine"]["machine_position"]["x"].as_f64() == Some(7.5), 10);
+    call(
+        &s,
+        "machine.jog",
+        json!({"direction": "NE", "step_mm": 2.5, "feed_mm_min": 800}),
+    );
+    let st = wait_state(
+        &s,
+        |st| st["machine"]["machine_position"]["x"].as_f64() == Some(7.5),
+        10,
+    );
     assert_eq!(st["firmware_version"], "1.1f");
     call(&s, "machine.jog_to", json!({"x": 1.0, "y": 2.0}));
-    wait_state(&s, |st| st["machine"]["status"] == "Idle" && st["machine"]["machine_position"]["x"].as_f64() == Some(1.0), 10);
+    wait_state(
+        &s,
+        |st| {
+            st["machine"]["status"] == "Idle" && st["machine"]["machine_position"]["x"].as_f64() == Some(1.0)
+        },
+        10,
+    );
     call(&s, "machine.set_zero", Value::Null);
-    call(&s, "machine.overrides", json!({"feed": 120, "rapid": 50, "power": 90}));
+    call(
+        &s,
+        "machine.overrides",
+        json!({"feed": 120, "rapid": 50, "power": 90}),
+    );
     wait_state(&s, |st| st["machine"]["overrides"] == json!([120, 50, 90]), 10);
     call(&s, "machine.read_settings", Value::Null);
     call(&s, "machine.custom_code", json!({"code": "G0 X[left]"}));
     call(&s, "machine.jog_stop", Value::Null);
-    let e = s.dispatch(&user(), "machine.jog", json!({"direction": "UP"})).unwrap_err();
+    let e = s
+        .dispatch(&user(), "machine.jog", json!({"direction": "UP"}))
+        .unwrap_err();
     assert!(matches!(e, ActionError::InvalidParams(_)));
-    let e = s.dispatch(&user(), "machine.select_laser", json!({"id": "nope"})).unwrap_err();
+    let e = s
+        .dispatch(&user(), "machine.select_laser", json!({"id": "nope"}))
+        .unwrap_err();
     assert!(matches!(e, ActionError::InvalidParams(_)));
     // board errors come back as failures
-    let e = s.dispatch(&user(), "machine.write_settings", json!({"settings": {"999": "1"}})).unwrap_err();
+    let e = s
+        .dispatch(
+            &user(),
+            "machine.write_settings",
+            json!({"settings": {"999": "1"}}),
+        )
+        .unwrap_err();
     assert!(e.to_string().contains("$999=1"));
     assert!(call(&s, "machine.list_ports", Value::Null).is_array());
 }
@@ -131,7 +183,11 @@ fn hold_resume_stop_and_abort() {
     wait_state(&s, |st| st["machine"]["status"] == "Run", 10);
     call(&s, "job.abort", Value::Null);
     // the board still runs the lines it buffered: wait until it is idle
-    wait_state(&s, |st| st["machine"]["in_program"] == false && st["machine"]["status"] == "Idle", 30);
+    wait_state(
+        &s,
+        |st| st["machine"]["in_program"] == false && st["machine"]["status"] == "Idle",
+        30,
+    );
     call(&s, "job.run", Value::Null);
     wait_state(&s, |st| st["machine"]["in_program"] == true, 10);
     call(&s, "machine.stop", Value::Null);
@@ -145,16 +201,28 @@ fn hold_resume_stop_and_abort() {
 #[test]
 fn refusals_and_permissions() {
     let s = Service::in_memory().unwrap();
-    assert!(matches!(s.dispatch(&user(), "job.run", Value::Null), Err(ActionError::Refused(_))));
-    assert!(matches!(s.dispatch(&user(), "machine.connect", Value::Null), Err(ActionError::InvalidParams(_))));
+    assert!(matches!(
+        s.dispatch(&user(), "job.run", Value::Null),
+        Err(ActionError::Refused(_))
+    ));
+    assert!(matches!(
+        s.dispatch(&user(), "machine.connect", Value::Null),
+        Err(ActionError::InvalidParams(_))
+    ));
     assert!(matches!(
         s.dispatch(&user(), "machine.connect", json!({"port": "/nonexistent/fk"})),
         Err(ActionError::Failed(_))
     ));
     let agent = Caller::new(CallerKind::Agent, "bot", Tier::Edit);
-    assert!(matches!(s.dispatch(&agent, "job.run", Value::Null), Err(ActionError::PermissionDenied { .. })));
+    assert!(matches!(
+        s.dispatch(&agent, "job.run", Value::Null),
+        Err(ActionError::PermissionDenied { .. })
+    ));
     assert!(s.dispatch(&agent, "machine.stop", Value::Null).is_ok());
-    assert!(matches!(s.dispatch(&user(), "job.load", json!({"path": "/nonexistent.nc"})), Err(ActionError::Failed(_))));
+    assert!(matches!(
+        s.dispatch(&user(), "job.load", json!({"path": "/nonexistent.nc"})),
+        Err(ActionError::Failed(_))
+    ));
     assert!(s.dispatch(&user(), "nope.nope", Value::Null).is_err());
     assert_eq!(call(&s, "job.info", Value::Null), Value::Null);
 }
@@ -169,11 +237,24 @@ fn settings_are_saved_and_automation_is_user_only() {
     {
         let s = Service::new(stores()).unwrap();
         let events = s.subscribe();
-        call(&s, "settings.set", json!({"key": "machine.streaming_mode", "value": "Synchronous"}));
+        call(
+            &s,
+            "settings.set",
+            json!({"key": "machine.streaming_mode", "value": "Synchronous"}),
+        );
         assert!(events.recv_timeout(Duration::from_secs(1)).is_ok());
-        let e = s.dispatch(&user(), "settings.set", json!({"key": "automation.mcp.enabled", "value": true})).unwrap_err();
+        let e = s
+            .dispatch(
+                &user(),
+                "settings.set",
+                json!({"key": "automation.mcp.enabled", "value": true}),
+            )
+            .unwrap_err();
         assert!(e.to_string().contains("user"));
-        assert!(s.dispatch(&user(), "settings.get", json!({"key": "nope"})).is_err());
+        assert!(
+            s.dispatch(&user(), "settings.get", json!({"key": "nope"}))
+                .is_err()
+        );
         // connecting records the version and $$ in the cache
         call(&s, "machine.connect", json!({"emulator": true}));
         wait_state(&s, |st| st["machine"]["ready"] == true, 10);
@@ -183,7 +264,10 @@ fn settings_are_saved_and_automation_is_user_only() {
     let text = std::fs::read_to_string(dir.path().join("settings.toml")).unwrap();
     assert!(text.contains("streaming_mode = \"Synchronous\""));
     let s = Service::new(stores()).unwrap();
-    assert_eq!(call(&s, "settings.get", json!({"key": "machine.streaming_mode"})), "Synchronous");
+    assert_eq!(
+        call(&s, "settings.get", json!({"key": "machine.streaming_mode"})),
+        "Synchronous"
+    );
     assert_eq!(call(&s, "settings.get", Value::Null)["version"], 1);
     let end = Instant::now() + Duration::from_secs(5);
     while !dir.path().join("cache.json").exists() && Instant::now() < end {

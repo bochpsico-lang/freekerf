@@ -46,7 +46,10 @@ impl Drop for PtyEmulator {
 }
 
 fn err(e: nix::Error) -> TransportError {
-    TransportError::Open { target: "pty".into(), reason: e.to_string() }
+    TransportError::Open {
+        target: "pty".into(),
+        reason: e.to_string(),
+    }
 }
 
 /// Opens a PTY and runs an emulated device behind it. The banner is printed when
@@ -62,15 +65,28 @@ pub fn serve_emulator(config: DeviceConfig) -> Result<PtyEmulator, TransportErro
     let mut t = tcgetattr(&p.slave).map_err(err)?;
     cfmakeraw(&mut t);
     tcsetattr(&p.slave, SetArg::TCSANOW, &t).map_err(err)?;
-    let path = nix::unistd::ttyname(&p.slave).map_err(err)?.to_string_lossy().into_owned();
+    let path = nix::unistd::ttyname(&p.slave)
+        .map_err(err)?
+        .to_string_lossy()
+        .into_owned();
     let stop = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&stop);
-    let device = Device::new(DeviceConfig { send_welcome_on_open: false, ..config });
+    let device = Device::new(DeviceConfig {
+        send_welcome_on_open: false,
+        ..config
+    });
     let thread = thread::Builder::new()
         .name("freekerf-pty-emulator".into())
         .spawn(move || pump(device, &p.master, &p.slave, &flag))
-        .map_err(|e| TransportError::Open { target: "pty".into(), reason: e.to_string() })?;
-    Ok(PtyEmulator { path, stop, thread: Some(thread) })
+        .map_err(|e| TransportError::Open {
+            target: "pty".into(),
+            reason: e.to_string(),
+        })?;
+    Ok(PtyEmulator {
+        path,
+        stop,
+        thread: Some(thread),
+    })
 }
 
 fn pump(mut device: Device, master: &OwnedFd, _slave: &OwnedFd, stop: &AtomicBool) {
@@ -83,9 +99,14 @@ fn pump(mut device: Device, master: &OwnedFd, _slave: &OwnedFd, stop: &AtomicBoo
         if !out.is_empty() && write_all(master, &out).is_err() {
             return;
         }
-        let wait = device.next_deadline().map_or(20, |d| d.saturating_sub(now()).clamp(1, 20));
+        let wait = device
+            .next_deadline()
+            .map_or(20, |d| d.saturating_sub(now()).clamp(1, 20));
         let mut fds = [PollFd::new(master.as_fd(), PollFlags::POLLIN)];
-        let ready = poll(&mut fds, PollTimeout::try_from(Duration::from_millis(wait)).unwrap_or(PollTimeout::ZERO));
+        let ready = poll(
+            &mut fds,
+            PollTimeout::try_from(Duration::from_millis(wait)).unwrap_or(PollTimeout::ZERO),
+        );
         match ready {
             Ok(n) if n > 0 => match nix::unistd::read(master, &mut buf) {
                 Ok(0) | Err(_) => {

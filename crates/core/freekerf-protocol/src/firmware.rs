@@ -255,7 +255,12 @@ impl Firmware for Marlin {
             return LineHandled::No;
         }
         core.status_seen();
-        let value = |i: usize| line.split(' ').nth(i).and_then(|p| p.split(':').nth(1)).and_then(parse_f32);
+        let value = |i: usize| {
+            line.split(' ')
+                .nth(i)
+                .and_then(|p| p.split(':').nth(1))
+                .and_then(parse_f32)
+        };
         if let (Some(x), Some(y), Some(z)) = (value(0), value(1), value(2)) {
             core.set_machine_position(Point3::new(x, y, z));
         }
@@ -263,7 +268,11 @@ impl Firmware for Marlin {
     }
 
     fn parse_status_name(&self, name: &str) -> Option<MachineStatus> {
-        Some(if name.contains("ok") { MachineStatus::Idle } else { MachineStatus::Disconnected })
+        Some(if name.contains("ok") {
+            MachineStatus::Idle
+        } else {
+            MachineStatus::Disconnected
+        })
     }
 
     fn force_idle_at_end(&self) -> bool {
@@ -312,7 +321,9 @@ impl Firmware for Vigo {
         for part in line[1..line.len() - 1].split('|') {
             if let Some(v) = part.strip_prefix("VSta:") {
                 #[allow(clippy::cast_possible_truncation)]
-                let Some(state) = parse_f32(v).map(|f| f as i32) else { break };
+                let Some(state) = parse_f32(v).map(|f| f as i32) else {
+                    break;
+                };
                 if self.old_state == 2 && state == 0 {
                     self.in_job = false;
                 }
@@ -320,7 +331,9 @@ impl Firmware for Vigo {
             } else if let Some(v) = part.strip_prefix("SBuf:") {
                 #[allow(clippy::cast_possible_truncation)]
                 let n: Vec<Option<i32>> = v.split(',').map(|x| parse_f32(x).map(|f| f as i32)).collect();
-                let [Some(received), Some(managed), Some(errors), ..] = n.as_slice() else { break };
+                let [Some(received), Some(managed), Some(errors), ..] = n.as_slice() else {
+                    break;
+                };
                 if self.old_received > *received {
                     // the board restarted its counters
                     self.old_received = 0;
@@ -372,7 +385,12 @@ mod tests {
 
     #[test]
     fn kinds() {
-        for k in [FirmwareKind::Grbl, FirmwareKind::Smoothie, FirmwareKind::Marlin, FirmwareKind::VigoWork] {
+        for k in [
+            FirmwareKind::Grbl,
+            FirmwareKind::Smoothie,
+            FirmwareKind::Marlin,
+            FirmwareKind::VigoWork,
+        ] {
             assert_eq!(k.create().kind(), k);
             assert_eq!(FirmwareKind::parse(&format!("{k:?}")), Some(k));
         }
@@ -386,9 +404,18 @@ mod tests {
         assert!(!Grbl.supports_true_jogging(None));
         assert!(!Smoothie.supports_true_jogging(Some(&v11)));
         assert!(!Marlin.supports_true_jogging(Some(&v11)));
-        assert_eq!(Smoothie.streaming_mode(StreamingMode::Buffered), StreamingMode::Synchronous);
-        assert_eq!(Marlin.streaming_mode(StreamingMode::Buffered), StreamingMode::Synchronous);
-        assert_eq!(Grbl.streaming_mode(StreamingMode::Buffered), StreamingMode::Buffered);
+        assert_eq!(
+            Smoothie.streaming_mode(StreamingMode::Buffered),
+            StreamingMode::Synchronous
+        );
+        assert_eq!(
+            Marlin.streaming_mode(StreamingMode::Buffered),
+            StreamingMode::Synchronous
+        );
+        assert_eq!(
+            Grbl.streaming_mode(StreamingMode::Buffered),
+            StreamingMode::Buffered
+        );
         assert_eq!(Vigo::default().fixed_buffer_size(), Some(127));
         assert!(!Marlin.supports_config_queries() && Grbl.supports_config_queries());
         assert!(!Smoothie.shows_unlock() && !Marlin.shows_unlock() && Grbl.shows_unlock());

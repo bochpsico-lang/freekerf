@@ -19,7 +19,12 @@ pub struct EmulatorTransport {
 
 impl Default for EmulatorTransport {
     fn default() -> Self {
-        Self { config: DeviceConfig { timed: true, ..DeviceConfig::default() } }
+        Self {
+            config: DeviceConfig {
+                timed: true,
+                ..DeviceConfig::default()
+            },
+        }
     }
 }
 
@@ -62,7 +67,12 @@ impl LinkWriter for Writer {
 }
 
 /// Moves bytes between a device and channels until the host side goes away.
-pub(crate) fn run_device(mut device: Device, from_host: &Receiver<Vec<u8>>, to_host: &Sender<Vec<u8>>, alive: &AtomicBool) {
+pub(crate) fn run_device(
+    mut device: Device,
+    from_host: &Receiver<Vec<u8>>,
+    to_host: &Sender<Vec<u8>>,
+    alive: &AtomicBool,
+) {
     let start = Instant::now();
     let now = || u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
     device.connected();
@@ -74,7 +84,9 @@ pub(crate) fn run_device(mut device: Device, from_host: &Receiver<Vec<u8>>, to_h
         if !alive.load(Ordering::SeqCst) {
             return;
         }
-        let wait = device.next_deadline().map_or(20, |d| d.saturating_sub(now()).clamp(1, 20));
+        let wait = device
+            .next_deadline()
+            .map_or(20, |d| d.saturating_sub(now()).clamp(1, 20));
         match from_host.recv_timeout(Duration::from_millis(wait)) {
             Ok(data) => device.receive(&data, now()),
             Err(RecvTimeoutError::Timeout) => device.tick(now()),
@@ -93,9 +105,15 @@ impl Transport for EmulatorTransport {
         thread::Builder::new()
             .name("freekerf-emulator".into())
             .spawn(move || run_device(device, &dev_rx, &dev_tx, &flag))
-            .map_err(|e| TransportError::Open { target: "emulator".into(), reason: e.to_string() })?;
+            .map_err(|e| TransportError::Open {
+                target: "emulator".into(),
+                reason: e.to_string(),
+            })?;
         Ok(Link {
-            reader: Box::new(Reader { rx: host_rx, pending: Vec::new() }),
+            reader: Box::new(Reader {
+                rx: host_rx,
+                pending: Vec::new(),
+            }),
             writer: Box::new(Writer { tx: host_tx, alive }),
         })
     }
