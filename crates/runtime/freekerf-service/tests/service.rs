@@ -59,6 +59,7 @@ fn registry_invariants() {
         ("machine.send", Tier::Laser),
         ("machine.stop", Tier::Safety),
         ("machine.feed_hold", Tier::Safety),
+        ("machine.safety_door", Tier::Safety),
         ("job.abort", Tier::Safety),
         ("machine.jog", Tier::Machine),
         ("state.get", Tier::Read),
@@ -195,6 +196,21 @@ fn hold_resume_stop_and_abort() {
     assert!(st["issues"].as_array().unwrap().is_empty()); // user actions are not issues
     let st = wait_state(&s, |st| !st["resume"].is_null(), 10);
     assert!(st["resume"]["executed"].as_u64().unwrap() > 0);
+    s.stop();
+}
+
+#[test]
+fn safety_door_holds_until_resumed() {
+    let s = connected();
+    let moves: String = (0..60).map(|i| format!("G1 X{} F600\n", (i % 2) * 2)).collect();
+    call(&s, "job.load_text", json!({"name": "long.nc", "gcode": moves}));
+    call(&s, "job.run", Value::Null);
+    wait_state(&s, |st| st["machine"]["status"] == "Run", 10);
+    call(&s, "machine.safety_door", Value::Null);
+    wait_state(&s, |st| st["machine"]["status"] == "Door", 10);
+    call(&s, "machine.resume", Value::Null);
+    wait_state(&s, |st| st["machine"]["status"] == "Run", 10);
+    call(&s, "machine.stop", Value::Null);
     s.stop();
 }
 

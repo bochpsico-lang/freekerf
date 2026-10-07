@@ -12,6 +12,9 @@ Run a loaded program on the machine: start, pause, stop, passes, recovery.
   `passes > 1` the passes code and the program are queued again after each pass.
 - **Feed hold / resume** (`machine.feed_hold`, `machine.resume`): `!` / `~`. A hold
   the host did not request shows as `AutoHold`, a cooling hold as `Cooling`.
+- **Safety door** (`machine.safety_door`, tier `safety`): the real-time byte 0x84;
+  a Grbl 1.1 board holds as if its door opened (`Door`) and `machine.resume`
+  continues. LaserGRBL sends `@` instead (Grbl 0.9; DIV-020).
 - **Abort** (`job.abort`, tier `safety`): stops streaming, clears the queue, sends
   `M5`. Lines already in the board's buffer still run.
 - **STOP** (`machine.stop`, tier `safety`): soft reset. Flushes every queue, ends

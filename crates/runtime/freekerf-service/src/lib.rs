@@ -800,6 +800,12 @@ fn build_registry() -> Registry<Inner> {
         Tier::Safety,
         |s: &Inner, _: NoParams| s.host(Host::jog_abort),
     ));
+    add(r.register(
+        "machine.safety_door",
+        "Safety door (real-time 0x84): the board holds as if its door opened; resume with machine.resume. Always allowed.",
+        Tier::Safety,
+        |s: &Inner, _: NoParams| s.host(Host::safety_door),
+    ));
 
     // ---- machine: motion and settings
     add(r.register(
