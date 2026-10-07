@@ -45,6 +45,8 @@ pub enum UnsupportedReason {
     NotConverted,
     /// A `polyline`/`polygon` whose points have no commas.
     MissingComma,
+    /// A path command without all its arguments (a curve missing a coordinate).
+    MissingArgument,
 }
 
 /// What an object is.

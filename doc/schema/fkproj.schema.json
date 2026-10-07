@@ -864,6 +864,10 @@
           "type": "boolean",
           "default": false
         },
+        "from_current": {
+          "description": "Drawn from where the previous path ended, without a travel move (SVG path\ndata that does not begin with a moveto).",
+          "type": "boolean"
+        },
         "segments": {
           "description": "Segments, each from the end of the previous one.",
           "type": "array",
@@ -1151,6 +1155,11 @@
           "description": "A `polyline`/`polygon` whose points have no commas.",
           "type": "string",
           "const": "missing_comma"
+        },
+        {
+          "description": "A path command without all its arguments (a curve missing a coordinate).",
+          "type": "string",
+          "const": "missing_argument"
         }
       ]
     },

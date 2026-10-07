@@ -18,13 +18,18 @@ fn segment() -> impl Strategy<Value = Segment> {
 }
 
 fn path() -> impl Strategy<Value = Path> {
-    (point(), prop::collection::vec(segment(), 0..6), any::<bool>()).prop_map(|(start, segments, closed)| {
-        Path {
+    (
+        point(),
+        prop::collection::vec(segment(), 0..6),
+        any::<bool>(),
+        any::<bool>(),
+    )
+        .prop_map(|(start, segments, closed, from_current)| Path {
             start,
             segments,
             closed,
-        }
-    })
+            from_current,
+        })
 }
 
 fn mode() -> impl Strategy<Value = LayerMode> {

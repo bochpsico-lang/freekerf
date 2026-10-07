@@ -23,3 +23,5 @@ tests and divergences from LaserGRBL. The action catalogue is generated.
 | [projects.md](projects.md) | the document model and the `.fkproj` file | M2 |
 | [planner.md](planner.md) | document → G-code: layer order, fillings, the G-code writer | M2 |
 | [test-patterns.md](test-patterns.md) | cutting, power/speed and shake tests, Hershey text | M2 |
+| [svg-import.md](svg-import.md) | SVG files: colour layers, shapes, transforms, curves | M2 |
+| [dxf-import.md](dxf-import.md) | DXF files: lines, true arcs, splines, blocks, colours | M2 |

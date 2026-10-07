@@ -36,6 +36,9 @@ All notable changes to FreeKerf are documented here. The format follows
   order, hatch fillings, pen and feed handling), the cutting, power/speed and
   shake test generators and Hershey text; .NET-compatible number formatting in
   `freekerf-gcode`.
+- `freekerf-import`: SVG (colour layers, all path commands, shapes, transforms,
+  units) and ASCII DXF (lines, true arcs, splines fitted with arcs, blocks,
+  colours, units) import, identical to LaserGRBL except for documented fixes.
 - `freekerf import-case`: runs `conformance` importer golden cases.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.

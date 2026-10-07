@@ -30,6 +30,7 @@ flowchart TB
     geometry[freekerf-geometry<br/>paths, booleans, hatch fillings]
     document[freekerf-document<br/>layers, objects, .fkproj]
     planner[freekerf-planner<br/>document to G-code]
+    import[freekerf-import<br/>SVG, DXF to document]
   end
   cli --> service
   cli --> settings
@@ -49,11 +50,13 @@ flowchart TB
   planner --> document
   planner --> gcode
   service --> planner
+  service --> import
+  import --> document
 ```
 
 | Layer | Crates | Rule |
 | --- | --- | --- |
-| core | gcode, protocol, emulator, session, geometry, document, planner | no I/O, no threads of their own, no clock; builds for `wasm32-unknown-unknown` |
+| core | gcode, protocol, emulator, session, geometry, document, planner, import | no I/O, no threads of their own, no clock; builds for `wasm32-unknown-unknown` |
 | config | settings | core only; files through the `SettingsStore` trait |
 | native | transport, platform | core only |
 | runtime | machine, service | core, config, native |
@@ -110,6 +113,7 @@ sequenceDiagram
 | add a setting | a field in `freekerf-settings` (with default), `host_options` if it reaches the protocol, a migration if a key moved, `cargo xtask gen-docs` |
 | change what the analysis computes | `freekerf-gcode` (`MachineState`, `Program::analyze`), check the conformance goldens |
 | add a front end | depend on `freekerf-service` only; dispatch actions, subscribe to events |
+| import a new file format | a module in `freekerf-import` returning an `Import` (colours + objects) from bytes; a feature page |
 
 ## Key decisions
 
