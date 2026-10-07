@@ -189,7 +189,17 @@ fn hold_resume_stop_and_abort() {
         30,
     );
     call(&s, "job.run", Value::Null);
-    wait_state(&s, |st| st["machine"]["in_program"] == true, 10);
+    // STOP counts as an interruption (ManualReset, resume offer) only once the
+    // board reported Run and executed a line, as in LaserGRBL
+    wait_state(
+        &s,
+        |st| {
+            st["machine"]["in_program"] == true
+                && st["machine"]["status"] == "Run"
+                && st["machine"]["job_executed"].as_u64() > Some(0)
+        },
+        10,
+    );
     call(&s, "machine.stop", Value::Null);
     let st = wait_state(&s, |st| st["machine"]["in_program"] == false, 10);
     assert!(st["issues"].as_array().unwrap().is_empty()); // user actions are not issues
