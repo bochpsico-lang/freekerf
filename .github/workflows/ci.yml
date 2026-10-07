@@ -117,11 +117,5 @@ jobs:
         env:
           FREEKERF_BIN: ${{ github.workspace }}/target/debug/freekerf
         run: |
-          if ! grep -q '^test-rust:' Makefile; then
-            # until freekerf/conformance merges the Rust host (branch claude/rust-host)
-            echo "::warning::conformance main has no test-rust target yet: using branch claude/rust-host"
-            git fetch --depth 1 origin claude/rust-host
-            git checkout FETCH_HEAD
-          fi
           uv sync
           make test-rust

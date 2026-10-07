@@ -404,7 +404,7 @@ Updated by every PR that delivers a milestone item.
 | M1: settings | `crates/config/freekerf-settings`, `doc/schema/settings.schema.json` | unit tests, `tests/it/settings_files.rs` | `doc/features/settings.md`, ADR 0005 |
 | M1: action registry and service | `crates/core/freekerf-session`, `crates/runtime/freekerf-service` | unit tests, `freekerf-service/tests/*` | `doc/features/actions.md` (generated), ADR 0004 |
 | M1: CLI (`analyze --json`, `send`, `console`, `emulate --pty`, `host --stdio`) | `apps/cli` | `apps/cli/tests/cli.rs` | `doc/features/{cli,host-protocol}.md` |
-| M1: conformance `RustHost`, Rust analyzer, `rust_divergence`, `make test-rust` | `freekerf/conformance` (branch `claude/rust-host`) | `make test-rust`: 32 passed, 3 runs in a row; CI job `conformance` | `doc/features/host-protocol.md`, conformance `README.md` |
+| M1: conformance `RustHost`, Rust analyzer, `rust_divergence`, `make test-rust` | `freekerf/conformance` (`lasergrbl_harness/host.py`, `golden.py`, `Makefile`; freekerf/conformance#2) | `make test-rust`: 32 passed, 3 runs in a row; CI job `conformance` | `doc/features/host-protocol.md`, conformance `README.md` |
 | M1: large files | `freekerf-gcode` (`rayon`, feature `parallel`) | `benches/analysis.rs` | `doc/benchmarks.md` |
 | M1: divergences | — | conformance (no marker needed so far) | `doc/divergences.md` |
 
