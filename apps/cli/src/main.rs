@@ -385,10 +385,15 @@ fn cmd_console(home: Option<&std::path::Path>, target: &Target) -> Result<ExitCo
     let service = open_service(home)?;
     install_stop_on_ctrl_c(&service);
     let events = service.subscribe();
+    let (printed_tx, printed_rx) = crossbeam_channel::bounded::<()>(1);
     std::thread::spawn(move || {
         for e in events {
             if let Some(line) = e.console_line() {
                 let _ = writeln!(std::io::stdout().lock(), "{line}");
+            }
+            // events arrive in order: once the disconnection is printed, so is everything before it
+            if e.to_json()["event"] == "disconnected" {
+                let _ = printed_tx.try_send(());
             }
         }
     });
@@ -442,6 +447,8 @@ fn cmd_console(home: Option<&std::path::Path>, target: &Target) -> Result<ExitCo
         }
     }
     let _ = service.dispatch(&user, "machine.disconnect", Value::Null);
+    // let the printer thread show the last rows before the process exits
+    let _ = printed_rx.recv_timeout(Duration::from_secs(5));
     Ok(ExitCode::SUCCESS)
 }
 
