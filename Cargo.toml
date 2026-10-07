@@ -37,6 +37,7 @@ freekerf-protocol = { path = "crates/core/freekerf-protocol" }
 freekerf-emulator = { path = "crates/core/freekerf-emulator" }
 freekerf-session = { path = "crates/core/freekerf-session" }
 freekerf-geometry = { path = "crates/core/freekerf-geometry" }
+freekerf-document = { path = "crates/core/freekerf-document" }
 freekerf-settings = { path = "crates/config/freekerf-settings" }
 freekerf-transport = { path = "crates/native/freekerf-transport" }
 freekerf-platform = { path = "crates/native/freekerf-platform" }
@@ -46,6 +47,7 @@ freekerf-testkit = { path = "crates/testing/freekerf-testkit" }
 
 # third party
 anyhow = "1"
+base64 = "0.22"
 assert_cmd = "2"
 clap = { version = "4", features = ["derive"] }
 criterion = { version = "0.5", default-features = false }

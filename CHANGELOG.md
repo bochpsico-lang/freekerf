@@ -30,6 +30,8 @@ All notable changes to FreeKerf are documented here. The format follows
   affine transforms, LaserGRBL's Bézier flattening and arc fitting, path ordering,
   polygon booleans and offsets (a port of Clipper 6.4.2) and the hatch filling
   patterns, identical to LaserGRBL's.
+- `freekerf-document`: the project model (objects on colour layers with cut and
+  raster settings) and the versioned `.fkproj` file with a generated JSON schema.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.
 - Action `machine.safety_door` (tier `safety`): the Grbl 1.1 door command (0x84).

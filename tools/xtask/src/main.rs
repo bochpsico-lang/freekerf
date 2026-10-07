@@ -77,6 +77,10 @@ fn generated() -> Result<Vec<(PathBuf, String)>> {
             root().join("doc/schema/settings.schema.json"),
             freekerf_settings::json_schema(),
         ),
+        (
+            root().join("doc/schema/fkproj.schema.json"),
+            freekerf_document::json_schema(),
+        ),
     ])
 }
 

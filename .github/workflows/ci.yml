@@ -71,7 +71,7 @@ jobs:
           toolchain: ${{ env.TOOLCHAIN }}
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session -p freekerf-geometry
+      - run: cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session -p freekerf-geometry -p freekerf-document
 
   cross-check:
     runs-on: ubuntu-latest
