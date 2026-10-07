@@ -14,10 +14,22 @@ use freekerf_geometry::hatch::FillPattern;
 use freekerf_import::{Import, dxf, svg};
 use freekerf_planner::generators::{self, CuttingTest, GreyscaleTest, ShakeTest};
 use freekerf_planner::{Firmware, Job, MachineOptions, PlanOptions, VectorStyle, hershey};
+use freekerf_raster::dither::DitherMode;
+use freekerf_raster::image::{Argb, Image, argb};
+use freekerf_raster::l2l::{Direction, L2lConf, L2lOptions, load_image_l2l};
+use freekerf_raster::ops::{self, Formula, Interpolation};
 use serde_json::{Value, json};
 
 /// Case kinds this build runs.
-pub const SUPPORTED_KINDS: &[&str] = &["generator", "hershey", "svg", "dxf", "svg_text"];
+pub const SUPPORTED_KINDS: &[&str] = &[
+    "generator",
+    "hershey",
+    "svg",
+    "dxf",
+    "svg_text",
+    "raster",
+    "image_op",
+];
 
 /// Error of a case: malformed, unsupported or failing to read its input.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -289,6 +301,217 @@ fn planned(
     .map_err(|e| CaseError::Invalid(e.to_string()))
 }
 
+/// A pixel token of the harness: 2 (grey), 6 (RGB) or 8 (ARGB) hex digits.
+fn pixel_token(tok: &str) -> Result<Argb, CaseError> {
+    let v =
+        u32::from_str_radix(tok, 16).map_err(|_| CaseError::Invalid(format!("bad pixel token `{tok}`")))?;
+    #[allow(clippy::cast_possible_truncation)]
+    Ok(match tok.len() {
+        2 => argb(255, v as u8, v as u8, v as u8),
+        6 => 0xFF00_0000 | v,
+        8 => v,
+        _ => return Err(CaseError::Invalid(format!("bad pixel token `{tok}`"))),
+    })
+}
+
+/// `parse_pixels` of the harness: `{"pixels": ["RRGGBB ...", ...]}` or
+/// `{"ascii": ["..##..", ...]}` (`#` black, `.` white).
+fn case_image(v: &Value) -> Result<Image, CaseError> {
+    let rows: Vec<Vec<Argb>> = if let Some(ascii) = v.get("ascii").and_then(Value::as_array) {
+        ascii
+            .iter()
+            .map(|r| {
+                r.as_str()
+                    .unwrap_or("")
+                    .chars()
+                    .map(|c| {
+                        if c == '#' {
+                            Ok(0xFF00_0000)
+                        } else {
+                            Ok(0xFFFF_FFFF)
+                        }
+                    })
+                    .collect()
+            })
+            .collect::<Result<_, CaseError>>()?
+    } else {
+        v.get("pixels")
+            .and_then(Value::as_array)
+            .ok_or_else(|| CaseError::Invalid("image without pixels".into()))?
+            .iter()
+            .map(|r| {
+                r.as_str()
+                    .unwrap_or("")
+                    .split_whitespace()
+                    .map(pixel_token)
+                    .collect()
+            })
+            .collect::<Result<_, CaseError>>()?
+    };
+    let width = rows.first().map_or(0, Vec::len);
+    if rows.iter().any(|r| r.len() != width) {
+        return Err(CaseError::Invalid("rows of different length".into()));
+    }
+    let height = rows.len();
+    Image::from_pixels(
+        u32::try_from(width).unwrap_or(0),
+        u32::try_from(height).unwrap_or(0),
+        rows.concat(),
+    )
+    .map_err(|e| CaseError::Invalid(e.to_string()))
+}
+
+/// `dump_bitmap` of the harness: rows of `AARRGGBB` tokens.
+fn dump_image(img: &Image) -> Value {
+    let w = img.width() as usize;
+    Value::Array(
+        img.pixels()
+            .chunks(w.max(1))
+            .map(|row| {
+                Value::from(
+                    row.iter()
+                        .map(|p| format!("{p:08X}"))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                )
+            })
+            .collect(),
+    )
+}
+
+/// `GrblFile.L2LConf` of a case: `L2L_DEFAULTS` of the harness, then the case's `conf`.
+#[allow(clippy::cast_possible_truncation)]
+fn l2l_conf(case: &Value) -> Result<L2lConf, CaseError> {
+    let mut c = L2lConf::default();
+    let Some(conf) = case.get("conf").and_then(Value::as_object) else {
+        return Ok(c);
+    };
+    let bad = |k: &str| CaseError::Invalid(format!("conf `{k}`"));
+    for (k, v) in conf {
+        let f = || v.as_f64().ok_or_else(|| bad(k));
+        let i = || {
+            v.as_i64()
+                .and_then(|n| i32::try_from(n).ok())
+                .ok_or_else(|| bad(k))
+        };
+        match k.as_str() {
+            "res" => c.res = f()?,
+            "fres" => c.fres = f()?,
+            "oX" => c.offset_x = f()? as f32,
+            "oY" => c.offset_y = f()? as f32,
+            "markSpeed" => c.mark_speed = i()?,
+            "borderSpeed" => c.border_speed = i()?,
+            "minPower" => c.min_power = i()?,
+            "maxPower" => c.max_power = i()?,
+            "lOn" => c.laser_on = v.as_str().ok_or_else(|| bad(k))?.to_owned(),
+            "lOff" => c.laser_off = v.as_str().ok_or_else(|| bad(k))?.to_owned(),
+            "pwm" => c.pwm = v.as_bool().ok_or_else(|| bad(k))?,
+            "vectorfilling" => c.vector_filling = v.as_bool().ok_or_else(|| bad(k))?,
+            "firmwareType" => c.smoothie = v.as_str() == Some("Smoothie"),
+            "dir" => {
+                c.direction = match v.as_str() {
+                    Some("Horizontal") => Direction::Horizontal,
+                    Some("Vertical") => Direction::Vertical,
+                    Some("Diagonal") => Direction::Diagonal,
+                    _ => return Err(bad(k)),
+                }
+            }
+            _ => return Err(CaseError::Invalid(format!("unknown conf `{k}`"))),
+        }
+    }
+    Ok(c)
+}
+
+fn image_op(case: &Value) -> Result<Image, CaseError> {
+    let img = case_image(field(case, "image")?)?;
+    let args = case.get("args").cloned().unwrap_or_else(|| json!({}));
+    #[allow(clippy::cast_possible_truncation)]
+    let f32_arg = |k: &str, d: f64| args.get(k).and_then(Value::as_f64).unwrap_or(d) as f32;
+    let i32_arg = |k: &str| int(&args, k);
+    let bool_arg = |k: &str, d: bool| args.get(k).and_then(Value::as_bool).unwrap_or(d);
+    let at = |k: &str| -> Result<(u32, u32), CaseError> {
+        let a = args
+            .get(k)
+            .and_then(Value::as_array)
+            .ok_or_else(|| CaseError::Invalid(format!("`{k}`")))?;
+        let n = |i: usize| {
+            a.get(i)
+                .and_then(Value::as_u64)
+                .and_then(|v| u32::try_from(v).ok())
+                .unwrap_or(0)
+        };
+        Ok((n(0), n(1)))
+    };
+    Ok(match field(case, "op")?.as_str().unwrap_or_default() {
+        "grayscale" => {
+            let formula = match args
+                .get("formula")
+                .and_then(Value::as_str)
+                .unwrap_or("SimpleAverage")
+            {
+                "SimpleAverage" => Formula::SimpleAverage,
+                "WeightAverage" => Formula::WeightAverage,
+                "OpticalCorrect" => Formula::OpticalCorrect,
+                "Custom" => Formula::Custom,
+                other => return Err(CaseError::Invalid(format!("formula `{other}`"))),
+            };
+            ops::grayscale(
+                &img,
+                f32_arg("r", 1.0),
+                f32_arg("g", 1.0),
+                f32_arg("b", 1.0),
+                f32_arg("brightness", 0.0),
+                f32_arg("contrast", 1.0),
+                formula,
+            )
+        }
+        "threshold" => ops::threshold(&img, f32_arg("threshold", 0.0), bool_arg("apply", true)),
+        "invert" => ops::invert(&img),
+        "dither" => {
+            let mode = match args.get("mode").and_then(Value::as_str).unwrap_or("") {
+                "Atkinson" => DitherMode::Atkinson,
+                "FloydSteinberg" => DitherMode::FloydSteinberg,
+                "Burks" => DitherMode::Burks,
+                "Jarvis" => DitherMode::Jarvis,
+                "Random" => DitherMode::Random,
+                "Sierra2" => DitherMode::Sierra2,
+                "Sierra3" => DitherMode::Sierra3,
+                "SierraLight" => DitherMode::SierraLight,
+                "Stucki" => DitherMode::Stucki,
+                other => return Err(CaseError::Invalid(format!("dither `{other}`"))),
+            };
+            freekerf_raster::dither::dither(&img, mode, 0)
+        }
+        "whitenize" => ops::whitenize(&img, i32_arg("threshold")?, bool_arg("demo", false)),
+        "resize" => {
+            let filter = match args
+                .get("interpolation")
+                .and_then(Value::as_str)
+                .unwrap_or("NearestNeighbor")
+            {
+                "NearestNeighbor" => Interpolation::NearestNeighbor,
+                "Bilinear" | "HighQualityBilinear" | "Low" => Interpolation::Bilinear,
+                _ => Interpolation::Bicubic,
+            };
+            let dim =
+                |k: &str| i32_arg(k).and_then(|v| u32::try_from(v).map_err(|_| CaseError::Invalid(k.into())));
+            ops::resize(
+                &img,
+                dim("width")?,
+                dim("height")?,
+                bool_arg("killalfa", true),
+                filter,
+            )
+        }
+        "fill" => {
+            let color = pixel_token(args.get("color").and_then(Value::as_str).unwrap_or(""))?;
+            ops::fill(&img, at("at")?, color, i32_arg("tolerance")?).0
+        }
+        "outline" => ops::outline(&img, at("at")?),
+        other => return Err(CaseError::Invalid(format!("unknown image op `{other}`"))),
+    })
+}
+
 /// Runs a case. `read` gives the bytes of an input file.
 ///
 /// # Errors
@@ -417,6 +640,20 @@ pub fn run(case: &Value, read: &Reader<'_>) -> Result<Value, CaseError> {
             lines.push(String::new());
             Ok(json!({ "converter_output": lines }))
         }
+        "raster" => {
+            let img = case_image(field(case, "image")?)?;
+            let conf = l2l_conf(case)?;
+            let opts = L2lOptions {
+                disable_g0: settings.machine.disable_g0,
+                unidirectional: settings.machine.unidirectional,
+                max_pwm: settings.machine.max_pwm,
+            };
+            Ok(file_result(&program_of(
+                &load_image_l2l(&img, &conf, &opts),
+                &settings,
+            )))
+        }
+        "image_op" => Ok(json!({ "pixels": dump_image(&image_op(case)?) })),
         other => Err(CaseError::Unsupported(other.to_owned())),
     }
 }
@@ -427,6 +664,127 @@ mod tests {
 
     fn no_files(name: &str) -> Result<Vec<u8>, String> {
         Err(format!("no file {name}"))
+    }
+
+    #[test]
+    fn image_cases() {
+        let img = json!({"pixels": ["00 FF0000", "80FFFFFF 7F"]});
+        let px = |v: &Value| {
+            v["pixels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|r| r.as_str().unwrap().to_owned())
+                .collect::<Vec<_>>()
+        };
+        let op = |op: &str, args: Value| {
+            run(
+                &json!({"kind": "image_op", "op": op, "image": img, "args": args}),
+                &no_files,
+            )
+        };
+        assert_eq!(
+            px(&op("invert", json!({})).unwrap()),
+            ["FFFFFFFF FF00FFFF", "80000000 FF808080"]
+        );
+        for (name, args) in [
+            ("grayscale", json!({"formula": "SimpleAverage"})),
+            (
+                "grayscale",
+                json!({"formula": "WeightAverage", "brightness": 0.1, "contrast": 1.2}),
+            ),
+            ("grayscale", json!({"formula": "OpticalCorrect"})),
+            (
+                "grayscale",
+                json!({"formula": "Custom", "r": 0.5, "g": 0.5, "b": 0.5}),
+            ),
+            ("threshold", json!({"threshold": 0.5, "apply": false})),
+            ("whitenize", json!({"threshold": 100, "demo": true})),
+            (
+                "resize",
+                json!({"width": 3, "height": 1, "interpolation": "Bilinear", "killalfa": false}),
+            ),
+            (
+                "resize",
+                json!({"width": 3, "height": 1, "interpolation": "HighQualityBicubic"}),
+            ),
+            ("fill", json!({"at": [0, 0], "color": "00FF00", "tolerance": 5})),
+            ("outline", json!({"at": [1, 1]})),
+        ] {
+            assert_eq!(
+                px(&op(name, args).unwrap()).len(),
+                if name == "resize" { 1 } else { 2 },
+                "{name}"
+            );
+        }
+        for mode in [
+            "Atkinson",
+            "FloydSteinberg",
+            "Burks",
+            "Jarvis",
+            "Random",
+            "Sierra2",
+            "Sierra3",
+            "SierraLight",
+            "Stucki",
+        ] {
+            assert!(op("dither", json!({"mode": mode})).is_ok(), "{mode}");
+        }
+        for (name, args) in [
+            ("dither", json!({"mode": "Nope"})),
+            ("grayscale", json!({"formula": "Nope"})),
+            ("whitenize", json!({})),
+            ("fill", json!({"at": [0, 0], "color": "12345", "tolerance": 1})),
+            ("outline", json!({})),
+            ("resize", json!({"width": -1, "height": 1})),
+            ("blur", json!({})),
+        ] {
+            assert!(op(name, args).is_err(), "{name}");
+        }
+        let ascii = run(
+            &json!({"kind": "image_op", "op": "invert", "image": {"ascii": ["#."]}}),
+            &no_files,
+        )
+        .unwrap();
+        assert_eq!(px(&ascii), ["FFFFFFFF FF000000"]);
+        for bad in [
+            json!({}),
+            json!({"pixels": ["00 00", "00"]}),
+            json!({"pixels": ["GG"]}),
+        ] {
+            assert!(
+                run(
+                    &json!({"kind": "image_op", "op": "invert", "image": bad}),
+                    &no_files
+                )
+                .is_err()
+            );
+        }
+
+        let raster = |conf: Value| {
+            run(
+                &json!({"kind": "raster", "image": {"ascii": ["#.#", ".#."]}, "conf": conf}),
+                &no_files,
+            )
+        };
+        let r = raster(
+            json!({"res": 5, "fres": 5, "oX": 1, "oY": 2, "markSpeed": 800, "borderSpeed": 900,
+            "minPower": 10, "maxPower": 500, "lOn": "M4", "lOff": "M5", "pwm": false, "vectorfilling": true,
+            "firmwareType": "Smoothie", "dir": "Vertical"}),
+        )
+        .unwrap();
+        assert!(r["gcode"].as_array().is_some_and(|g| !g.is_empty()));
+        assert!(raster(json!({"dir": "Diagonal"})).is_ok());
+        for bad in [
+            json!({"dir": "Up"}),
+            json!({"res": "x"}),
+            json!({"markSpeed": 1.5}),
+            json!({"lOn": 3}),
+            json!({"pwm": 1}),
+            json!({"zoom": 1}),
+        ] {
+            assert!(raster(bad).is_err());
+        }
     }
 
     #[test]
