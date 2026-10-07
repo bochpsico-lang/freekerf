@@ -25,7 +25,7 @@ fixed entries are outside what those layers observe.
 | DIV-016 | A successful `$N=V` updates a throw-away configuration when none was read yet | The settings table is always updated | fixed | `protocol.rs::write_settings_sends_one_dollar_line_per_setting` |
 | DIV-017 | Comment-only lines are kept as empty commands and streamed as empty lines | Same | kept (goldens `stream`) | golden `comments_spacing`, `host_behaviour.rs::comment_lines_are_streamed_as_empty_lines_and_header_footer_wrap_the_job` |
 | DIV-019 | Resume queues an empty command when no modal group is settled | The empty command is not queued | fixed | `host_behaviour.rs::resume_adds_the_motion_mode_homing_and_work_offset` |
-| DIV-020 | Safety door sends `@` (Grbl 0.9) | Sends 0x84 (Grbl 1.1) | fixed | `host_behaviour.rs::state_rules_of_immediate_commands` |
+| DIV-020 | Safety door sends `@` (Grbl 0.9) | Sends 0x84 (Grbl 1.1) | fixed | `host_behaviour.rs::state_rules_of_immediate_commands`, `service.rs::hold_resume_stop_and_abort`, conformance `test_responses.py::test_safety_door_sends_the_legacy_at_sign` |
 | DIV-021 | Jog feed formatted with the current culture (`F1234,5`) | Always invariant | fixed | `jog.rs` unit tests |
 | DIV-022 | Jog step rounded to one decimal (0.25 → 0.3, 0.04 → 0.0) | One to three decimals (0.25, 0.04, 10.0) | fixed | `jog.rs::steps_and_speeds`, `host_behaviour.rs::jog_variants_v11` |
 | DIV-024 | `WriteConfig`/`RefreshConfig` silently do nothing unless Idle/Alarm | The action fails with "settings can be written only in Idle or Alarm" | fixed | `host_behaviour.rs::manual_commands_are_refused_during_a_job` |

@@ -25,6 +25,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `machine.overrides` | machine | Sets the override targets; the host steps the board towards them. |
 | `machine.read_settings` | machine | Reads the board settings again (`$$`). |
 | `machine.resume` | machine | Resumes after a feed hold or a door (cycle start). |
+| `machine.safety_door` | safety | Safety door (real-time 0x84): the board holds as if its door opened; resume with machine.resume. Always allowed. |
 | `machine.select_laser` | edit | Selects the laser module in use (life counters). |
 | `machine.send` | laser | Sends one line of G-code or a `$` command (not during a job). It can turn the laser on. |
 | `machine.set_zero` | machine | Sets the current position as work zero (`G92 X0 Y0 Z0`). |
@@ -180,6 +181,12 @@ No parameters.
 ### `machine.resume`
 
 Resumes after a feed hold or a door (cycle start).
+
+No parameters.
+
+### `machine.safety_door`
+
+Safety door (real-time 0x84): the board holds as if its door opened; resume with machine.resume. Always allowed.
 
 No parameters.
 

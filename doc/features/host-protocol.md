@@ -46,6 +46,7 @@ from the defaults. Closing stdin disconnects the machine and exits.
 | `load_gcode(path)` / `run_job()` / `abort_job()` | `job.load` / `job.run` / `job.abort` |
 | `send_command(line)` | `machine.send` |
 | `feed_hold()` / `resume()` / `soft_reset()` | `machine.feed_hold` / `machine.resume` / `machine.stop` |
+| `safety_door()` | `machine.safety_door` |
 | `unlock()` / `home()` / `jog(...)` | `machine.unlock` / `machine.home` / `machine.jog` |
 | `set_override_targets(...)` | `machine.overrides` |
 | `write_settings(dict)` | `machine.write_settings` |

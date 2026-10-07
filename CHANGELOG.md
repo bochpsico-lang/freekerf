@@ -28,6 +28,7 @@ All notable changes to FreeKerf are documented here. The format follows
 - `freekerf-machine`: the I/O-thread driver with a priority STOP channel.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.
+- Action `machine.safety_door` (tier `safety`): the Grbl 1.1 door command (0x84).
 - Documentation: `AGENTS.md`, architecture, ADRs 0001-0005, feature pages,
   divergences from LaserGRBL, coverage, benchmarks, roadmap.
 
