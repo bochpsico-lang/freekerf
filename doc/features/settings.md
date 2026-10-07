@@ -29,6 +29,7 @@ query_machine_info = true
 status_query_ms = 500
 support_pwm = true
 continuous_jog = false
+accept_broken_ok = true      # a garbled line containing "ok" counts as ok (DIV-051)
 
 [machine.auto_cooling]
 enabled = false

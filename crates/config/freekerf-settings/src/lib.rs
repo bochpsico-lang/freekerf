@@ -141,6 +141,8 @@ pub struct MachineSettings {
     pub support_pwm: bool,
     /// Continuous jog (jog while pressed).
     pub continuous_jog: bool,
+    /// Count a garbled line that contains `ok` as an `ok` (tolerates a noisy link).
+    pub accept_broken_ok: bool,
     /// Automatic cooling cycles.
     pub auto_cooling: AutoCoolingSettings,
 }
@@ -157,6 +159,7 @@ impl Default for MachineSettings {
             status_query_ms: 500,
             support_pwm: true,
             continuous_jog: false,
+            accept_broken_ok: true,
             auto_cooling: AutoCoolingSettings::default(),
         }
     }
@@ -349,6 +352,7 @@ impl Settings {
             }),
             jog_step_mm: self.jog.step_mm,
             jog_speed_mm_min: self.jog.speed_mm_min,
+            accept_broken_ok: m.accept_broken_ok,
             last_known_version: None,
             last_known_settings: None,
         }
@@ -551,8 +555,11 @@ mod tests {
         s.machine.firmware = Firmware::Marlin;
         s.jog.step_mm = 2.5;
         s.jog.speed_mm_min = 1200.0;
+        assert!(s.host_options().accept_broken_ok);
+        s.machine.accept_broken_ok = false;
         let o = s.host_options();
         assert_eq!((o.jog_step_mm, o.jog_speed_mm_min), (2.5, 1200.0));
+        assert!(!o.accept_broken_ok);
         assert_eq!(
             o.auto_cooling,
             Some(AutoCooling {

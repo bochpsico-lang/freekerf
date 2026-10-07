@@ -28,6 +28,8 @@ All notable changes to FreeKerf are documented here. The format follows
 - `freekerf-machine`: the I/O-thread driver with a priority STOP channel.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.
+- Setting `machine.accept_broken_ok` (default on): a garbled line containing `ok`
+  counts as an `ok`, as in LaserGRBL; off, only lines starting with `ok`/`error` do.
 - Action `machine.safety_door` (tier `safety`): the Grbl 1.1 door command (0x84).
 - Documentation: `AGENTS.md`, architecture, ADRs 0001-0005, feature pages,
   divergences from LaserGRBL, coverage, benchmarks, roadmap.
@@ -36,3 +38,5 @@ All notable changes to FreeKerf are documented here. The format follows
 
 - Custom code: `[jogstep]` and `[jogspeed]` are evaluated (the jog settings), as in
   LaserGRBL; they were left unevaluated.
+- A startup block report (`>G54G20:ok`) or a well-formed `[...]` message containing
+  "ok" no longer acknowledges a pending line (DIV-051).
