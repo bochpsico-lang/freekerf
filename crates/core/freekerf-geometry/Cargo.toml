@@ -1,0 +1,22 @@
+[package]
+name = "freekerf-geometry"
+description = "Paths, curves, flattening, transforms, booleans, offsets and hatch fillings (Clipper 6.4.2 port)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+schemars.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

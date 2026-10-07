@@ -27,6 +27,7 @@ flowchart TB
     protocol[freekerf-protocol<br/>sans-IO host + firmware variants]
     gcode[freekerf-gcode<br/>parser, state, analysis]
     emulator[freekerf-emulator<br/>sans-IO Grbl 1.1 device]
+    geometry[freekerf-geometry<br/>paths, booleans, hatch fillings]
   end
   cli --> service
   cli --> settings
@@ -46,7 +47,7 @@ flowchart TB
 
 | Layer | Crates | Rule |
 | --- | --- | --- |
-| core | gcode, protocol, emulator, session | no I/O, no threads of their own, no clock; builds for `wasm32-unknown-unknown` |
+| core | gcode, protocol, emulator, session, geometry | no I/O, no threads of their own, no clock; builds for `wasm32-unknown-unknown` |
 | config | settings | core only; files through the `SettingsStore` trait |
 | native | transport, platform | core only |
 | runtime | machine, service | core, config, native |
@@ -111,6 +112,7 @@ sequenceDiagram
 - Injected clock, sans-IO protocol: [ADR 0003](adr/0003-injectable-clock.md).
 - One action registry with tiers: [ADR 0004](adr/0004-action-registry.md).
 - Settings in TOML with a generated schema: [ADR 0005](adr/0005-settings-toml.md).
+- Polygon clipping is a port of Clipper 6.4.2, for LaserGRBL-identical fillings: [ADR 0007](adr/0007-clipping-library.md).
 
 ## Generated files
 
