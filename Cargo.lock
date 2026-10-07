@@ -504,6 +504,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "freekerf-geometry"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "freekerf-it"
 version = "0.1.0"
 dependencies = [

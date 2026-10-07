@@ -18,6 +18,7 @@ its protocol and golden (G-code) layers (`make test-rust` there).
 ```
 crates/core/       pure logic, no I/O, builds for wasm32
   freekerf-gcode       commands, modal state, arcs, analysis, time estimate
+  freekerf-geometry    paths, curves, transforms, Clipper 6.4.2 port, hatch fillings
   freekerf-protocol    sans-IO host state machine (port of GrblCore) + firmware variants
   freekerf-emulator    sans-IO Grbl 1.1 device (simulator, tests)
   freekerf-session     action registry: names, JSON schemas, permission tiers
@@ -48,7 +49,7 @@ cargo xtask gen-docs                         # regenerate doc/features/actions.m
 cargo xtask check-docs                       # CI: generated docs are committed
 cargo llvm-cov --workspace --exclude xtask --exclude freekerf-testkit --summary-only
 cargo bench -p freekerf-gcode                # 1M-line analysis (doc/benchmarks.md)
-cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session
+cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session -p freekerf-geometry
 cargo deny check
 
 cargo run -p freekerf-cli -- analyze file.nc --json

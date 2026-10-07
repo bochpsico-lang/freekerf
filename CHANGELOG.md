@@ -26,6 +26,10 @@ All notable changes to FreeKerf are documented here. The format follows
 - `freekerf-session` and `freekerf-service`: the action registry with permission
   tiers; every front end dispatches actions.
 - `freekerf-machine`: the I/O-thread driver with a priority STOP channel.
+- `freekerf-geometry`: paths of lines, arcs and Bézier curves, Mono-compatible
+  affine transforms, LaserGRBL's Bézier flattening and arc fitting, path ordering,
+  polygon booleans and offsets (a port of Clipper 6.4.2) and the hatch filling
+  patterns, identical to LaserGRBL's.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.
 - Setting `machine.accept_broken_ok` (default on): a garbled line containing `ok`
