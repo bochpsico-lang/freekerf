@@ -958,3 +958,17 @@ fn streaming_mode_names() {
     }
     assert_eq!(StreamingMode::parse("Fast"), None);
 }
+
+#[test]
+fn work_position_variables_are_the_work_position() {
+    // DIV-101: LaserGRBL gives the machine position for [WPos.*]
+    let mut b = connected();
+    b.host.send_command("G0 X5", b.now).unwrap();
+    b.host.send_command("G92 X0", b.now).unwrap();
+    b.exchange();
+    b.advance(600);
+    assert_eq!(
+        b.host.evaluate_expression("[WPos.X] [MPos.X] [WCO.X]"),
+        "0.000 5.000 5.000"
+    );
+}

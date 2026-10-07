@@ -36,7 +36,8 @@ fn main() -> ExitCode {
 }
 
 fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    manifest.ancestors().nth(2).unwrap_or(manifest).to_path_buf()
 }
 
 fn check_layers() -> Result<()> {

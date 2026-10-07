@@ -2,7 +2,7 @@
 
 FreeKerf is free software (**GPL-3.0-or-later**) for designing jobs and driving laser machines (Grbl, grblHAL, Smoothie, Marlin…). It is the successor of LaserGRBL (© 2016 Diego Settimi), rewritten in Rust, cross-platform (Linux, Windows, macOS; tablets later), and designed for mouse, keyboard **and** touch.
 
-> **Status: planning.** There is no code yet. This document defines **what to build, in which order, and under which rules** (architecture, tests, documentation). Once code lands, the maintenance guide is [`AGENTS.md`](AGENTS.md) (created in M0) and this file tracks progress in §13 *Where each item lives*.
+> **Status: M0 and M1 done.** This document defines **what to build, in which order, and under which rules** (architecture, tests, documentation). The maintenance guide is [`AGENTS.md`](AGENTS.md) and this file tracks progress in §13 *Where each item lives*.
 
 Related repositories in the [`freekerf`](https://github.com/freekerf) organization:
 
@@ -386,11 +386,27 @@ Run the "What the spike must validate" table of `design/tech-notes.md` (canvas w
 
 ## 13. Where each item lives
 
-Updated by every PR that delivers a milestone item (empty until M0).
+Updated by every PR that delivers a milestone item.
 
 | Item | Implementation | Tests | Documentation |
 | --- | --- | --- | --- |
-| — | — | — | — |
+| M0: workspace, toolchain, lints | `Cargo.toml`, `rust-toolchain.toml`, `rustfmt.toml`, `clippy.toml` | CI `lint`, `msrv` | `AGENTS.md` |
+| M0: layer rules | `tools/xtask/src/layers.rs` | `layers.rs` unit tests (a broken rule fails), CI `lint` | `AGENTS.md`, `doc/architecture.md` |
+| M0: CI | `.github/workflows/ci.yml` | — | `AGENTS.md` |
+| M0: test kit | `crates/testing/freekerf-testkit` (`SimClock`, `Bench`) | used by the protocol tests | `AGENTS.md` |
+| M0: docs and ADRs | `AGENTS.md`, `CLAUDE.md`, `doc/` | `cargo xtask check-docs` | `doc/adr/0001`-`0005` |
+| M1: G-code parser, state, analysis | `crates/core/freekerf-gcode` | `tests/golden.rs`, `tests/properties.rs`, unit tests | `doc/features/gcode-analysis.md` |
+| M1: protocol host (streaming, responses, status, `$$`/`$I`, overrides, jog, jobs, resume, custom code, life counters) | `crates/core/freekerf-protocol` | `tests/protocol.rs` (conformance scenarios), `tests/host_behaviour.rs`, unit tests | `doc/features/{connection,streaming,job-lifecycle,custom-code,jog,overrides,machine-settings,laser-life}.md` |
+| M1: firmware variants | `crates/core/freekerf-protocol/src/firmware.rs` | `host_behaviour.rs` (banners, Smoothie, Marlin, Vigo) | `doc/features/firmware-variants.md` |
+| M1: emulator | `crates/core/freekerf-emulator`, `freekerf-transport` (in process, PTY) | unit tests, transport tests | `doc/features/emulator.md` |
+| M1: transports | `crates/native/freekerf-transport` | `tests/serial_pty.rs`, unit tests | `doc/features/connection.md` |
+| M1: machine driver | `crates/runtime/freekerf-machine` | `tests/driver.rs` | `doc/architecture.md`, ADR 0001 |
+| M1: settings | `crates/config/freekerf-settings`, `doc/schema/settings.schema.json` | unit tests, `tests/it/settings_files.rs` | `doc/features/settings.md`, ADR 0005 |
+| M1: action registry and service | `crates/core/freekerf-session`, `crates/runtime/freekerf-service` | unit tests, `freekerf-service/tests/*` | `doc/features/actions.md` (generated), ADR 0004 |
+| M1: CLI (`analyze --json`, `send`, `console`, `emulate --pty`, `host --stdio`) | `apps/cli` | `apps/cli/tests/cli.rs` | `doc/features/{cli,host-protocol}.md` |
+| M1: conformance `RustHost`, Rust analyzer, `rust_divergence`, `make test-rust` | `freekerf/conformance` (branch `claude/rust-host`) | `make test-rust`: 32 passed, 3 runs in a row; CI job `conformance` | `doc/features/host-protocol.md`, conformance `README.md` |
+| M1: large files | `freekerf-gcode` (`rayon`, feature `parallel`) | `benches/analysis.rs` | `doc/benchmarks.md` |
+| M1: divergences | — | conformance (no marker needed so far) | `doc/divergences.md` |
 
 ## 14. Decisions already taken
 

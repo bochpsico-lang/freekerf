@@ -23,12 +23,16 @@ fn every_golden_program_streams_without_errors() {
     let emu = freekerf_transport::pty::serve_emulator(freekerf_emulator::DeviceConfig::default()).unwrap();
     let s = Service::in_memory().unwrap();
     let user = Caller::user();
-    s.dispatch(&user, "machine.connect", json!({"port": emu.path()})).unwrap();
-    wait(&s, |st| st["machine"]["ready"] == true && st["machine"]["status"] == "Idle");
+    s.dispatch(&user, "machine.connect", json!({"port": emu.path()}))
+        .unwrap();
+    wait(&s, |st| {
+        st["machine"]["ready"] == true && st["machine"]["status"] == "Idle"
+    });
     for name in ["square", "arcs", "relative", "raster_like", "offsets"] {
         let events = s.subscribe();
         let path = gcode_fixture(&format!("gcode/{name}.nc"));
-        s.dispatch(&user, "job.load", json!({"path": path.to_string_lossy()})).unwrap();
+        s.dispatch(&user, "job.load", json!({"path": path.to_string_lossy()}))
+            .unwrap();
         s.dispatch(&user, "job.run", Value::Null).unwrap();
         let end = Instant::now() + Duration::from_secs(20);
         let mut done = None;
@@ -41,7 +45,9 @@ fn every_golden_program_streams_without_errors() {
         }
         let done = done.unwrap_or_else(|| panic!("{name}: job did not end"));
         assert_eq!(done["errors"], 0, "{name}");
-        wait(&s, |st| st["machine"]["status"] == "Idle" && st["machine"]["ready"] == true);
+        wait(&s, |st| {
+            st["machine"]["status"] == "Idle" && st["machine"]["ready"] == true
+        });
     }
     s.dispatch(&user, "machine.disconnect", Value::Null).unwrap();
     emu.stop();

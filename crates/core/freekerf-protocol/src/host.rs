@@ -554,7 +554,7 @@ impl Core {
             ("MPos.X", f64::from(self.mpos.x)),
             ("MPos.Y", f64::from(self.mpos.y)),
             ("MPos.Z", f64::from(self.mpos.z)),
-            // LaserGRBL gives the machine position here; FreeKerf the work position (DIV-031)
+            // LaserGRBL gives the machine position here; FreeKerf the work position (DIV-101)
             ("WPos.X", f64::from(wpos.x)),
             ("WPos.Y", f64::from(wpos.y)),
             ("WPos.Z", f64::from(wpos.z)),
@@ -1688,7 +1688,7 @@ impl Host {
     /// while connected; this is the STOP of the user interface.
     pub fn soft_reset(&mut self, now: u64) -> Result<(), HostError> {
         self.core.now = now;
-        // also while connecting: STOP must always work (LaserGRBL needs a status report)
+        // also while connecting: STOP must always work (LaserGRBL needs a status report: DIV-102)
         if !self.core.link_open {
             return Err(HostError::NotConnected);
         }

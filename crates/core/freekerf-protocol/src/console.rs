@@ -165,7 +165,7 @@ pub fn describe_setting(number: &str) -> Option<(&'static str, &'static str, &'s
 }
 
 /// Readable form of a received line (only for Grbl 1.1, which uses these codes).
-/// Unknown alarms keep their text (FINDINGS F-03 fixed: DIV-003b).
+/// Unknown alarms keep their text (FINDINGS F-03 fixed: DIV-003).
 #[must_use]
 pub fn decode_message(line: &str) -> Option<String> {
     match MessageKind::classify(line) {

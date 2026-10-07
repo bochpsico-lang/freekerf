@@ -1,0 +1,284 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Settings",
+  "description": "The whole settings file.",
+  "type": "object",
+  "properties": {
+    "automation": {
+      "description": "Automation (user-only).",
+      "$ref": "#/$defs/AutomationSettings",
+      "default": {
+        "mcp": {
+          "allow_laser": false,
+          "allow_machine": false,
+          "enabled": false
+        }
+      }
+    },
+    "job": {
+      "description": "Job custom code.",
+      "$ref": "#/$defs/JobSettings",
+      "default": {
+        "footer": "G0 X0 Y0 Z0 (move back to origin)",
+        "header": "G90 (use absolute coordinates)",
+        "passes": ";(Uncomment if you want to sink Z axis)\n;G91 (use relative coordinates)\n;G0 Z-1 (sinks the Z axis, 1mm)\n;G90 (use absolute coordinates)"
+      }
+    },
+    "jog": {
+      "description": "Jog.",
+      "$ref": "#/$defs/JogSettings",
+      "default": {
+        "speed_mm_min": 1000.0,
+        "step_mm": 1.0
+      }
+    },
+    "machine": {
+      "description": "Machine connection.",
+      "$ref": "#/$defs/MachineSettings",
+      "default": {
+        "auto_cooling": {
+          "enabled": false,
+          "off_s": 60,
+          "on_s": 600
+        },
+        "baud": 115200,
+        "continuous_jog": false,
+        "firmware": "Grbl",
+        "port": null,
+        "query_machine_info": true,
+        "reset_on_connect": true,
+        "status_query_ms": 500,
+        "streaming_mode": "Buffered",
+        "support_pwm": true
+      }
+    },
+    "version": {
+      "description": "Format version.",
+      "type": "integer",
+      "format": "uint32",
+      "default": 1,
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "AutoCoolingSettings": {
+      "description": "Automatic cooling: hold the job `off_s` every `on_s` seconds of work.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Enabled.",
+          "type": "boolean",
+          "default": false
+        },
+        "off_s": {
+          "description": "Pause, seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 60,
+          "minimum": 0
+        },
+        "on_s": {
+          "description": "Work time, seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 600,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "AutomationSettings": {
+      "description": "Automation (scripts and agents).",
+      "type": "object",
+      "properties": {
+        "mcp": {
+          "description": "MCP.",
+          "$ref": "#/$defs/McpSettings",
+          "default": {
+            "allow_laser": false,
+            "allow_machine": false,
+            "enabled": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Firmware": {
+      "description": "Firmware family.",
+      "oneOf": [
+        {
+          "description": "Grbl, grblHAL and compatible.",
+          "type": "string",
+          "const": "Grbl"
+        },
+        {
+          "description": "Smoothieware.",
+          "type": "string",
+          "const": "Smoothie"
+        },
+        {
+          "description": "Marlin.",
+          "type": "string",
+          "const": "Marlin"
+        },
+        {
+          "description": "VigoWork.",
+          "type": "string",
+          "const": "VigoWork"
+        }
+      ]
+    },
+    "JobSettings": {
+      "description": "Code around jobs.",
+      "type": "object",
+      "properties": {
+        "footer": {
+          "description": "After the program.",
+          "type": "string",
+          "default": "G0 X0 Y0 Z0 (move back to origin)"
+        },
+        "header": {
+          "description": "Before the program (`[expr]` allowed; `!`, `~`, `?`, `ctrl-x`, `0xNN` are sent at once).",
+          "type": "string",
+          "default": "G90 (use absolute coordinates)"
+        },
+        "passes": {
+          "description": "Between passes.",
+          "type": "string",
+          "default": ";(Uncomment if you want to sink Z axis)\n;G91 (use relative coordinates)\n;G0 Z-1 (sinks the Z axis, 1mm)\n;G90 (use absolute coordinates)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "JogSettings": {
+      "description": "Jog defaults.",
+      "type": "object",
+      "properties": {
+        "speed_mm_min": {
+          "description": "Feed, mm/min.",
+          "type": "number",
+          "format": "double",
+          "default": 1000.0
+        },
+        "step_mm": {
+          "description": "Step, mm.",
+          "type": "number",
+          "format": "double",
+          "default": 1.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "MachineSettings": {
+      "description": "How to reach the machine and how to talk to it.",
+      "type": "object",
+      "properties": {
+        "auto_cooling": {
+          "description": "Automatic cooling cycles.",
+          "$ref": "#/$defs/AutoCoolingSettings",
+          "default": {
+            "enabled": false,
+            "off_s": 60,
+            "on_s": 600
+          }
+        },
+        "baud": {
+          "description": "Baud rate.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 115200,
+          "minimum": 0
+        },
+        "continuous_jog": {
+          "description": "Continuous jog (jog while pressed).",
+          "type": "boolean",
+          "default": false
+        },
+        "firmware": {
+          "description": "Firmware family.",
+          "$ref": "#/$defs/Firmware",
+          "default": "Grbl"
+        },
+        "port": {
+          "description": "Last serial port used.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "query_machine_info": {
+          "description": "Ask `$I` when connecting.",
+          "type": "boolean",
+          "default": true
+        },
+        "reset_on_connect": {
+          "description": "Soft reset when connecting.",
+          "type": "boolean",
+          "default": true
+        },
+        "status_query_ms": {
+          "description": "Status query period, ms.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 500,
+          "minimum": 0
+        },
+        "streaming_mode": {
+          "description": "Streaming mode.",
+          "$ref": "#/$defs/Streaming",
+          "default": "Buffered"
+        },
+        "support_pwm": {
+          "description": "Hardware PWM: `S0` does not burn.",
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "McpSettings": {
+      "description": "MCP server settings (§9 of the plan). Changed only by the user, never by\nactions, scripts or agents.",
+      "type": "object",
+      "properties": {
+        "allow_laser": {
+          "description": "Agents may request `laser` actions (always confirmed by a human on screen).",
+          "type": "boolean",
+          "default": false
+        },
+        "allow_machine": {
+          "description": "Agents may use `machine` actions.",
+          "type": "boolean",
+          "default": false
+        },
+        "enabled": {
+          "description": "MCP server enabled (off by default).",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "Streaming": {
+      "description": "Streaming mode.",
+      "oneOf": [
+        {
+          "description": "Fill the RX buffer (character counting).",
+          "type": "string",
+          "const": "Buffered"
+        },
+        {
+          "description": "One line at a time.",
+          "type": "string",
+          "const": "Synchronous"
+        },
+        {
+          "description": "One line at a time, failed job lines retried 3 times.",
+          "type": "string",
+          "const": "RepeatOnError"
+        }
+      ]
+    }
+  }
+}

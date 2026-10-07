@@ -2,7 +2,7 @@
 //! bounding box. Computed in `f64` as in LaserGRBL.
 //!
 //! With `R` the center is assumed at the chord midpoint (FINDINGS F-12, kept:
-//! DIV-003), which is only right for half circles.
+//! DIV-012), which is only right for half circles.
 
 use std::f64::consts::PI;
 
