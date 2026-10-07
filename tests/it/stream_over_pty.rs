@@ -33,12 +33,10 @@ fn every_golden_program_streams_without_errors() {
         let end = Instant::now() + Duration::from_secs(20);
         let mut done = None;
         while done.is_none() && Instant::now() < end {
-            if let Ok(e) = events.recv_timeout(Duration::from_millis(100)) {
-                if let ServiceEvent::Machine(_) = &e {
-                    if let Some(j) = e.to_json()["data"].get("JobEnded") {
-                        done = Some(j.clone());
-                    }
-                }
+            if let Ok(e @ ServiceEvent::Machine(_)) = events.recv_timeout(Duration::from_millis(100))
+                && let Some(j) = e.to_json()["data"].get("JobEnded")
+            {
+                done = Some(j.clone());
             }
         }
         let done = done.unwrap_or_else(|| panic!("{name}: job did not end"));
