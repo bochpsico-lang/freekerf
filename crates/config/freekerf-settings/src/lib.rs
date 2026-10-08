@@ -309,6 +309,21 @@ pub struct CustomButton {
     pub icon: Option<String>,
 }
 
+/// Safety settings: user-only, like automation (actions, scripts and agents cannot
+/// change them).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SafetySettings {
+    /// Seconds before "Fire laser" can be pressed (1-10, default 3).
+    pub fire_countdown_s: u64,
+}
+
+impl Default for SafetySettings {
+    fn default() -> Self {
+        Self { fire_countdown_s: 3 }
+    }
+}
+
 /// The whole settings file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
@@ -327,6 +342,8 @@ pub struct Settings {
     pub ui: UiSettings,
     /// Custom buttons of the machine panel (added in M4a; none by default).
     pub buttons: Vec<CustomButton>,
+    /// Safety (user-only; added in M4a).
+    pub safety: SafetySettings,
 }
 
 impl Default for Settings {
@@ -339,6 +356,7 @@ impl Default for Settings {
             automation: AutomationSettings::default(),
             ui: UiSettings::default(),
             buttons: Vec::new(),
+            safety: SafetySettings::default(),
         }
     }
 }
@@ -435,13 +453,16 @@ impl Settings {
             .ok_or_else(|| SettingsError::UnknownKey(key.to_owned()))
     }
 
-    /// Sets a dotted key from JSON. `automation.*` is refused when `user` is false:
+    /// Sets a dotted key from JSON. `automation.*` and `safety.*` are refused when `user` is false:
     /// only the user changes it, in the app or with `freekerf config set`.
     ///
     /// # Errors
     /// Unknown key, user-only key, or a value of the wrong type.
     pub fn set(&mut self, key: &str, value: serde_json::Value, user: bool) -> Result<(), SettingsError> {
-        if !user && (key == "automation" || key.starts_with("automation.") || key == "version") {
+        let user_only = ["automation", "safety"]
+            .iter()
+            .any(|k| key == *k || key.starts_with(&format!("{k}.")));
+        if !user && (user_only || key == "version") {
             return Err(SettingsError::UserOnly(key.to_owned()));
         }
         let mut root = serde_json::to_value(&*self).map_err(|e| SettingsError::Invalid(e.to_string()))?;
@@ -574,6 +595,19 @@ mod tests {
         assert_eq!(back.ui.density, Density::Comfortable);
         assert_eq!(back.ui.units, Units::In);
         assert!(s.set("ui.theme", serde_json::json!("sepia"), false).is_err());
+    }
+
+    #[test]
+    fn safety_is_user_only() {
+        let mut s = Settings::default();
+        assert_eq!(s.safety.fire_countdown_s, 3);
+        assert!(matches!(
+            s.set("safety.fire_countdown_s", serde_json::json!(0), false),
+            Err(SettingsError::UserOnly(_))
+        ));
+        s.set("safety.fire_countdown_s", serde_json::json!(5), true)
+            .unwrap();
+        assert_eq!(s.safety.fire_countdown_s, 5);
     }
 
     #[test]

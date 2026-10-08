@@ -48,12 +48,9 @@
     console: ConsoleProjection;
   } = $props();
 
-  /** The laser request waiting for the confirmation dialog (local until it is confirmed or cancelled). */
-  let pending: LaserRequest | null = $state(null);
-
+  /** Laser actions only ask: the app opens the fire confirmation (PLAN §9.5). */
   async function laser(request: LaserRequest): Promise<void> {
-    pending = request;
-    await run(() => service.dispatch('view.open_dialog', { dialog: 'fire_confirmation' }));
+    await run(() => service.dispatch('fire.request', { action: request.action, params: request.params }));
   }
 
   async function run(action: () => Promise<unknown>): Promise<void> {
@@ -129,7 +126,12 @@
         stage?.zoom(0.8);
         return;
       case 'close-dialog':
-        void run(() => service.dispatch('view.close_dialog', {}));
+        // closing the fire confirmation cancels its request (also in Rust)
+        void run(() =>
+          view.topDialog === 'fire_confirmation'
+            ? service.dispatch('fire.cancel', {})
+            : service.dispatch('view.close_dialog', {}),
+        );
         return;
       case 'shortcuts':
         void run(() => service.dispatch('view.open_dialog', { dialog: 'shortcuts' }));
@@ -188,12 +190,6 @@
 {#snippet recoverDialog(close: () => void)}
   <RecoverDialog onclose={close} />
 {/snippet}
-{#snippet fireDialog(close: () => void)}
-  <FireConfirmation
-    request={pending}
-    onclose={() => {
-      pending = null;
-      close();
-    }}
-  />
+{#snippet fireDialog()}
+  <FireConfirmation />
 {/snippet}

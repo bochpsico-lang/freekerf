@@ -20,6 +20,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+pub mod fire;
 pub mod view;
 
 use schemars::JsonSchema;

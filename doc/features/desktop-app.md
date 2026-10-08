@@ -24,13 +24,15 @@ for the Design mode screens until M2 lands.
 | `dispatch(action, params)` | runs an action of the registry ([actions.md](actions.md)) and returns its JSON result or an `ActionError` |
 | `catalog()` | the action specs (name, tier, parameter and result schemas) |
 | `subscribe(events)` | streams service events (`EventMessage` JSON) on a Tauri channel |
+| `confirm_fire(id)` | the Fire laser button: runs the pending laser request after its countdown ([fire-confirmation.md](fire-confirmation.md)) |
 | `preview()` | the tool path of the loaded program, raw bytes ([canvas.md](canvas.md)) |
 | `subscribe_head(frames)` | head frames, raw 24 bytes, up to 60 Hz ([canvas.md](canvas.md)) |
 | `bench_report(report)` | only with `--bench-canvas`: prints the canvas benchmark and exits |
 
 - The window calls as `{kind: user, name: "desktop", max_tier: machine}`. Actions
   of tier `laser` (`job.run`, `job.resume`, `machine.send`, `machine.custom_code`)
-  are **refused** until the fire confirmation (PLAN §9.5) is in place.
+  are refused; they run only through the fire confirmation (`fire.request`, then
+  `confirm_fire` after the countdown).
 - STOP (`machine.stop`) and the other `safety` actions are always allowed.
 - No Tauri plugin is enabled and the capability file grants nothing: the web view
   has no file system, shell or network access of its own. The content security

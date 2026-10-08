@@ -60,6 +60,13 @@
         "support_pwm": true
       }
     },
+    "safety": {
+      "description": "Safety (user-only; added in M4a).",
+      "$ref": "#/$defs/SafetySettings",
+      "default": {
+        "fire_countdown_s": 3
+      }
+    },
     "ui": {
       "description": "Appearance of the desktop app (added in M4a; files without it get the defaults).",
       "$ref": "#/$defs/UiSettings",
@@ -319,6 +326,20 @@
           "description": "MCP server enabled (off by default).",
           "type": "boolean",
           "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "SafetySettings": {
+      "description": "Safety settings: user-only, like automation (actions, scripts and agents cannot\nchange them).",
+      "type": "object",
+      "properties": {
+        "fire_countdown_s": {
+          "description": "Seconds before \"Fire laser\" can be pressed (1-10, default 3).",
+          "type": "integer",
+          "format": "uint64",
+          "default": 3,
+          "minimum": 0
         }
       },
       "additionalProperties": false

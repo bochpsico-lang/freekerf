@@ -433,3 +433,108 @@ fn produce_mode_helpers_frame_info_and_system_commands() {
         20,
     );
 }
+
+#[test]
+fn laser_actions_run_only_after_a_confirmed_countdown() {
+    let s = connected();
+    let clock = freekerf_testkit::SimClock::new(10_000);
+    s.set_fire_clock(Arc::new(clock.clone()));
+    call(
+        &s,
+        "job.load_text",
+        json!({"name": "sq.nc", "gcode": "G0 X1 Y1\nM3 S500\nG1 X5 F3000\nM5\n"}),
+    );
+    // the window's caller cannot dispatch any laser action itself
+    let window = Caller::new(CallerKind::User, "desktop", Tier::Machine);
+    let laser: Vec<String> = s
+        .specs()
+        .into_iter()
+        .filter(|a| a.tier == Tier::Laser)
+        .map(|a| a.name)
+        .collect();
+    assert_eq!(
+        laser,
+        ["job.resume", "job.run", "machine.custom_code", "machine.send"]
+    );
+    for a in &laser {
+        let e = s.dispatch(&window, a, json!({})).unwrap_err();
+        assert!(matches!(e, ActionError::PermissionDenied { .. }), "{a}: {e:?}");
+    }
+    // it can ask; only laser actions can be asked for
+    let bad = s
+        .dispatch(&window, "fire.request", json!({"action": "machine.home"}))
+        .unwrap_err();
+    assert!(matches!(bad, ActionError::InvalidParams(_)), "{bad:?}");
+    let req = s
+        .dispatch(
+            &window,
+            "fire.request",
+            json!({"action": "job.run", "params": {}}),
+        )
+        .unwrap();
+    let id = req["id"].as_u64().unwrap();
+    assert_eq!(req["countdown_ms"], 3000);
+    assert_eq!(req["summary"]["program"], "sq.nc");
+    let view = call(&s, "view.get", json!({}));
+    assert_eq!(view["fire_request"]["id"], id);
+    assert_eq!(view["dialogs"], json!(["fire_confirmation"]));
+    // too early, wrong id: refused, nothing runs
+    assert!(matches!(s.confirm_fire(id), Err(ActionError::Refused(_))));
+    clock.advance(2999);
+    assert!(matches!(s.confirm_fire(id), Err(ActionError::Refused(_))));
+    assert!(matches!(s.confirm_fire(id + 1), Err(ActionError::Refused(_))));
+    assert_eq!(call(&s, "state.get", json!({}))["machine"]["in_program"], false);
+    // after the countdown the person's confirmation runs it, once
+    clock.advance(1);
+    let events = s.subscribe();
+    s.confirm_fire(id).unwrap();
+    let end = Instant::now() + Duration::from_secs(10);
+    loop {
+        assert!(Instant::now() < end, "the job did not start");
+        if let Ok(ServiceEvent::Machine(MachineEvent::Host(Event::JobStarted { .. }))) =
+            events.recv_timeout(Duration::from_millis(100))
+        {
+            break;
+        }
+    }
+    assert!(matches!(s.confirm_fire(id), Err(ActionError::Refused(_))));
+    let view = call(&s, "view.get", json!({}));
+    assert!(view["fire_request"].is_null());
+    assert_eq!(view["dialogs"], json!([]));
+    wait_state(
+        &s,
+        |st| st["machine"]["in_program"] == false && st["machine"]["status"] == "Idle",
+        20,
+    );
+    // a request can be cancelled (always allowed)
+    let req = s
+        .dispatch(
+            &window,
+            "fire.request",
+            json!({"action": "machine.send", "params": {"line": "M3 S10"}}),
+        )
+        .unwrap();
+    assert_eq!(req["summary"]["code"], "M3 S10");
+    let reader = Caller::new(CallerKind::Agent, "reader", Tier::Read);
+    s.dispatch(&reader, "fire.cancel", json!({})).unwrap();
+    clock.advance(10_000);
+    assert!(matches!(
+        s.confirm_fire(req["id"].as_u64().unwrap()),
+        Err(ActionError::Refused(_))
+    ));
+    // closing its dialog cancels it too
+    let req = s
+        .dispatch(
+            &window,
+            "fire.request",
+            json!({"action": "job.run", "params": {}}),
+        )
+        .unwrap();
+    call(&s, "view.close_dialog", json!({}));
+    clock.advance(10_000);
+    assert!(matches!(
+        s.confirm_fire(req["id"].as_u64().unwrap()),
+        Err(ActionError::Refused(_))
+    ));
+    assert!(call(&s, "view.get", json!({}))["fire_request"].is_null());
+}

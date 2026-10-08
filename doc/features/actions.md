@@ -7,6 +7,8 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | Action | Tier | Description |
 | --- | --- | --- |
 | `console.get` | read | Console rows (sent commands, answers, messages). |
+| `fire.cancel` | safety | Cancels the pending laser request (the one given, or any). Always allowed. |
+| `fire.request` | machine | Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request. |
 | `job.abort` | safety | Stops streaming the job and sends `M5` (lines already in the board still run; use machine.stop to stop at once). Always allowed. |
 | `job.frame` | machine | Runs the head around the bounds of the loaded program with the laser off (jog moves). |
 | `job.info` | read | The loaded program (name, lines, estimated time, range). |
@@ -59,6 +61,23 @@ Console rows (sent commands, answers, messages).
 | Parameter | Required | Description |
 | --- | --- | --- |
 | `last` | no | Only the last `last` rows. |
+
+### `fire.cancel`
+
+Cancels the pending laser request (the one given, or any). Always allowed.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `id` | no | The request; the pending one when absent. |
+
+### `fire.request`
+
+Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `action` | yes | An action of tier `laser` (`job.run`, `job.resume`, `machine.send`, `machine.custom_code`). |
+| `params` | no | Its parameters. |
 
 ### `job.abort`
 

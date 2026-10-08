@@ -9,6 +9,8 @@
 use std::collections::BTreeMap;
 
 use schemars::JsonSchema;
+
+use crate::fire::FireRequest;
 use serde::{Deserialize, Serialize};
 
 /// Most toasts kept at once (`design/design-system.md`: at most 3 stacked).
@@ -120,6 +122,9 @@ pub struct ViewState {
     pub fit_request: u64,
     /// Element with the keyboard focus (`canvas`, `console`... free text), if known.
     pub focus: Option<String>,
+    /// The laser action waiting for the person's confirmation, if any (the fire
+    /// confirmation dialog is open while it is set).
+    pub fire_request: Option<FireRequest>,
     /// Next toast id.
     #[serde(skip)]
     next_toast: u64,
@@ -136,6 +141,7 @@ impl Default for ViewState {
             viewport: None,
             fit_request: 0,
             focus: None,
+            fire_request: None,
             next_toast: 1,
         }
     }
@@ -171,6 +177,9 @@ pub enum ViewCommand {
     Fit,
     /// Records the focus.
     Focus(Option<String>),
+    /// Shows (opens the fire confirmation dialog) or clears (closes it) the pending
+    /// laser request. Set by the service, not an action of its own.
+    SetFireRequest(Option<FireRequest>),
 }
 
 /// A command that cannot be applied.
@@ -235,6 +244,13 @@ impl ViewState {
             }
             ViewCommand::Fit => self.fit_request = self.fit_request.wrapping_add(1),
             ViewCommand::Focus(f) => self.focus = f,
+            ViewCommand::SetFireRequest(r) => {
+                self.dialogs.retain(|d| *d != Dialog::FireConfirmation);
+                if r.is_some() {
+                    self.dialogs.push(Dialog::FireConfirmation);
+                }
+                self.fire_request = r;
+            }
         }
         Ok(None)
     }
@@ -336,6 +352,26 @@ mod tests {
         assert_eq!(v.fit_request, 2);
         v.apply(ViewCommand::Focus(Some("canvas".into()))).unwrap();
         assert_eq!(v.focus.as_deref(), Some("canvas"));
+    }
+
+    #[test]
+    fn fire_requests_open_and_close_the_dialog() {
+        let mut v = ViewState::default();
+        let r = crate::fire::FireGate::default().request(
+            "job.run",
+            serde_json::Value::Null,
+            "desktop",
+            crate::fire::FireSummary::default(),
+            3000,
+            0,
+        );
+        v.apply(ViewCommand::OpenDialog(Dialog::Settings)).unwrap();
+        v.apply(ViewCommand::SetFireRequest(Some(r))).unwrap();
+        assert_eq!(v.top_dialog(), Some(Dialog::FireConfirmation));
+        assert!(v.fire_request.is_some());
+        v.apply(ViewCommand::SetFireRequest(None)).unwrap();
+        assert_eq!(v.dialogs, [Dialog::Settings]);
+        assert!(v.fire_request.is_none());
     }
 
     #[test]

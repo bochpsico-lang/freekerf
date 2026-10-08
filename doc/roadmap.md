@@ -10,8 +10,7 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 | `freekerf-ipc`, `freekerf-script`, `freekerf-mcp`, Python client | M2 scope | M2 |
 | Fuzzing (`cargo-fuzz` targets for G-code) | planned with the importers' parsers | M2 |
 | Permission grants (this run / session / always) | needs callers other than the user (scripts, agents) | M2 |
-| Human fire confirmation of `laser` actions | needs the desktop UI | M4 |
-| Sounds, notifications, hotkeys, safety countdown | UI concerns | M4 |
+| Sounds, notifications | UI concerns (hotkeys and the safety countdown are done in M4a) | M5 |
 | Importing LaserGRBL settings (`Settings.bin`), buttons, counters | `freekerf-migrate` | M2 |
 | Canvas ≥ 50 fps measurement on Linux with a GPU (`freekerf-desktop --bench-canvas`) | the cloud CI and dev containers have no GPU; only the software floor is recorded | before M4a is closed |
 | Head interpolation between status reports along the tool path | status reports arrive a few times per second; the head jumps between them | M4b |

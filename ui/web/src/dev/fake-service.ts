@@ -71,6 +71,8 @@ export class FakeService implements AppService {
   state: State = initialState();
   private listeners = new Set<(event: EventMessage) => void>();
   private headListeners = new Set<(frame: ArrayBuffer) => void>();
+  /** Clock of the fake fire gate, ms (tests move it). */
+  now = 0;
   view: ViewState = {
     mode: 'produce',
     panel: 'machine',
@@ -80,6 +82,7 @@ export class FakeService implements AppService {
     viewport: null,
     fit_request: 0,
     focus: null,
+    fire_request: null,
   };
   settings: Settings = {
     version: 1,
@@ -138,6 +141,7 @@ export class FakeService implements AppService {
     'view.close_dialog': (p) =>
       this.changeView((v) => {
         const d = (p as Params<'view.close_dialog'>).dialog;
+        if ((d ?? v.dialogs.at(-1)) === 'fire_confirmation') v.fire_request = null;
         v.dialogs = d ? v.dialogs.filter((x) => x !== d) : v.dialogs.slice(0, -1);
       }),
     'view.toast': (p) => {
@@ -193,6 +197,30 @@ export class FakeService implements AppService {
     'machine.system_command': () => null,
     'job.frame': () => null,
     'job.abort': () => null,
+    'fire.request': (p) => {
+      const { action, params } = p as Params<'fire.request'>;
+      if (ACTION_TIERS[action as ActionName] !== 'laser') {
+        throw new ActionFailure('fire.request', {
+          kind: 'invalid_params',
+          message: `${action} is not a laser action`,
+        });
+      }
+      const request = {
+        id: this.nextToast++,
+        action,
+        params: params ?? {},
+        requested_by: 'desktop',
+        summary: { program: this.state.program?.name ?? null, lines: this.state.program?.lines ?? null },
+        countdown_ms: 3000,
+      };
+      this.fireAt = this.now;
+      this.changeView((v) => {
+        v.fire_request = request;
+        v.dialogs = [...v.dialogs.filter((d) => d !== 'fire_confirmation'), 'fire_confirmation'];
+      });
+      return request;
+    },
+    'fire.cancel': () => this.clearFire(),
     'settings.set': (p) => {
       const { key, value } = p as Params<'settings.set'>;
       const parts = key.split('.');
@@ -234,6 +262,29 @@ export class FakeService implements AppService {
   subscribe(listener: (event: EventMessage) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  private fireAt = 0;
+  /** Laser actions the fake ran after a confirmation (tests). */
+  readonly fired: { action: string; params: unknown }[] = [];
+
+  async confirmFire(id: number): Promise<unknown> {
+    const r = this.view.fire_request;
+    if (!r || r.id !== id)
+      throw new ActionFailure('fire', { kind: 'refused', message: 'no pending laser request with this id' });
+    if (this.now - this.fireAt < r.countdown_ms) {
+      throw new ActionFailure('fire', { kind: 'refused', message: 'wait before confirming' });
+    }
+    this.clearFire();
+    this.fired.push({ action: r.action, params: r.params });
+    return null;
+  }
+
+  private clearFire(): null {
+    return this.changeView((v) => {
+      v.fire_request = null;
+      v.dialogs = v.dialogs.filter((d) => d !== 'fire_confirmation');
+    });
   }
 
   async toolpath(): Promise<ArrayBuffer> {

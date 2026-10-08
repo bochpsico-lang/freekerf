@@ -46,4 +46,10 @@ export interface AppService {
   toolpath(): Promise<ArrayBuffer>;
   /** Head frames (raw, 24 bytes, up to 60 Hz while they change); returns the unsubscribe function. */
   subscribeHead(listener: (frame: ArrayBuffer) => void): () => void;
+  /**
+   * The person pressed "Fire laser": runs the pending laser request `id` if its
+   * countdown is over. The only way the window runs a `laser` action (PLAN §9.5);
+   * not an action of the registry, so scripts and agents cannot confirm.
+   */
+  confirmFire(id: number): Promise<unknown>;
 }
