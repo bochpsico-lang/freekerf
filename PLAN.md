@@ -2,7 +2,7 @@
 
 FreeKerf is free software (**GPL-3.0-or-later**) for designing jobs and driving laser machines (Grbl, grblHAL, Smoothie, Marlin…). It is the successor of LaserGRBL (© 2016 Diego Settimi), rewritten in Rust, cross-platform (Linux, Windows, macOS; tablets later), and designed for mouse, keyboard **and** touch.
 
-> **Status: M0 and M1 done.** This document defines **what to build, in which order, and under which rules** (architecture, tests, documentation). The maintenance guide is [`AGENTS.md`](AGENTS.md) and this file tracks progress in §13 *Where each item lives*.
+> **Status: M0, M1 and M3 done; M2 and M4a in progress.** This document defines **what to build, in which order, and under which rules** (architecture, tests, documentation). The maintenance guide is [`AGENTS.md`](AGENTS.md) and this file tracks progress in §13 *Where each item lives*.
 
 Related repositories in the [`freekerf`](https://github.com/freekerf) organization:
 
@@ -139,7 +139,7 @@ New code comes with tests. CI fails when a gate below fails.
 | **Conformance** | external repo `conformance` | observable behaviour vs. LaserGRBL (protocol + golden; importers from M2) with `LASERGRBL_HOST=rust` | `make test-rust` in CI (checkout of `conformance`) |
 | **MCP integration** | `crates/runtime/freekerf-mcp/tests/`, `tests/` | an MCP client (`rmcp` client) against a headless app + emulator: fixed tool set, `run_script` reaching every registry namespace, sandbox and limits, resources and change notifications, permission tiers per call, disabled-by-default, attach vs. launch (§9.6) | `cargo test`, `rmcp` client |
 | **Fuzzing** | `fuzz/` | G-code, SVG, DXF and host-protocol parsers (from M2; scheduled CI job) | `cargo-fuzz` |
-| **UI end to end** | `ui/web/tests/`, `apps/desktop/tests/` | the 8 flows of `design/ux.md` against the emulator (from M4) | Playwright + Tauri WebDriver |
+| **UI end to end** | `ui/web/tests/`, `apps/desktop/tests/` | the 8 flows of `design/ux.md` against the emulator (Produce flows from M4a, all from M4b) | WebdriverIO + `tauri-driver` for the real app (Playwright cannot drive WebKitWebDriver); Playwright for `ui/web` in a browser against the fake service |
 | **Benchmarks** | `benches/` | load/analyze/plan large files; results in `doc/benchmarks.md` | `criterion` |
 
 Rules:
@@ -344,13 +344,38 @@ Crates: `geometry`, `raster`, `document`, `import`, `planner`, `materials`, `mig
 The code spike was replaced by desk research ([`doc/research/ui-toolkit.md`](doc/research/ui-toolkit.md)). **Decision: Tauri 2** ([ADR 0006](doc/adr/0006-ui-toolkit.md)). The first goal is a **desktop app**; tablets stay at M6. Multi-touch problems found during implementation are recorded in `doc/roadmap.md` and handled later; they do not block milestones. Bulk data crosses the IPC as raw payloads (`tauri::ipc::Response`, raw channels), never JSON arrays.
 
 ### M4 — Desktop MVP (10–16 weeks)
-- `ui/web` grown from `design/prototypes/app`: Design/Produce modes, canvas (pan, zoom, pinch, selection, handles), colour layers, inspector, machine panel, console, fire confirmation, job recovery, welcome flow and LaserGRBL migration.
-- All **MVP** items of the matrix in `design/research.md` §6.
-- i18n: `cargo xtask resx2ftl` converts the LaserGRBL `.resx` translations that still apply.
-- Automatic density by input type; light, dark and high-contrast themes from the `fk-` tokens.
-- **Automation in the desktop app (§9):** all view actions (mode, panels, selection, viewport, dialogs) in the registry; the UI dispatches only through it; attach-or-launch of the desktop app; semantic view snapshot + window screenshot; "Agent connected" and running-script indicators, action log, cancel and disconnect; `laser` tier with human confirmation on screen; automation settings page (off by default); macro editor with `api.d.ts` autocomplete; LaserGRBL custom buttons migrated to scripts.
+M4 is split in two phases so the app shell does not wait for M2. **M4a** builds everything that only needs the M1 service; **M4b** plugs the Design mode into the M2 crates. The Design mode screens are written in M4a against a contract ([`doc/features/ui-contract.md`](doc/features/ui-contract.md)) and a fake service, so M4b only swaps the implementation.
 
-**Acceptance:** canvas performance check on Linux (20,000 paths + 8000×6000 image, ≥ 50 fps pan with mouse; results in `doc/benchmarks.md`); the 8 flows of `design/ux.md` pass as UI end-to-end tests against the emulator in CI on Linux, and the same flows can be driven end to end by a test MCP client through `run_script`; the no-UI-only-actions lint passes; front-end unit tests (component logic) with coverage reported; user-facing docs drafted for `website`.
+#### M4a — App shell and Produce mode (does not depend on M2)
+- `apps/desktop` (Tauri 2, crate `freekerf-desktop`, depends only on `freekerf-service`) and `ui/web` grown from `design/prototypes/app`; front-end framework, canvas renderer and Rust → TypeScript type generation each decided in an ADR.
+- `ui/tokens` generated from `design/tokens.json` (pinned `design` commit); brand fonts and icons with credits; light, dark and high-contrast themes; automatic density by input type.
+- View state in Rust (`freekerf-session::view`: mode, panels, viewport, dialogs, toasts, focus) behind `view.*` actions; the UI changes app state **only** through `dispatch(action)` (lint).
+- Shell: Design/Produce modes, top bar with machine state and **STOP always visible** (also over dialogs), dockable panels, responsive layouts (wide ≥ 1180 px, medium 820–1179 px, narrow < 820 px machine only), keyboard shortcuts.
+- Canvas: renderer, pan/zoom/selection with the mouse, rulers, work-area grid, **G-code preview** from M1 analysis and head simulation over a raw channel at 60 Hz.
+- **Produce mode, real:** connect (serial and emulator), machine states, jog (step and continuous), home/unlock, origin, frame, open G-code, run/pause/stop, overrides, progress and remaining time, console, job recovery, laser life counters, basic custom buttons (G-code).
+- **Fire confirmation** (checklist + countdown, `design/ux.md`) as the only path to `laser`-tier actions, enforced in Rust.
+- Settings screen through actions (the UI never reads the TOML), automation settings page (MCP off by default, read-only in this phase).
+- i18n: Fluent in `ui/i18n`, `cargo xtask resx2ftl` converting the LaserGRBL `.resx` translations that still apply, `en` and `pt-BR` complete, long-string check (`de`).
+- Design mode screens (layers palette and list, inspector, shape and text tools, move/resize/rotate handles, import dialogs, migration step of the welcome flow) against the fake service in `ui/web/src/dev/`, behind a feature flag that is **off** in distributed builds.
+
+**Acceptance (M4a):**
+- the Tauri app opens on Linux (X11 and Wayland) and builds (`cargo check`) for Windows and macOS in CI;
+- Produce mode works end to end against the emulator, with UI end-to-end tests in CI on Linux;
+- canvas performance check (20,000 paths + 8000×6000 image, ≥ 50 fps pan with mouse) recorded in `doc/benchmarks.md`, measured on real Linux hardware (CI only gives a software-rendering floor);
+- STOP always reachable; `laser` actions only after the human confirmation (tested in Rust and end to end);
+- the dispatch-only lint passes; generated types checked in CI (committed == generated); the fake service is absent from the production bundle (tested);
+- front-end license check (npm allow-list compatible with GPL-3.0) in CI;
+- front-end unit and component tests with coverage reported;
+- docs: `doc/features/{shell,produce-mode,canvas,theming,i18n,fire-confirmation,ui-contract}.md`, ADRs for the framework, the canvas and type generation, front-end commands in `AGENTS.md`.
+
+#### M4b — Design mode on top of M2 (after M2 is merged)
+- Replace the fake service by the real `document.*` actions of the contract; turn the Design mode flag on.
+- Import flows (SVG, DXF, image with dithering), colour layers with cut settings, shapes, text and transforms on the real document; preview and time estimate from the planner.
+- Welcome flow with LaserGRBL migration (`freekerf-migrate`); material library import (`freekerf-materials`); LaserGRBL custom buttons migrated to scripts.
+- All remaining **MVP** items of the matrix in `design/research.md` §6.
+- **Automation in the desktop app (§9):** selection and document actions in the registry; attach-or-launch of the desktop app; semantic view snapshot + window screenshot; "Agent connected" and running-script indicators, action log, cancel and disconnect; automation settings page writable; macro editor with `api.d.ts` autocomplete.
+
+**Acceptance (M4b):** the 8 flows of `design/ux.md` pass as UI end-to-end tests against the emulator in CI on Linux, and the same flows can be driven end to end by a test MCP client through `run_script`; user-facing docs drafted for `website`.
 
 ### M5 — v1 and distribution (8–12 weeks)
 - **v1** items of the matrix: node editing, booleans, offset, array, trace, material library UI, material test, `$$` editor, Smoothie/Marlin in the UI, Telnet/WebSocket + discovery, notifications.
@@ -406,6 +431,7 @@ Updated by every PR that delivers a milestone item.
 | M1: large files | `freekerf-gcode` (`rayon`, feature `parallel`) | `benches/analysis.rs` | `doc/benchmarks.md` |
 | M1: divergences | — | conformance (no marker needed so far) | `doc/divergences.md` |
 | M3: UI toolkit decision (Tauri 2) | — | — | `doc/research/ui-toolkit.md`, `doc/adr/0006-ui-toolkit.md` |
+| M4a: plan split into M4a / M4b | `PLAN.md` §10 | — | `PLAN.md` |
 
 ## 14. Decisions already taken
 

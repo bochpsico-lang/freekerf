@@ -10,8 +10,8 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 | `freekerf-ipc`, `freekerf-script`, `freekerf-mcp`, Python client | M2 scope | M2 |
 | Fuzzing (`cargo-fuzz` targets for G-code) | planned with the importers' parsers | M2 |
 | Permission grants (this run / session / always) | needs callers other than the user (scripts, agents) | M2 |
-| Human fire confirmation of `laser` actions | needs the desktop UI | M4 |
-| Sounds, notifications, hotkeys, safety countdown | UI concerns | M4 |
+| Human fire confirmation of `laser` actions | needs the desktop UI | M4a |
+| Sounds, notifications, hotkeys, safety countdown | UI concerns | M4a (hotkeys, countdown), M5 (sounds, notifications) |
 | Importing LaserGRBL settings (`Settings.bin`), buttons, counters | `freekerf-migrate` | M2 |
 
 ## Decided

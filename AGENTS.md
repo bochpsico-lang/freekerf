@@ -169,4 +169,4 @@ never delete it or loosen it for the C# host.
 - Logging with `tracing`; no `println!` in libraries.
 - No telemetry.
 - Documentation, commit messages and PR descriptions in English; UI text goes
-  through i18n (from M4).
+  through i18n (from M4a).

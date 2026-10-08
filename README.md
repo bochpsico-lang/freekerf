@@ -2,7 +2,7 @@
 
 Free software for designing jobs and driving laser machines (Grbl, grblHAL, Smoothie, Marlin…), written in Rust, cross-platform, for mouse, keyboard and touch. Successor of [LaserGRBL](https://github.com/arkypita/LaserGRBL).
 
-> **Status: headless core (milestones M0 and M1).** The machine core and the `freekerf` command line work: G-code analysis, streaming to Grbl/grblHAL, Smoothie, Marlin and VigoWork boards, jog, overrides, jobs with passes and resume, a built-in emulator. They pass the protocol and G-code golden layers of the [conformance](https://github.com/freekerf/conformance) suite. The desktop app comes with M3-M4. The plan is in **[PLAN.md](PLAN.md)**; how to work on the code is in **[AGENTS.md](AGENTS.md)**.
+> **Status: headless core (milestones M0 and M1).** The machine core and the `freekerf` command line work: G-code analysis, streaming to Grbl/grblHAL, Smoothie, Marlin and VigoWork boards, jog, overrides, jobs with passes and resume, a built-in emulator. They pass the protocol and G-code golden layers of the [conformance](https://github.com/freekerf/conformance) suite. The desktop app comes with M4 (M4a: shell and Produce mode; M4b: Design mode on top of M2). The plan is in **[PLAN.md](PLAN.md)**; how to work on the code is in **[AGENTS.md](AGENTS.md)**.
 
 ## Try it
 
