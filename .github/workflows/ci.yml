@@ -182,10 +182,10 @@ jobs:
       - name: the app starts and stays up on X11 (Xvfb)
         run: |
           export FREEKERF_HOME="$(mktemp -d)"
-          set +e
-          xvfb-run -a timeout 15 target/debug/freekerf-desktop
-          code=$?
-          test "$code" -eq 124 || { echo "the app exited with $code"; exit 1; }
+          # the app's own exit code (xvfb-run may fail its own cleanup and replace it)
+          xvfb-run -a sh -c 'timeout 15 target/debug/freekerf-desktop; echo $? > "$FREEKERF_HOME/exit-code"' || true
+          code="$(cat "$FREEKERF_HOME/exit-code")"
+          test "$code" -eq 124 || { echo "the app exited with $code (124 = still running after 15 s)"; exit 1; }
 
   conformance:
     # conformance's protocol and golden (G-code) layers against the Rust build
