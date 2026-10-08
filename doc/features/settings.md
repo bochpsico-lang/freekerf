@@ -50,6 +50,7 @@ allow_machine = false
 allow_laser = false
 
 [ui]                        # desktop app appearance (M4a)
+language = "auto"           # auto | a locale of ui/i18n (en, pt-BR, de, fr...)
 theme = "dark"              # dark | light
 high_contrast = false
 density = "auto"            # auto | compact | comfortable

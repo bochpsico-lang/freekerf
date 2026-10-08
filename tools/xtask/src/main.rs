@@ -9,6 +9,8 @@
 //! * `sync-tokens [--design <dir>] [--check]`: tokens, icons, fonts and app icons
 //!   from `freekerf/design` at the commit of `ui/tokens/design.lock` (default
 //!   checkout: `$FREEKERF_DESIGN` or `../design`);
+//! * `resx2ftl --lasergrbl <checkout> [--check]`: LaserGRBL translations that still
+//!   apply, as `ui/i18n/<locale>/lasergrbl.ftl` (mapping in `ui/i18n/lasergrbl.toml`);
 //! * `gen-ts`: same as `gen-docs` (the TypeScript types of `ui/web/src/gen/` are
 //!   generated files too).
 
@@ -22,6 +24,7 @@ use serde_json::Value;
 
 mod design;
 mod layers;
+mod resx;
 mod ts;
 
 fn main() -> ExitCode {
@@ -31,8 +34,9 @@ fn main() -> ExitCode {
         Some("gen-docs" | "gen-ts") => gen_docs(false),
         Some("check-docs") => gen_docs(true),
         Some("sync-tokens") => sync_tokens(&args[1..]),
+        Some("resx2ftl") => resx2ftl(&args[1..]),
         _ => {
-            eprintln!("usage: cargo xtask <check-layers|gen-docs|gen-ts|check-docs|sync-tokens>");
+            eprintln!("usage: cargo xtask <check-layers|gen-docs|gen-ts|check-docs|sync-tokens|resx2ftl>");
             return ExitCode::from(2);
         }
     };
@@ -196,5 +200,52 @@ fn sync_tokens(args: &[String]) -> Result<()> {
             "files differ from design {commit} (run `cargo xtask sync-tokens`): {}",
             stale.join(", ")
         )
+    }
+}
+
+fn resx2ftl(args: &[String]) -> Result<()> {
+    let check = args.iter().any(|a| a == "--check");
+    let checkout = args
+        .iter()
+        .position(|a| a == "--lasergrbl")
+        .and_then(|i| args.get(i + 1))
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("LASERGRBL_REPO").map(PathBuf::from))
+        .context("pass --lasergrbl <checkout of arkypita/LaserGRBL> (or set LASERGRBL_REPO)")?;
+    let outputs = resx::outputs(&root(), &checkout)?;
+    let mut stale = Vec::new();
+    for (path, text) in &outputs {
+        let full = root().join(path);
+        if std::fs::read_to_string(&full).ok().as_deref() == Some(text.as_str()) {
+            continue;
+        }
+        if check {
+            stale.push(path.display().to_string());
+        } else {
+            if let Some(d) = full.parent() {
+                std::fs::create_dir_all(d)?;
+            }
+            std::fs::write(&full, text)?;
+            println!("wrote {}", path.display());
+        }
+    }
+    // files no longer generated (every message is now hand-written in that locale)
+    for dir in std::fs::read_dir(root().join("ui/i18n"))?.flatten() {
+        let file = dir.path().join("lasergrbl.ftl");
+        let rel = file.strip_prefix(root()).unwrap_or(&file).to_path_buf();
+        if file.exists() && !outputs.iter().any(|(p, _)| *p == rel) {
+            if check {
+                stale.push(rel.display().to_string());
+            } else {
+                std::fs::remove_file(&file)?;
+                println!("removed {}", rel.display());
+            }
+        }
+    }
+    if stale.is_empty() {
+        println!("resx2ftl: {} locale files in sync", outputs.len());
+        Ok(())
+    } else {
+        bail!("stale (run `cargo xtask resx2ftl`): {}", stale.join(", "))
     }
 }

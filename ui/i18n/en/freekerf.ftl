@@ -221,6 +221,35 @@ toast-homed = Homing done.
 toast-origin = Work origin set here.
 
 ## settings
+settings-tab-display = Display
+settings-tab-machine = Machine
+settings-tab-job = Job code
+settings-tab-safety = Safety
+settings-tab-automation = Automation
+settings-langAuto = Automatic (system language)
+settings-firmware = Firmware
+settings-baud = Speed (baud)
+settings-streaming = Streaming
+settings-streaming-Buffered = Buffered (fast)
+settings-streaming-Synchronous = Synchronous (safe)
+settings-streaming-RepeatOnError = Repeat on error
+settings-statusMs = Status every (ms)
+settings-resetOnConnect = Reset the board when connecting
+settings-supportPwm = Hardware PWM
+settings-autoCooling = Automatic cooling pauses
+settings-jogSpeed = Jog speed (mm/min)
+settings-header = Header
+settings-passes = Between passes
+settings-footer = Footer
+settings-jobHint = G-code sent before the job, between passes and after it. [expr] is evaluated; !, ~, ?, ctrl-x and 0xNN are sent at once.
+settings-countdown = Countdown before "Fire laser"
+settings-userOnly = Only you can change this, with `freekerf config set` (scripts and agents cannot).
+settings-mcp = AI agents (MCP server)
+settings-mcpMachine = Agents may move the machine
+settings-mcpLaser = Agents may ask to fire the laser
+settings-on = On
+settings-off = Off
+settings-automationNote = Off by default. Even when allowed, the laser only fires after you confirm on this screen.
 settings-title = Display and input
 settings-theme = Theme
 

@@ -86,7 +86,7 @@ export class FakeService implements AppService {
   };
   settings: Settings = {
     version: 1,
-    ui: { theme: 'dark', high_contrast: false, density: 'auto', units: 'mm' },
+    ui: { language: 'en', theme: 'dark', high_contrast: false, density: 'auto', units: 'mm' },
   };
   private nextToast = 1;
   /** Tool path returned by `toolpath()` (set by `job.load_text`, or by tests). */

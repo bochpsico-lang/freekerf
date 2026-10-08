@@ -5,7 +5,7 @@
   // view state in Rust (PLAN §9: the UI changes app state only through actions).
   import { setApp, type AppContext, type LaserRequest } from './context';
   import { flags } from './flags';
-  import { t } from './i18n/index.svelte';
+  import { setLocale, t } from './i18n/index.svelte';
   import ConsolePanel from './produce/ConsolePanel.svelte';
   import FireConfirmation from './produce/FireConfirmation.svelte';
   import MachinePanel from './produce/MachinePanel.svelte';
@@ -81,6 +81,8 @@
   let zoom = $state(1);
   // the narrow layout is machine-only (design/ux.md "Layouts")
   const mode = $derived(env.layout === 'narrow' || !flags.designMode ? 'produce' : view.mode);
+
+  $effect(() => setLocale(settings.ui.language));
 
   $effect(() => {
     const root = document.documentElement;

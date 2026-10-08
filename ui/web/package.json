@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "licenses": "node scripts/check-licenses.mjs",
-    "check:bundle": "node scripts/check-bundle.mjs"
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "test:web": "playwright test"
   },
   "dependencies": {
     "@fluent/bundle": "^0.19.1",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@testing-library/svelte": "^5.4.2",
     "@types/node": "^24.19.1",

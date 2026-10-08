@@ -668,6 +668,8 @@ export type UiSettings = {
   density?: Density;
   /** High contrast (on top of the theme). */
   high_contrast?: boolean;
+  /** Language: `auto` (the system's) or a locale of `ui/i18n` (`en`, `pt-BR`, `de`...). */
+  language?: string;
   /** Theme. */
   theme?: Theme;
   /** Units shown. */

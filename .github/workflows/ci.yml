@@ -50,6 +50,10 @@ jobs:
           path: design
       - name: tokens, icons and fonts match freekerf/design
         run: cargo xtask sync-tokens --design design --check
+      - name: LaserGRBL translations (ui/i18n/*/lasergrbl.ftl) match the pinned commit
+        run: |
+          git clone --quiet --filter=blob:none --no-checkout https://github.com/arkypita/LaserGRBL lasergrbl
+          cargo xtask resx2ftl --lasergrbl lasergrbl --check
       - name: rustdoc
         run: cargo doc --workspace --no-deps
         env:
@@ -147,6 +151,10 @@ jobs:
       - run: npm run check
       - name: unit and component tests with coverage
         run: npm run coverage
+      - name: web tests in Chromium (long strings in German, three layouts)
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:web
       - run: npm run build
       - name: the fake service is not in the production bundle
         run: npm run check:bundle

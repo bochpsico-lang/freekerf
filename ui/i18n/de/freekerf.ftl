@@ -221,6 +221,35 @@ toast-homed = Referenzfahrt abgeschlossen.
 toast-origin = Werkstücknullpunkt hier gesetzt.
 
 ## settings
+settings-tab-display = Anzeige
+settings-tab-machine = Maschine
+settings-tab-job = Auftragscode
+settings-tab-safety = Sicherheit
+settings-tab-automation = Automatisierung
+settings-langAuto = Automatisch (Systemsprache)
+settings-firmware = Firmware
+settings-baud = Übertragungsgeschwindigkeit (Baud)
+settings-streaming = Übertragungsmodus
+settings-streaming-Buffered = Gepuffert (schnell)
+settings-streaming-Synchronous = Synchron (sicher)
+settings-streaming-RepeatOnError = Bei Fehler wiederholen
+settings-statusMs = Statusabfrage alle (ms)
+settings-resetOnConnect = Steuerung beim Verbinden zurücksetzen
+settings-supportPwm = Hardware-PWM
+settings-autoCooling = Automatische Abkühlpausen
+settings-jogSpeed = Verfahrgeschwindigkeit (mm/min)
+settings-header = Kopfzeilen-Code
+settings-passes = Zwischen den Durchgängen
+settings-footer = Fußzeilen-Code
+settings-jobHint = G-Code, der vor dem Auftrag, zwischen den Durchgängen und danach gesendet wird. [expr] wird ausgewertet; !, ~, ?, ctrl-x und 0xNN werden sofort gesendet.
+settings-countdown = Countdown vor „Laser auslösen“
+settings-userOnly = Nur Sie können das ändern, mit `freekerf config set` (Skripte und Agenten nicht).
+settings-mcp = KI-Agenten (MCP-Server)
+settings-mcpMachine = Agenten dürfen die Maschine bewegen
+settings-mcpLaser = Agenten dürfen das Auslösen des Lasers anfordern
+settings-on = Ein
+settings-off = Aus
+settings-automationNote = Standardmäßig aus. Auch wenn erlaubt, feuert der Laser erst, nachdem Sie auf diesem Bildschirm bestätigt haben.
 settings-title = Darstellung und Eingabe
 settings-theme = Farbschema
 

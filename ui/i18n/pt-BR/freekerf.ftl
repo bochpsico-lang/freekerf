@@ -221,6 +221,35 @@ toast-homed = Referenciamento concluído.
 toast-origin = Origem de trabalho definida aqui.
 
 ## settings
+settings-tab-display = Exibição
+settings-tab-machine = Máquina
+settings-tab-job = Código do trabalho
+settings-tab-safety = Segurança
+settings-tab-automation = Automação
+settings-langAuto = Automático (idioma do sistema)
+settings-firmware = Firmware
+settings-baud = Velocidade (baud)
+settings-streaming = Envio
+settings-streaming-Buffered = Com buffer (rápido)
+settings-streaming-Synchronous = Síncrono (seguro)
+settings-streaming-RepeatOnError = Repetir em caso de erro
+settings-statusMs = Estado a cada (ms)
+settings-resetOnConnect = Reiniciar a placa ao conectar
+settings-supportPwm = PWM por hardware
+settings-autoCooling = Pausas automáticas de resfriamento
+settings-jogSpeed = Velocidade do jog (mm/min)
+settings-header = Cabeçalho
+settings-passes = Entre passadas
+settings-footer = Rodapé
+settings-jobHint = G-code enviado antes do trabalho, entre passadas e depois dele. [expr] é avaliado; !, ~, ?, ctrl-x e 0xNN são enviados na hora.
+settings-countdown = Contagem antes de "Disparar laser"
+settings-userOnly = Só você pode mudar isso, com `freekerf config set` (scripts e agentes não podem).
+settings-mcp = Agentes de IA (servidor MCP)
+settings-mcpMachine = Agentes podem mover a máquina
+settings-mcpLaser = Agentes podem pedir para disparar o laser
+settings-on = Ligado
+settings-off = Desligado
+settings-automationNote = Desligado por padrão. Mesmo quando permitido, o laser só dispara depois que você confirma nesta tela.
 settings-title = Exibição e entrada
 settings-theme = Tema
 

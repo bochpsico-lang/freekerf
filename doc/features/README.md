@@ -23,6 +23,7 @@ tests and divergences from LaserGRBL. The action catalogue is generated.
 | [shell.md](shell.md) | app shell: view state, layouts, STOP, dialogs, keyboard, dispatch-only | M4a |
 | [fire-confirmation.md](fire-confirmation.md) | the human confirmation before any laser action | M4a |
 | [produce-mode.md](produce-mode.md) | machine panel, jog, frame, overrides, console, recovery | M4a |
+| [i18n.md](i18n.md) | Fluent translations, language setting, LaserGRBL translations (`resx2ftl`) | M4a |
 | [theming.md](theming.md) | themes, high contrast, density, units | M4a |
 | [canvas.md](canvas.md) | the canvas: renderer, gestures, G-code preview, head, performance | M4a |
 | [desktop-app.md](desktop-app.md) | the Tauri app, its boundary with the service, generated types, design system | M4a |
