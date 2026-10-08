@@ -1,4 +1,9 @@
+import { reportBench } from './ipc/bench';
 import { TauriService } from './ipc/tauri';
-import { start } from './start';
+import { start, startBench } from './start';
 
-start(new TauriService());
+if (location.hash === '#bench-canvas') {
+  void startBench().then(reportBench);
+} else {
+  start(new TauriService());
+}

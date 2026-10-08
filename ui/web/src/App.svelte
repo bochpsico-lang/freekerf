@@ -1,8 +1,12 @@
 <script lang="ts">
+  import Canvas from './canvas/Canvas.svelte';
   import type { AppService } from './service';
   import type { MachineState } from './state/machine.svelte';
+  import type { PreviewState } from './state/preview.svelte';
 
-  let { service, machine }: { service: AppService; machine: MachineState } = $props();
+  let { service, machine, preview }: { service: AppService; machine: MachineState; preview: PreviewState } =
+    $props();
+  const workArea = { x: 0, y: 0, width: 400, height: 400 };
 
   const labels = {
     offline: 'Disconnected',
@@ -41,9 +45,10 @@
   <button class="estop" onclick={() => run(() => service.dispatch('machine.stop', {}))}>STOP</button>
 </header>
 <main class="stage">
+  <Canvas {workArea} toolpath={preview.toolpath} head={preview.head} executed={preview.head?.executed ?? 0} />
   {#if error}<p class="error" role="alert">{error}</p>{/if}
   {#if machine.state}
-    <p class="mono">
+    <p class="mono readout">
       X {machine.state.machine.work_position.x.toFixed(2)} · Y {machine.state.machine.work_position.y.toFixed(
         2,
       )}

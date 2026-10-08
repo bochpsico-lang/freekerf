@@ -1,7 +1,10 @@
 //! The service as seen from the window, without Tauri types (unit-testable).
 
+use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
+use freekerf_service::preview::{HEAD_FRAME_BYTES, head_frame};
 use freekerf_service::{ActionError, ActionSpec, Caller, CallerKind, Service, Stores, Tier};
 use serde_json::Value;
 
@@ -45,6 +48,42 @@ impl Bridge {
     #[must_use]
     pub fn catalog(&self) -> Vec<ActionSpec> {
         self.service.specs()
+    }
+
+    /// The tool path of the loaded program (binary, `freekerf_service::preview`).
+    #[must_use]
+    pub fn preview(&self) -> Option<Arc<Vec<u8>>> {
+        self.service.preview()
+    }
+
+    /// The current head frame (`freekerf_service::preview::head_frame`).
+    #[must_use]
+    pub fn head(&self) -> [u8; HEAD_FRAME_BYTES] {
+        head_frame(&self.service.snapshot())
+    }
+
+    /// Sends a head frame to `send` every `period` when it changed, on a thread,
+    /// until `send` returns `false`.
+    pub fn forward_head(&self, period: Duration, send: impl Fn(Vec<u8>) -> bool + Send + 'static) {
+        let bridge = self.clone();
+        let spawned = thread::Builder::new()
+            .name("freekerf-desktop-head".into())
+            .spawn(move || {
+                let mut last = None;
+                loop {
+                    let frame = bridge.head();
+                    if last != Some(frame) {
+                        if !send(frame.to_vec()) {
+                            break;
+                        }
+                        last = Some(frame);
+                    }
+                    thread::sleep(period);
+                }
+            });
+        if let Err(e) = spawned {
+            tracing::error!("cannot start the head forwarder: {e}");
+        }
     }
 
     /// Forwards every service event as JSON to `send` on a thread, until `send`
@@ -102,6 +141,32 @@ mod tests {
     }
 
     #[test]
+    fn preview_and_head() {
+        let b = bridge();
+        assert!(b.preview().is_none());
+        b.dispatch(
+            "job.load_text",
+            serde_json::json!({"name": "a.nc", "gcode": "M3 S100\nG1 X10 F100\n"}),
+        )
+        .unwrap();
+        let p = b.preview().unwrap();
+        assert_eq!(&p[0..4], b"FKTP");
+        assert_eq!(b.head().len(), HEAD_FRAME_BYTES);
+    }
+
+    #[test]
+    fn head_frames_are_sent_on_change_until_the_receiver_goes() {
+        let b = bridge();
+        let (tx, rx) = std::sync::mpsc::channel();
+        b.forward_head(Duration::from_millis(1), move |f| tx.send(f).is_ok());
+        let first = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(first.len(), HEAD_FRAME_BYTES);
+        // unchanged state: no second frame
+        assert!(rx.recv_timeout(Duration::from_millis(50)).is_err());
+        drop(rx);
+    }
+
+    #[test]
     fn stop_is_always_allowed() {
         bridge().dispatch("machine.stop", serde_json::json!({})).unwrap();
     }
@@ -113,7 +178,7 @@ mod tests {
         b.forward_events(move |e| tx.send(e).is_ok());
         b.dispatch("machine.connect", serde_json::json!({"emulator": true}))
             .unwrap();
-        let first = rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        let first = rx.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(first["event"].is_string(), "{first}");
         b.dispatch("machine.disconnect", serde_json::json!({})).unwrap();
     }

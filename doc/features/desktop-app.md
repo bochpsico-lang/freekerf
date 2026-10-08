@@ -24,6 +24,9 @@ for the Design mode screens until M2 lands.
 | `dispatch(action, params)` | runs an action of the registry ([actions.md](actions.md)) and returns its JSON result or an `ActionError` |
 | `catalog()` | the action specs (name, tier, parameter and result schemas) |
 | `subscribe(events)` | streams service events (`EventMessage` JSON) on a Tauri channel |
+| `preview()` | the tool path of the loaded program, raw bytes ([canvas.md](canvas.md)) |
+| `subscribe_head(frames)` | head frames, raw 24 bytes, up to 60 Hz ([canvas.md](canvas.md)) |
+| `bench_report(report)` | only with `--bench-canvas`: prints the canvas benchmark and exits |
 
 - The window calls as `{kind: user, name: "desktop", max_tier: machine}`. Actions
   of tier `laser` (`job.run`, `job.resume`, `machine.send`, `machine.custom_code`)

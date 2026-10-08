@@ -39,4 +39,11 @@ export interface AppService {
   catalog(): Promise<ActionSpec[]>;
   /** Service events from now on; returns the unsubscribe function. */
   subscribe(listener: (event: EventMessage) => void): () => void;
+  /**
+   * Tool path of the loaded program, raw (`canvas/toolpath.ts`, format "FKTP");
+   * empty when no program is loaded.
+   */
+  toolpath(): Promise<ArrayBuffer>;
+  /** Head frames (raw, 24 bytes, up to 60 Hz while they change); returns the unsubscribe function. */
+  subscribeHead(listener: (frame: ArrayBuffer) => void): () => void;
 }

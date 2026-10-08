@@ -14,6 +14,8 @@ function isActionError(e: unknown): e is ActionError {
 export class TauriService implements AppService {
   private listeners = new Set<(event: EventMessage) => void>();
   private channel: Channel<EventMessage> | null = null;
+  private headListeners = new Set<(frame: ArrayBuffer) => void>();
+  private headChannel: Channel<ArrayBuffer> | null = null;
 
   async dispatch<A extends ActionName>(action: A, params: Params<A>): Promise<Result<A>> {
     try {
@@ -40,4 +42,28 @@ export class TauriService implements AppService {
     }
     return () => this.listeners.delete(listener);
   }
+
+  async toolpath(): Promise<ArrayBuffer> {
+    return toArrayBuffer(await invoke<ArrayBuffer | number[]>('preview'));
+  }
+
+  subscribeHead(listener: (frame: ArrayBuffer) => void): () => void {
+    this.headListeners.add(listener);
+    if (!this.headChannel) {
+      const channel = new Channel<ArrayBuffer>();
+      channel.onmessage = (frame) => {
+        const buf = toArrayBuffer(frame);
+        for (const l of this.headListeners) l(buf);
+      };
+      this.headChannel = channel;
+      void invoke('subscribe_head', { frames: channel });
+    }
+    return () => this.headListeners.delete(listener);
+  }
+}
+
+/** Raw IPC bodies arrive as ArrayBuffer (some platforms give a number array). */
+function toArrayBuffer(data: ArrayBuffer | ArrayLike<number>): ArrayBuffer {
+  if (data instanceof ArrayBuffer) return data;
+  return Uint8Array.from(data).buffer;
 }

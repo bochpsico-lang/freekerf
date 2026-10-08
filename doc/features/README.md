@@ -20,4 +20,5 @@ tests and divergences from LaserGRBL. The action catalogue is generated.
 | [cli.md](cli.md) | the `freekerf` command line | M1 |
 | [host-protocol.md](host-protocol.md) | `freekerf host --stdio` (JSON Lines) | M1 |
 | [actions.md](actions.md) | the action registry (generated) | M1 |
+| [canvas.md](canvas.md) | the canvas: renderer, gestures, G-code preview, head, performance | M4a |
 | [desktop-app.md](desktop-app.md) | the Tauri app, its boundary with the service, generated types, design system | M4a |

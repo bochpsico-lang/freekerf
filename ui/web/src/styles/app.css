@@ -98,8 +98,18 @@ body {
 
 .stage {
   flex: 1;
-  padding: var(--fk-space-4);
+  position: relative;
+  min-height: 0;
   background: var(--fk-color-surface-canvas);
+}
+
+.stage .readout,
+.stage .error {
+  position: absolute;
+  right: var(--fk-space-3);
+  bottom: var(--fk-space-2);
+  margin: 0;
+  pointer-events: none;
 }
 
 .error {

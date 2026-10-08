@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub mod analysis;
+pub mod preview;
 
 pub use freekerf_session::{ActionError, ActionSpec, Caller, CallerKind, Tier};
 
@@ -212,6 +213,8 @@ impl SettingsStore for FileStore {
 struct Loaded {
     name: String,
     program: Program,
+    /// Tool path buffer ([`preview`]), built on the first request.
+    preview: Option<Arc<Vec<u8>>>,
 }
 
 /// State shared by the actions.
@@ -341,6 +344,19 @@ impl Service {
     #[must_use]
     pub fn snapshot(&self) -> HostSnapshot {
         self.inner.machine.snapshot()
+    }
+
+    /// The tool path of the loaded program as the binary buffer of [`preview`]
+    /// (built once per program), or `None` when no program is loaded. Bulk data for
+    /// the canvas: front ends read it directly, not through an action.
+    #[must_use]
+    pub fn preview(&self) -> Option<Arc<Vec<u8>>> {
+        let options = self.inner.analysis_options();
+        let mut loaded = lock(&self.inner.loaded);
+        let l = loaded.as_mut()?;
+        Some(Arc::clone(l.preview.get_or_insert_with(|| {
+            Arc::new(preview::encode(&l.program, &options))
+        })))
     }
 
     /// STOP without going through the registry (also bound to Ctrl-C by the CLI).
@@ -1038,7 +1054,11 @@ fn load_program(s: &Inner, name: String, bytes: &[u8]) -> Result<ProgramInfo, Ac
     let program = Program::parse_bytes(bytes, &s.analysis_options());
     let copy = program.clone();
     s.host_result(move |h, _| h.set_program(copy))?;
-    let loaded = Loaded { name, program };
+    let loaded = Loaded {
+        name,
+        program,
+        preview: None,
+    };
     let info = program_info(&loaded);
     *lock(&s.loaded) = Some(loaded);
     s.publish(&ServiceEvent::ProgramLoaded);

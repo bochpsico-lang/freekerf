@@ -407,6 +407,7 @@ Updated by every PR that delivers a milestone item.
 | M1: divergences | — | conformance (no marker needed so far) | `doc/divergences.md` |
 | M3: UI toolkit decision (Tauri 2) | — | — | `doc/research/ui-toolkit.md`, `doc/adr/0006-ui-toolkit.md` |
 | M4a: desktop skeleton (Tauri app, Svelte front end, generated types, design tokens, CI) | `apps/desktop/src-tauri` (`freekerf-desktop`), `ui/web`, `ui/tokens`, `tools/xtask/src/{ts,design}.rs`, `Registry::describe_result`, `EventMessage` | `bridge.rs` unit tests, `ui/web` Vitest (`src/**/*.test.ts`, `tests/unit/`), xtask `ts`/`design` tests, CI `ui`, `desktop`, `desktop-platforms` | `doc/features/desktop-app.md`, ADR 0011 (framework), ADR 0013 (types), `ui/CREDITS.md` |
+| M4a: canvas (WebGL2 renderer, scene cache, gestures, rulers, grid, G-code preview, head at 60 Hz, `--bench-canvas`) | `ui/web/src/canvas/`, `freekerf-service/src/preview.rs`, `freekerf-desktop` (`preview`, `subscribe_head`, `bench.rs`) | `ui/web/src/canvas/*.test.ts`, `preview.rs` tests (shared fixture `ui/web/tests/fixtures/toolpath-v1.bin`), bridge tests | `doc/features/canvas.md`, ADR 0012, `doc/benchmarks.md` (software floor; GPU measurement pending) |
 
 ## 14. Decisions already taken
 
