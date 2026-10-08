@@ -44,7 +44,6 @@ interface Doc {
   next_id: number;
 }
 
-
 function apply(m: Affine, x: number, y: number): [number, number] {
   return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 }
