@@ -54,9 +54,14 @@ theme = "dark"              # dark | light
 high_contrast = false
 density = "auto"            # auto | compact | comfortable
 units = "mm"                # mm | in (display only; the machine works in mm)
+
+[[buttons]]                 # custom buttons of the machine panel (M4a); none by default
+label = "Air on"
+code = "M8"                 # custom code: [expr] allowed; runs through the fire confirmation
+icon = "air"                # optional, an icon name of the design system
 ```
 
-`[ui]` was added in M4a with defaults for every key, so older files load unchanged
+`[ui]` and `[[buttons]]` were added in M4a with defaults for every key, so older files load unchanged
 and no migration (or version bump) is needed; `ui_section_is_optional_and_settable`
 tests it. The desktop app reads and writes these keys only through
 `settings.get` / `settings.set` ([theming.md](theming.md)).

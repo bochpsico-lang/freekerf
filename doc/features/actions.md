@@ -8,6 +8,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | --- | --- | --- |
 | `console.get` | read | Console rows (sent commands, answers, messages). |
 | `job.abort` | safety | Stops streaming the job and sends `M5` (lines already in the board still run; use machine.stop to stop at once). Always allowed. |
+| `job.frame` | machine | Runs the head around the bounds of the loaded program with the laser off (jog moves). |
 | `job.info` | read | The loaded program (name, lines, estimated time, range). |
 | `job.load` | edit | Loads and analyzes a G-code file. |
 | `job.load_text` | edit | Loads and analyzes G-code given as text. |
@@ -18,6 +19,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `machine.disconnect` | machine | Closes the connection. |
 | `machine.feed_hold` | safety | Feed hold (pause the motion). Always allowed. |
 | `machine.home` | machine | Runs the homing cycle (`$H`). |
+| `machine.info` | read | Work area, laser mode, highest power and laser module counters, from the board settings. |
 | `machine.jog` | machine | Jogs one step in a direction (laser off). |
 | `machine.jog_stop` | safety | Stops a continuous jog. Always allowed. |
 | `machine.jog_to` | machine | Jogs to a work position (laser off). |
@@ -30,6 +32,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `machine.send` | laser | Sends one line of G-code or a `$` command (not during a job). It can turn the laser on. |
 | `machine.set_zero` | machine | Sets the current position as work zero (`G92 X0 Y0 Z0`). |
 | `machine.stop` | safety | STOP: soft reset of the board (laser off, queues flushed). Always allowed. |
+| `machine.system_command` | machine | Sends a `$` command (`$$`, `$I`, `$H`, `$X`, `$N=V`, `$J=...`; not during a job). It cannot turn the laser on. |
 | `machine.unlock` | machine | Unlocks the alarm state (`$X`). |
 | `machine.write_settings` | machine | Writes board settings (`$N=V`), one at a time; returns when the board answered all of them. |
 | `settings.get` | read | Reads the settings (all, or one dotted key). |
@@ -62,6 +65,14 @@ Console rows (sent commands, answers, messages).
 Stops streaming the job and sends `M5` (lines already in the board still run; use machine.stop to stop at once). Always allowed.
 
 No parameters.
+
+### `job.frame`
+
+Runs the head around the bounds of the loaded program with the laser off (jog moves).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `feed_mm_min` | no | Feed in mm/min (default: the jog setting). |
 
 ### `job.info`
 
@@ -138,6 +149,12 @@ No parameters.
 ### `machine.home`
 
 Runs the homing cycle (`$H`).
+
+No parameters.
+
+### `machine.info`
+
+Work area, laser mode, highest power and laser module counters, from the board settings.
 
 No parameters.
 
@@ -228,6 +245,14 @@ No parameters.
 STOP: soft reset of the board (laser off, queues flushed). Always allowed.
 
 No parameters.
+
+### `machine.system_command`
+
+Sends a `$` command (`$$`, `$I`, `$H`, `$X`, `$N=V`, `$J=...`; not during a job). It cannot turn the laser on.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `line` | yes | A `$` command (`$$`, `$I`, `$H`, `$X`, `$#`, `$G`, `$N=V`, `$J=...`): never turns the laser on. Other G-code goes through `machine.send` (tier `laser`). |
 
 ### `machine.unlock`
 

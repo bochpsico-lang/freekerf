@@ -393,3 +393,43 @@ fn view_actions_change_the_view_and_publish_it() {
     let denied = service.dispatch(&reader, "view.set_mode", json!({"mode": "produce"}));
     assert!(matches!(denied, Err(ActionError::PermissionDenied { .. })));
 }
+
+#[test]
+fn produce_mode_helpers_frame_info_and_system_commands() {
+    let s = connected();
+    // machine.info: the emulator's $$ table was read on connect
+    let info = call(&s, "machine.info", json!({}));
+    assert_eq!(info["settings_known"], true, "{info}");
+    assert!(info["table_width_mm"].as_f64().unwrap() > 0.0);
+    // system commands only; they need the machine tier, not laser
+    let machine = Caller::new(CallerKind::Agent, "agent", Tier::Machine);
+    s.dispatch(&machine, "machine.system_command", json!({"line": "$I"}))
+        .unwrap();
+    for bad in ["G1 X10 S1000", "M3 S500", "$$\nM3"] {
+        let e = s
+            .dispatch(&machine, "machine.system_command", json!({"line": bad}))
+            .unwrap_err();
+        assert!(matches!(e, ActionError::InvalidParams(_)), "{bad}: {e:?}");
+    }
+    // frame: refused without a drawing, then runs around the drawing range
+    let e = s.dispatch(&machine, "job.frame", json!({})).unwrap_err();
+    assert!(matches!(e, ActionError::Refused(_)), "{e:?}");
+    call(
+        &s,
+        "job.load_text",
+        json!({"name": "sq.nc", "gcode": "G0 X10 Y5\nM3 S800\nG1 X30 F3000\nG1 Y25\nM5\n"}),
+    );
+    s.dispatch(&machine, "job.frame", json!({"feed_mm_min": 6000.0}))
+        .unwrap();
+    // the head visits the corners and ends back at the first one
+    wait_state(
+        &s,
+        |st| {
+            let p = &st["machine"]["work_position"];
+            st["machine"]["status"] == "Idle"
+                && (p["x"].as_f64().unwrap() - 10.0).abs() < 0.01
+                && (p["y"].as_f64().unwrap() - 5.0).abs() < 0.01
+        },
+        20,
+    );
+}

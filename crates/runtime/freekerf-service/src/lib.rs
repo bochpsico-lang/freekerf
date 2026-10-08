@@ -674,6 +674,44 @@ pub struct ConsoleParams {
     pub last: Option<usize>,
 }
 
+/// `machine.system_command`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SystemCommandParams {
+    /// A `$` command (`$$`, `$I`, `$H`, `$X`, `$#`, `$G`, `$N=V`, `$J=...`): never turns
+    /// the laser on. Other G-code goes through `machine.send` (tier `laser`).
+    pub line: String,
+}
+
+/// `job.frame`.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameParams {
+    /// Feed in mm/min (default: the jog setting).
+    pub feed_mm_min: Option<f64>,
+}
+
+/// Result of `machine.info`: what the board told about itself.
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct MachineInfo {
+    /// Work area width (`$130`), mm.
+    pub table_width_mm: f64,
+    /// Work area height (`$131`), mm.
+    pub table_height_mm: f64,
+    /// Laser mode (`$32`).
+    pub laser_mode: bool,
+    /// Highest S (`$30`).
+    pub max_power: f64,
+    /// Homing enabled (`$22`).
+    pub homing_enabled: bool,
+    /// The `$$` table was read.
+    pub settings_known: bool,
+    /// Laser module life counters.
+    pub laser_life: Vec<freekerf_protocol::LaserLifeCounter>,
+    /// Index of the module in use, if known.
+    pub laser_in_use: Option<usize>,
+}
+
 /// `view.set_mode`.
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -1026,6 +1064,41 @@ fn build_registry() -> Registry<Inner> {
         },
     ));
     add(r.register(
+        "machine.system_command",
+        "Sends a `$` command (`$$`, `$I`, `$H`, `$X`, `$N=V`, `$J=...`; not during a job). It cannot turn the laser on.",
+        Tier::Machine,
+        |s: &Inner, p: SystemCommandParams| {
+            let line = p.line.trim().to_owned();
+            if !is_system_command(&line) {
+                return Err(ActionError::InvalidParams(
+                    "only `$` commands; other G-code needs machine.send".into(),
+                ));
+            }
+            s.host_result(move |h, now| h.send_command(&line, now))
+        },
+    ));
+    add(r.register(
+        "machine.info",
+        "Work area, laser mode, highest power and laser module counters, from the board settings.",
+        Tier::Read,
+        |s: &Inner, _: NoParams| {
+            s.host(|h, _| {
+                let st = h.settings();
+                let life = h.laser_life();
+                MachineInfo {
+                    table_width_mm: decimal_to_f64(st.table_width()),
+                    table_height_mm: decimal_to_f64(st.table_height()),
+                    laser_mode: st.laser_mode(),
+                    max_power: decimal_to_f64(st.max_pwm()),
+                    homing_enabled: st.homing_enabled(),
+                    settings_known: !st.is_empty(),
+                    laser_life: life.counters.clone(),
+                    laser_in_use: life.current,
+                }
+            })
+        },
+    ));
+    add(r.register(
         "machine.send",
         "Sends one line of G-code or a `$` command (not during a job). It can turn the laser on.",
         Tier::Laser,
@@ -1075,6 +1148,34 @@ fn build_registry() -> Registry<Inner> {
         "The loaded program (name, lines, estimated time, range).",
         Tier::Read,
         |s: &Inner, _: NoParams| Ok(lock(&s.loaded).as_ref().map(program_info)),
+    ));
+    add(r.register(
+        "job.frame",
+        "Runs the head around the bounds of the loaded program with the laser off (jog moves).",
+        Tier::Machine,
+        |s: &Inner, p: FrameParams| {
+            let range = lock(&s.loaded)
+                .as_ref()
+                .and_then(|l| program_info(l).drawing_range)
+                .ok_or_else(|| ActionError::Refused("no program with a drawing loaded".into()))?;
+            let feed = p
+                .feed_mm_min
+                .unwrap_or_else(|| lock(&s.settings).jog.speed_mm_min);
+            #[allow(clippy::cast_possible_truncation)]
+            let (x0, y0, x1, y1, feed) = (
+                range[0] as f32,
+                range[1] as f32,
+                range[2] as f32,
+                range[3] as f32,
+                feed as f32,
+            );
+            s.host_result(move |h, now| {
+                for (x, y) in [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)] {
+                    h.jog_to(x, y, feed, now)?;
+                }
+                Ok(())
+            })
+        },
     ));
     add(r.register(
         "job.run",
@@ -1204,6 +1305,7 @@ fn describe_results(r: &mut Registry<Inner>) {
     add(r.describe_result::<ProgramInfo>("job.load_text"));
     add(r.describe_result::<Option<ProgramInfo>>("job.info"));
     add(r.describe_result::<ViewState>("view.get"));
+    add(r.describe_result::<MachineInfo>("machine.info"));
     add(r.describe_result::<u64>("view.toast"));
     for name in [
         "settings.set",
@@ -1223,8 +1325,10 @@ fn describe_results(r: &mut Registry<Inner>) {
         "machine.read_settings",
         "machine.write_settings",
         "machine.send",
+        "machine.system_command",
         "machine.custom_code",
         "machine.select_laser",
+        "job.frame",
         "job.run",
         "job.resume",
         "job.abort",
@@ -1240,6 +1344,15 @@ fn describe_results(r: &mut Registry<Inner>) {
     ] {
         add(r.describe_result::<()>(name));
     }
+}
+
+/// A `$` command (never turns the laser on).
+fn is_system_command(line: &str) -> bool {
+    line.starts_with('$') && !line.contains(['\n', '\r'])
+}
+
+fn decimal_to_f64(d: freekerf_gcode::Decimal) -> f64 {
+    freekerf_gcode::number::f64_from_decimal(d)
 }
 
 fn load_program(s: &Inner, name: String, bytes: &[u8]) -> Result<ProgramInfo, ActionError> {

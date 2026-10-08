@@ -116,6 +116,17 @@ obj-contrast = Contrast
 obj-dither = Dithering
 
 ## machine
+machine-emulator = FreeKerf emulator (no machine)
+machine-refreshPorts = Look for ports again
+machine-openGcode = Open G-code…
+machine-noProgram = No program loaded
+machine-lines = Lines
+machine-overrides = Overrides
+machine-ovFeed = Speed
+machine-ovPower = Power
+machine-ovRapid = Rapid moves
+machine-noButtons = No custom buttons yet.
+machine-laserLife = Laser module usage
 machine-connection = Connection
 machine-port = Port
 machine-connect = Connect
@@ -182,6 +193,8 @@ disc-title = Connection lost
 disc-body = The machine stopped answering at line { $n }. The controller turned the laser off.
 
 ## recover
+recover-restoreWco = Restore the work origin of the job
+recover-nothing = No interrupted job.
 recover-open = Recover job…
 recover-title = Recover job
 recover-cause = Cause
@@ -301,6 +314,7 @@ estop-title = Stop pressed
 estop-body = Laser off and controller reset at line { $n }. The position may be lost: home before going on.
 
 ## cause
+cause-other = interrupted
 cause-alarm = controller alarm
 cause-disc = lost connection
 cause-estop = manual stop (STOP)

@@ -73,6 +73,20 @@ export type ConsoleRow = {
   };
 };
 
+/**
+ * A custom button of the machine panel: G-code (custom code with `[expr]`) run on
+ * a click. Running it can turn the laser on, so it goes through the fire
+ * confirmation (`machine.custom_code`, tier `laser`).
+ */
+export type CustomButton = {
+  /** Custom code (`[expr]` allowed; `!`, `~`, `?`, `ctrl-x`, `0xNN` sent at once). */
+  code?: string;
+  /** Icon name of the design system (`target`, `air`...), optional. */
+  icon?: string | null;
+  /** Label. */
+  label?: string;
+};
+
 /** `machine.custom_code`. */
 export type CustomCodeParams = {
   /** Lines of custom code (`[expr]`, `!`, `~`, `?`, `ctrl-x`, `0xNN` allowed). */
@@ -175,6 +189,12 @@ export type FirmwareVersion = {
 export type FocusParams = {
   /** Element with the focus (`canvas`, `console`...), none when absent. */
   target?: string | null;
+};
+
+/** `job.frame`. */
+export type FrameParams = {
+  /** Feed in mm/min (default: the jog setting). */
+  feed_mm_min?: number | null;
 };
 
 /** State of the host for front ends. */
@@ -289,6 +309,36 @@ export type JogToParams = {
   y: number;
 };
 
+/** Usage of one laser module. */
+export type LaserLifeCounter = {
+  /** Brand. */
+  brand: string;
+  /** Emission time per 10 % power class (1-10 %, ..., 91-100 %), ms. */
+  classes_ms: number[];
+  /** Date the module died (no longer selected automatically). */
+  death_date?: string | null;
+  /** Unique id. */
+  id: string;
+  /** Last day it was used. */
+  last_usage?: string | null;
+  /** Model. */
+  model: string;
+  /** Date monitoring started. */
+  monitoring_date?: string | null;
+  /** Name given by the user (`Default` for the first one). */
+  name: string;
+  /** Emission time with power above 3 %, ms. */
+  non_zero_ms: number;
+  /** Emission time weighted by power, ms. */
+  normalized_power_ms: number;
+  /** Optical power in watts. */
+  optical_power_w?: number | null;
+  /** Purchase date (`YYYY-MM-DD`). */
+  purchase_date?: string | null;
+  /** Time in `Run`, ms. */
+  run_ms: number;
+};
+
 /** `job.load`. */
 export type LoadParams = {
   /** Path of a G-code file. */
@@ -301,6 +351,26 @@ export type LoadTextParams = {
   gcode: string;
   /** Name shown for the program. */
   name: string;
+};
+
+/** Result of `machine.info`: what the board told about itself. */
+export type MachineInfo = {
+  /** Homing enabled (`$22`). */
+  homing_enabled: boolean;
+  /** Index of the module in use, if known. */
+  laser_in_use?: number | null;
+  /** Laser module life counters. */
+  laser_life: LaserLifeCounter[];
+  /** Laser mode (`$32`). */
+  laser_mode: boolean;
+  /** Highest S (`$30`). */
+  max_power: number;
+  /** The `$$` table was read. */
+  settings_known: boolean;
+  /** Work area height (`$131`), mm. */
+  table_height_mm: number;
+  /** Work area width (`$130`), mm. */
+  table_width_mm: number;
 };
 
 /** How to reach the machine and how to talk to it. */
@@ -496,6 +566,15 @@ export type State = {
 /** Streaming mode. */
 export type Streaming = "Buffered" | "Synchronous" | "RepeatOnError";
 
+/** `machine.system_command`. */
+export type SystemCommandParams = {
+  /**
+   * A `$` command (`$$`, `$I`, `$H`, `$X`, `$#`, `$G`, `$N=V`, `$J=...`): never turns
+   * the laser on. Other G-code goes through `machine.send` (tier `laser`).
+   */
+  line: string;
+};
+
 /** The kind of a system operation. */
 export type SystemOpKind = "ReadSettings" | "ReadInfo" | "WriteSettings" | "WriteWifi";
 
@@ -654,6 +733,8 @@ export type EventMessage = {
 export type Settings = {
   /** Automation (user-only). */
   automation?: AutomationSettings;
+  /** Custom buttons of the machine panel (added in M4a; none by default). */
+  buttons?: CustomButton[];
   /** Job custom code. */
   job?: JobSettings;
   /** Jog. */
@@ -679,6 +760,12 @@ export interface Actions {
     params: NoParams;
     result: null;
     tier: "safety";
+  };
+  /** Runs the head around the bounds of the loaded program with the laser off (jog moves). */
+  "job.frame": {
+    params: FrameParams;
+    result: null;
+    tier: "machine";
   };
   /** The loaded program (name, lines, estimated time, range). */
   "job.info": {
@@ -739,6 +826,12 @@ export interface Actions {
     params: NoParams;
     result: null;
     tier: "machine";
+  };
+  /** Work area, laser mode, highest power and laser module counters, from the board settings. */
+  "machine.info": {
+    params: NoParams;
+    result: MachineInfo;
+    tier: "read";
   };
   /** Jogs one step in a direction (laser off). */
   "machine.jog": {
@@ -811,6 +904,12 @@ export interface Actions {
     params: NoParams;
     result: null;
     tier: "safety";
+  };
+  /** Sends a `$` command (`$$`, `$I`, `$H`, `$X`, `$N=V`, `$J=...`; not during a job). It cannot turn the laser on. */
+  "machine.system_command": {
+    params: SystemCommandParams;
+    result: null;
+    tier: "machine";
   };
   /** Unlocks the alarm state (`$X`). */
   "machine.unlock": {
@@ -917,6 +1016,7 @@ export type ActionName = keyof Actions;
 export const ACTION_TIERS = {
   "console.get": "read",
   "job.abort": "safety",
+  "job.frame": "machine",
   "job.info": "read",
   "job.load": "edit",
   "job.load_text": "edit",
@@ -927,6 +1027,7 @@ export const ACTION_TIERS = {
   "machine.disconnect": "machine",
   "machine.feed_hold": "safety",
   "machine.home": "machine",
+  "machine.info": "read",
   "machine.jog": "machine",
   "machine.jog_stop": "safety",
   "machine.jog_to": "machine",
@@ -939,6 +1040,7 @@ export const ACTION_TIERS = {
   "machine.send": "laser",
   "machine.set_zero": "machine",
   "machine.stop": "safety",
+  "machine.system_command": "machine",
   "machine.unlock": "machine",
   "machine.write_settings": "machine",
   "settings.get": "read",

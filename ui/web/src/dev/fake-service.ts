@@ -168,6 +168,31 @@ export class FakeService implements AppService {
         v.focus = (p as Params<'view.focus'>).target ?? null;
       }),
     'settings.get': () => structuredClone(this.settings),
+    'console.get': () => [],
+    'machine.info': () => ({
+      table_width_mm: 400,
+      table_height_mm: 300,
+      laser_mode: true,
+      max_power: 1000,
+      homing_enabled: false,
+      settings_known: this.state.machine.connected,
+      laser_life: [],
+      laser_in_use: null,
+    }),
+    'machine.list_ports': () => ['/dev/ttyUSB0'],
+    // machine actions without a model: recorded in `calls`, accepted
+    'machine.jog': () => null,
+    'machine.jog_stop': () => null,
+    'machine.jog_to': () => null,
+    'machine.home': () => null,
+    'machine.unlock': () => null,
+    'machine.set_zero': () => null,
+    'machine.overrides': () => null,
+    'machine.feed_hold': () => null,
+    'machine.resume': () => null,
+    'machine.system_command': () => null,
+    'job.frame': () => null,
+    'job.abort': () => null,
     'settings.set': (p) => {
       const { key, value } = p as Params<'settings.set'>;
       const parts = key.split('.');

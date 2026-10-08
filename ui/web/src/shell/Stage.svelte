@@ -12,10 +12,16 @@
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
   import { formatDuration } from '../lib/format';
+  import AlarmBanner from '../produce/AlarmBanner.svelte';
 
   let { onzoom }: { onzoom?: (realSize: number) => void } = $props();
   const { view, preview, machine, settings, service } = app();
-  const workArea = { x: 0, y: 0, width: 400, height: 400 };
+  // the work area from the board ($130/$131), 400×400 mm until it is known
+  const workArea = $derived(
+    machine.info?.settings_known
+      ? { x: 0, y: 0, width: machine.info.table_width_mm, height: machine.info.table_height_mm }
+      : { x: 0, y: 0, width: 400, height: 400 },
+  );
   /** CSS pixels per mm at 100 % (96 dpi). */
   const REAL_SIZE = 96 / 25.4;
   const COMMIT_MS = 250;
@@ -97,6 +103,7 @@
       </div>
     </div>
   {/if}
+  <AlarmBanner />
   <div class="canvas-tools" aria-label="View">
     <button
       class="icon-btn"

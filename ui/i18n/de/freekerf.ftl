@@ -116,6 +116,17 @@ obj-contrast = Kontrast
 obj-dither = Rasterung
 
 ## machine
+machine-emulator = FreeKerf-Emulator (ohne Maschine)
+machine-refreshPorts = Erneut nach Anschlüssen suchen
+machine-openGcode = G-Code öffnen…
+machine-noProgram = Kein Programm geladen
+machine-lines = Zeilen
+machine-overrides = Echtzeitanpassungen
+machine-ovFeed = Geschwindigkeit
+machine-ovPower = Leistung
+machine-ovRapid = Eilgangbewegungen
+machine-noButtons = Noch keine benutzerdefinierten Schaltflächen.
+machine-laserLife = Nutzung des Lasermoduls
 machine-connection = Verbindung
 machine-port = Anschluss
 machine-connect = Verbinden
@@ -182,6 +193,8 @@ disc-title = Verbindung unterbrochen
 disc-body = Die Maschine reagiert seit Zeile { $n } nicht mehr. Die Steuerung hat den Laser abgeschaltet.
 
 ## recover
+recover-restoreWco = Werkstücknullpunkt des Auftrags wiederherstellen
+recover-nothing = Kein unterbrochener Auftrag.
 recover-open = Auftrag wiederherstellen…
 recover-title = Auftrag wiederherstellen
 recover-cause = Ursache
@@ -301,6 +314,7 @@ estop-title = Stopp ausgelöst
 estop-body = Laser aus und Steuerung in Zeile { $n } zurückgesetzt. Die Position kann verloren sein: vor dem Fortsetzen eine Referenzfahrt durchführen.
 
 ## cause
+cause-other = unterbrochen
 cause-alarm = Alarm der Steuerung
 cause-disc = Verbindung unterbrochen
 cause-estop = manueller Stopp (STOPP)

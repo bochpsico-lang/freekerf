@@ -22,7 +22,7 @@ describe('App shell', () => {
 
   it('connects to the emulator from the machine panel', async () => {
     const { service, props } = await mountApp();
-    await fireEvent.click(screen.getByTestId('connect-emulator'));
+    await fireEvent.click(screen.getByTestId('connect'));
     await props.machine.refresh();
     await waitFor(() => expect(screen.getByTestId('state-chip').textContent).toContain('Ready'));
     expect(service.calls.some((c) => c.action === 'machine.connect')).toBe(true);
@@ -85,7 +85,7 @@ describe('App shell', () => {
       throw new Error('no emulator');
     });
     await mountApp(service);
-    await fireEvent.click(screen.getByTestId('connect-emulator'));
+    await fireEvent.click(screen.getByTestId('connect'));
     await waitFor(() => expect(screen.getByTestId('toasts').textContent).toContain('no emulator'));
   });
 

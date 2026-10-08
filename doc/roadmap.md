@@ -16,6 +16,8 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 | Canvas ≥ 50 fps measurement on Linux with a GPU (`freekerf-desktop --bench-canvas`) | the cloud CI and dev containers have no GPU; only the software floor is recorded | before M4a is closed |
 | Head interpolation between status reports along the tool path | status reports arrive a few times per second; the head jumps between them | M4b |
 | Thick lines in the canvas (selection emphasis, kerf width) | WebGL lines are 1 px; needs quads in the vertex shader | M4b |
+| Job start (absolute / current position / user origin) with the 3×3 anchor | needs the planner to offset the job | M4b |
+| Drop a file on the window to open it | Tauri intercepts drops; done with the import flow | M4b |
 | WebGPU renderer | not in WebKitGTK yet; same interface as the WebGL2 renderer (ADR 0012) | later |
 | Tauri dependencies flagged unmaintained (gtk-rs 0.18 macros, `unic-*` via `urlpattern`) | ignored in `deny.toml` (no vulnerability); upstream Tauri must move | when Tauri updates |
 

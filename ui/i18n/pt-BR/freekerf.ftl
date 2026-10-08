@@ -116,6 +116,17 @@ obj-contrast = Contraste
 obj-dither = Pontilhado
 
 ## machine
+machine-emulator = Emulador FreeKerf (sem máquina)
+machine-refreshPorts = Procurar portas de novo
+machine-openGcode = Abrir G-code…
+machine-noProgram = Nenhum programa carregado
+machine-lines = Linhas
+machine-overrides = Ajustes em tempo real
+machine-ovFeed = Velocidade
+machine-ovPower = Potência
+machine-ovRapid = Movimentos rápidos
+machine-noButtons = Nenhum botão personalizado ainda.
+machine-laserLife = Uso do módulo laser
 machine-connection = Conexão
 machine-port = Porta
 machine-connect = Conectar
@@ -182,6 +193,8 @@ disc-title = Conexão perdida
 disc-body = A máquina parou de responder na linha { $n }. O controlador desligou o laser.
 
 ## recover
+recover-restoreWco = Restaurar a origem de trabalho do trabalho
+recover-nothing = Nenhum trabalho interrompido.
 recover-open = Recuperar trabalho…
 recover-title = Recuperar trabalho
 recover-cause = Causa
@@ -301,6 +314,7 @@ estop-title = Parada acionada
 estop-body = Laser desligado e controlador reiniciado na linha { $n }. A posição pode ter se perdido: referencie antes de continuar.
 
 ## cause
+cause-other = interrompido
 cause-alarm = alarme do controlador
 cause-disc = conexão perdida
 cause-estop = parada manual (PARAR)

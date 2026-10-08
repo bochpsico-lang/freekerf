@@ -3,10 +3,15 @@
   // status bar, bottom bar (narrow), dialogs and toasts. Layout by window width,
   // density by input kind, theme from the settings; everything else from the
   // view state in Rust (PLAN §9: the UI changes app state only through actions).
-  import { setApp, type AppContext } from './context';
+  import { setApp, type AppContext, type LaserRequest } from './context';
   import { flags } from './flags';
   import { t } from './i18n/index.svelte';
+  import ConsolePanel from './produce/ConsolePanel.svelte';
+  import FireConfirmation from './produce/FireConfirmation.svelte';
   import MachinePanel from './produce/MachinePanel.svelte';
+  import RecoverDialog from './produce/RecoverDialog.svelte';
+  import { progress } from './produce/job';
+  import Icon from './lib/Icon.svelte';
   import type { AppService } from './service';
   import BottomBar from './shell/BottomBar.svelte';
   import Dialogs from './shell/Dialogs.svelte';
@@ -19,6 +24,7 @@
   import ToolRail from './shell/ToolRail.svelte';
   import TopBar from './shell/TopBar.svelte';
   import { resolveDensity, type Environment } from './state/environment.svelte';
+  import type { ConsoleProjection } from './state/console.svelte';
   import type { MachineState } from './state/machine.svelte';
   import type { PreviewState } from './state/preview.svelte';
   import type { SettingsProjection } from './state/settings.svelte';
@@ -31,6 +37,7 @@
     view,
     settings,
     env,
+    console: consoleRows,
   }: {
     service: AppService;
     machine: MachineState;
@@ -38,7 +45,16 @@
     view: ViewProjection;
     settings: SettingsProjection;
     env: Environment;
+    console: ConsoleProjection;
   } = $props();
+
+  /** The laser request waiting for the confirmation dialog (local until it is confirmed or cancelled). */
+  let pending: LaserRequest | null = $state(null);
+
+  async function laser(request: LaserRequest): Promise<void> {
+    pending = request;
+    await run(() => service.dispatch('view.open_dialog', { dialog: 'fire_confirmation' }));
+  }
 
   async function run(action: () => Promise<unknown>): Promise<void> {
     try {
@@ -51,7 +67,17 @@
 
   // the projections are created once by start.ts and never replaced
   // svelte-ignore state_referenced_locally
-  const ctx: AppContext = { service, machine, preview, view, settings, env, run };
+  const ctx: AppContext = {
+    service,
+    machine,
+    preview,
+    view,
+    settings,
+    env,
+    console: consoleRows,
+    run,
+    laser,
+  };
   setApp(ctx);
 
   let stage: Stage | undefined = $state();
@@ -81,10 +107,12 @@
         else if (machine.visual === 'run') void service.dispatch('machine.feed_hold', {});
         return;
       case 'start':
-        void run(() => service.dispatch('view.open_dialog', { dialog: 'fire_confirmation' }));
+        if (machine.visual === 'idle' && machine.state?.program)
+          void laser({ action: 'job.run', params: {} });
         return;
       case 'frame':
-        return; // Produce mode PR
+        if (machine.visual === 'idle') void run(() => service.dispatch('job.frame', {}));
+        return;
       case 'mode-design':
         if (flags.designMode) void run(() => service.dispatch('view.set_mode', { mode: 'design' }));
         return;
@@ -129,13 +157,43 @@
   {#if mode === 'design'}<ToolRail />{:else}<nav class="toolrail" aria-hidden="true"></nav>{/if}
   <Stage bind:this={stage} onzoom={(z) => (zoom = z)} />
   {#if env.layout === 'medium' && mode === 'design'}<DockRail />{/if}
-  <Dock panels={{ machine: machinePanel }} />
+  <Dock panels={{ machine: machinePanel, console: consolePanel }} />
 </div>
 <StatusBar {zoom} />
-{#if env.layout === 'narrow'}<BottomBar />{/if}
-<Dialogs />
+{#if env.layout === 'narrow'}
+  <BottomBar>
+    <button
+      class="btn primary big"
+      disabled={machine.visual !== 'idle' || !machine.state?.program}
+      onclick={() => laser({ action: 'job.run', params: {} })}
+      ><Icon name="play" /><span>{t('machine-start')}</span></button
+    >
+    <button class="btn big" disabled={!progress(machine.state?.machine)} onclick={() => exec('pause')}
+      ><Icon name="pause" /><span>{t('machine-pause')}</span></button
+    >
+    <button class="btn big" disabled={machine.visual !== 'idle'} onclick={() => exec('frame')}
+      ><Icon name="frame" /><span>{t('machine-frame')}</span></button
+    >
+  </BottomBar>
+{/if}
+<Dialogs extra={{ recover: recoverDialog, fire_confirmation: fireDialog }} />
 <Toasts />
 
 {#snippet machinePanel()}
   <MachinePanel />
+{/snippet}
+{#snippet consolePanel()}
+  <ConsolePanel />
+{/snippet}
+{#snippet recoverDialog(close: () => void)}
+  <RecoverDialog onclose={close} />
+{/snippet}
+{#snippet fireDialog(close: () => void)}
+  <FireConfirmation
+    request={pending}
+    onclose={() => {
+      pending = null;
+      close();
+    }}
+  />
 {/snippet}

@@ -295,6 +295,20 @@ pub struct UiSettings {
     pub units: Units,
 }
 
+/// A custom button of the machine panel: G-code (custom code with `[expr]`) run on
+/// a click. Running it can turn the laser on, so it goes through the fire
+/// confirmation (`machine.custom_code`, tier `laser`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct CustomButton {
+    /// Label.
+    pub label: String,
+    /// Custom code (`[expr]` allowed; `!`, `~`, `?`, `ctrl-x`, `0xNN` sent at once).
+    pub code: String,
+    /// Icon name of the design system (`target`, `air`...), optional.
+    pub icon: Option<String>,
+}
+
 /// The whole settings file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
@@ -311,6 +325,8 @@ pub struct Settings {
     pub automation: AutomationSettings,
     /// Appearance of the desktop app (added in M4a; files without it get the defaults).
     pub ui: UiSettings,
+    /// Custom buttons of the machine panel (added in M4a; none by default).
+    pub buttons: Vec<CustomButton>,
 }
 
 impl Default for Settings {
@@ -322,6 +338,7 @@ impl Default for Settings {
             jog: JogSettings::default(),
             automation: AutomationSettings::default(),
             ui: UiSettings::default(),
+            buttons: Vec::new(),
         }
     }
 }
@@ -557,6 +574,27 @@ mod tests {
         assert_eq!(back.ui.density, Density::Comfortable);
         assert_eq!(back.ui.units, Units::In);
         assert!(s.set("ui.theme", serde_json::json!("sepia"), false).is_err());
+    }
+
+    #[test]
+    fn custom_buttons() {
+        let s = Settings::from_toml(
+            "version = 1\n[[buttons]]\nlabel = \"Air\"\ncode = \"M8\"\nicon = \"air\"\n[[buttons]]\nlabel = \"Focus\"\ncode = \"M3 S10\"\n",
+        )
+        .unwrap();
+        assert_eq!(s.buttons.len(), 2);
+        assert_eq!(s.buttons[0].icon.as_deref(), Some("air"));
+        assert_eq!(s.buttons[1].icon, None);
+        assert_eq!(Settings::from_toml(&s.to_toml().unwrap()).unwrap(), s);
+        let mut t = Settings::default();
+        assert!(t.buttons.is_empty());
+        t.set(
+            "buttons",
+            serde_json::json!([{"label": "Home", "code": "$H"}]),
+            false,
+        )
+        .unwrap();
+        assert_eq!(t.buttons[0].code, "$H");
     }
 
     #[test]
