@@ -21,6 +21,8 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 | Material picker in the layer editor, context menu, z-order, array, node editing, trace, boolean operations | need `freekerf-materials` and M2's geometry | M4b |
 | Welcome dialog on the first run | needs a "welcomed" flag in `[ui]` (settings migration) | M4b |
 | Gestures: no hover cursor feedback over handles; the rotation handle sits above the box and can leave the view on small selections near the top edge; trackpad pinch on WebKitGTK arrives as Ctrl+wheel only | found while building the Design mode | M4b |
+| App end-to-end tests on Windows (WebView2 driver) and macOS (no WKWebView driver for Tauri) | Linux runs them in CI; PLAN §6 asks Linux and Windows | M5 |
+| Coverage of the browser-only canvas code (Playwright/E2E instrumentation) and a frontend coverage gate | Vitest in jsdom cannot run WebGL2 | M4b |
 | WebGPU renderer | not in WebKitGTK yet; same interface as the WebGL2 renderer (ADR 0012) | later |
 | Tauri dependencies flagged unmaintained (gtk-rs 0.18 macros, `unic-*` via `urlpattern`) | ignored in `deny.toml` (no vulnerability); upstream Tauri must move | when Tauri updates |
 
