@@ -10,7 +10,8 @@ async function errors(code: string, filePath: string): Promise<string[]> {
   return (result?.messages ?? []).filter((m) => m.severity === 2).map((m) => m.ruleId ?? m.message);
 }
 
-describe('architecture lint', () => {
+// type-aware ESLint on Svelte files has a slow cold start on CI runners
+describe('architecture lint', { timeout: 60_000 }, () => {
   it('only src/ipc talks to Tauri', async () => {
     const code = "import { invoke } from '@tauri-apps/api/core';\nvoid invoke('dispatch');\n";
     expect(await errors(code, 'src/lib/Thing.ts')).toContain('no-restricted-imports');
@@ -25,7 +26,7 @@ describe('architecture lint', () => {
   });
 });
 
-describe('dispatch-only lint', () => {
+describe('dispatch-only lint', { timeout: 60_000 }, () => {
   it('reports writes to projections of app state outside src/state', async () => {
     const svelte = (code: string) => `<script lang="ts">\n${code}\n</script>\n`;
     for (const code of [
