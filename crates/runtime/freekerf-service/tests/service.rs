@@ -341,6 +341,13 @@ fn view_actions_change_the_view_and_publish_it() {
         .dispatch(&ui, "view.set_mode", json!({"mode": "design"}))
         .unwrap();
     service
+        .dispatch(&ui, "view.set_tool", json!({"tool": "rect"}))
+        .unwrap();
+    assert_eq!(
+        service.dispatch(&ui, "view.get", json!({})).unwrap()["tool"],
+        "rect"
+    );
+    service
         .dispatch(&ui, "view.show_panel", json!({"panel": "layers"}))
         .unwrap();
     service
@@ -381,7 +388,7 @@ fn view_actions_change_the_view_and_publish_it() {
             assert_eq!(e.to_json()["event"], "view");
         }
     }
-    assert_eq!(views, 8);
+    assert_eq!(views, 9);
     // invalid values are refused, and a read-only caller cannot change the view
     let bad = service.dispatch(
         &ui,

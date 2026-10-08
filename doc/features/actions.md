@@ -48,6 +48,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `view.open_dialog` | ui | Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable). |
 | `view.set_drawer` | ui | Opens or closes the panel drawer (medium layout). |
 | `view.set_mode` | ui | Switches between the Design and Produce modes. |
+| `view.set_tool` | ui | Chooses the Design mode tool (select, rectangle, ellipse, text). |
 | `view.set_viewport` | ui | Shows the table around a point at a zoom (CSS pixels per mm). |
 | `view.show_panel` | ui | Shows a panel of the dock (opens the drawer in the medium layout). |
 | `view.toast` | ui | Shows a short message (at most 3 at once); returns its id. |
@@ -369,6 +370,14 @@ Switches between the Design and Produce modes.
 | Parameter | Required | Description |
 | --- | --- | --- |
 | `mode` | yes | `design` or `produce`. |
+
+### `view.set_tool`
+
+Chooses the Design mode tool (select, rectangle, ellipse, text).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `tool` | yes | `select`, `rect`, `ellipse` or `text`. |
 
 ### `view.set_viewport`
 

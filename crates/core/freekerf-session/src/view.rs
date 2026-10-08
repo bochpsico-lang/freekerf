@@ -27,6 +27,21 @@ pub enum Mode {
     Produce,
 }
 
+/// Active tool of the Design mode (`design/interaction.md` §2).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Tool {
+    /// Select, move, resize, rotate.
+    #[default]
+    Select,
+    /// Draw a rectangle.
+    Rect,
+    /// Draw an ellipse.
+    Ellipse,
+    /// Place a text.
+    Text,
+}
+
 /// Panels of the dock (wide layout) or the drawers (medium layout).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -108,6 +123,8 @@ pub struct Viewport {
 pub struct ViewState {
     /// Mode.
     pub mode: Mode,
+    /// Active tool of the Design mode.
+    pub tool: Tool,
     /// Active panel of the dock.
     pub panel: Panel,
     /// The panel drawer is open (medium layout).
@@ -134,6 +151,7 @@ impl Default for ViewState {
     fn default() -> Self {
         Self {
             mode: Mode::Produce,
+            tool: Tool::Select,
             panel: Panel::Machine,
             drawer_open: false,
             dialogs: Vec::new(),
@@ -152,6 +170,8 @@ impl Default for ViewState {
 pub enum ViewCommand {
     /// Switches the mode; Produce opens the machine panel.
     SetMode(Mode),
+    /// Chooses the Design mode tool.
+    SetTool(Tool),
     /// Shows a panel (and opens the drawer).
     ShowPanel(Panel),
     /// Opens or closes the drawer.
@@ -206,6 +226,7 @@ impl ViewState {
                     self.panel = Panel::Machine;
                 }
             }
+            ViewCommand::SetTool(t) => self.tool = t,
             ViewCommand::ShowPanel(p) => {
                 self.panel = p;
                 self.drawer_open = true;
@@ -278,6 +299,9 @@ mod tests {
         );
         v.apply(ViewCommand::SetDrawer(false)).unwrap();
         assert!(!v.drawer_open);
+        assert_eq!(v.tool, Tool::Select);
+        v.apply(ViewCommand::SetTool(Tool::Ellipse)).unwrap();
+        assert_eq!(v.tool, Tool::Ellipse);
         v.apply(ViewCommand::SetMode(Mode::Produce)).unwrap();
         assert_eq!(v.panel, Panel::Machine);
     }

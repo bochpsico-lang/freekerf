@@ -21,7 +21,7 @@ use freekerf_protocol::{
     ConsoleRow, Event, FirmwareKind, Host, HostError, HostSnapshot, Issue, JogDirection, ResumeSuggestion,
 };
 use freekerf_session::fire::{FireGate, FireRequest, FireSummary};
-use freekerf_session::view::{Dialog, Mode, Panel, ToastLevel, ViewCommand, ViewState, Viewport};
+use freekerf_session::view::{Dialog, Mode, Panel, ToastLevel, Tool, ViewCommand, ViewState, Viewport};
 use freekerf_session::{NoParams, Registry};
 use freekerf_settings::{MachineCache, Settings, SettingsStore};
 use freekerf_transport::{EmulatorTransport, SerialTransport, Transport};
@@ -790,6 +790,14 @@ pub struct SetModeParams {
     pub mode: Mode,
 }
 
+/// `view.set_tool`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SetToolParams {
+    /// `select`, `rect`, `ellipse` or `text`.
+    pub tool: Tool,
+}
+
 /// `view.show_panel`.
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -1344,6 +1352,12 @@ fn register_view(r: &mut Registry<Inner>) {
         move |s: &Inner, p: SetModeParams| unit(s, ViewCommand::SetMode(p.mode)),
     ));
     add(r.register(
+        "view.set_tool",
+        "Chooses the Design mode tool (select, rectangle, ellipse, text).",
+        Tier::Ui,
+        move |s: &Inner, p: SetToolParams| unit(s, ViewCommand::SetTool(p.tool)),
+    ));
+    add(r.register(
         "view.show_panel",
         "Shows a panel of the dock (opens the drawer in the medium layout).",
         Tier::Ui,
@@ -1460,6 +1474,7 @@ fn describe_results(r: &mut Registry<Inner>) {
         "job.resume",
         "job.abort",
         "view.set_mode",
+        "view.set_tool",
         "view.show_panel",
         "view.set_drawer",
         "view.open_dialog",

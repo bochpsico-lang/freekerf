@@ -35,7 +35,8 @@ crates/testing/
 apps/cli/          the `freekerf` binary (thin shell over the service)
 apps/desktop/      the Tauri 2 app (`src-tauri` = crate freekerf-desktop, thin shell over the service)
 ui/web/            web front end (Svelte 5 + TypeScript + Vite): src/ipc (Tauri), src/state,
-                   src/gen (generated: api.ts, icons.ts), src/dev (fake service, never shipped)
+                   src/gen (generated: api.ts, icons.ts), src/dev (fake service, never shipped),
+                   src/shell, src/produce, src/design (Design mode on src/contract, M2's UI contract)
 ui/tokens/         fk-tokens.css generated from freekerf/design (commit in design.lock)
 ui/i18n/           Fluent translations: <locale>/freekerf.ftl (en is the reference),
                    <locale>/lasergrbl.ftl generated from LaserGRBL (lasergrbl.toml)

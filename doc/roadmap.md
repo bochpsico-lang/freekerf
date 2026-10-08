@@ -17,6 +17,10 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 | Thick lines in the canvas (selection emphasis, kerf width) | WebGL lines are 1 px; needs quads in the vertex shader | M4b |
 | Job start (absolute / current position / user origin) with the 3×3 anchor | needs the planner to offset the job | M4b |
 | Drop a file on the window to open it | Tauri intercepts drops; done with the import flow | M4b |
+| Design mode on the real document (M2 implements `doc/features/ui-contract.md`; flag on in builds) | M2's crates and actions | M4b |
+| Material picker in the layer editor, context menu, z-order, array, node editing, trace, boolean operations | need `freekerf-materials` and M2's geometry | M4b |
+| Welcome dialog on the first run | needs a "welcomed" flag in `[ui]` (settings migration) | M4b |
+| Gestures: no hover cursor feedback over handles; the rotation handle sits above the box and can leave the view on small selections near the top edge; trackpad pinch on WebKitGTK arrives as Ctrl+wheel only | found while building the Design mode | M4b |
 | WebGPU renderer | not in WebKitGTK yet; same interface as the WebGL2 renderer (ADR 0012) | later |
 | Tauri dependencies flagged unmaintained (gtk-rs 0.18 macros, `unic-*` via `urlpattern`) | ignored in `deny.toml` (no vulnerability); upstream Tauri must move | when Tauri updates |
 
