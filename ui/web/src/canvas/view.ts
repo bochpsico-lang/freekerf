@@ -45,6 +45,8 @@ export class CanvasView {
   private mode: 'design' | 'produce' = 'produce';
   private executed = 0;
   private showTravel = true;
+  /** The user moved the view: a resize keeps the camera instead of fitting again. */
+  private touched = false;
   /** Overlay contents. */
   readonly scene: OverlayScene = {
     workArea: { x: 0, y: 0, width: 400, height: 400 },
@@ -172,6 +174,8 @@ export class CanvasView {
     this.overlay.width = Math.round(w * ratio);
     this.overlay.height = Math.round(h * ratio);
     this.cam = Camera.resized(this.cam, w, h);
+    if (!this.touched) this.cam = Camera.fitted(this.scene.workArea, w, h);
+    this.events.camera?.(this.cam);
     this.invalidate();
   }
 
@@ -186,7 +190,13 @@ export class CanvasView {
     return this.cam;
   }
 
+  /** Moves the view (the user or the view state moved it: resizes keep it). */
   setCamera(c: CameraState): void {
+    this.touched = true;
+    this.applyCamera(c);
+  }
+
+  private applyCamera(c: CameraState): void {
     this.cam = c;
     this.events.camera?.(c);
     this.invalidate();
@@ -194,7 +204,8 @@ export class CanvasView {
 
   /** Fits `rect` (default: the work area) in the view. */
   fit(rect: Rect = this.scene.workArea): void {
-    this.setCamera(Camera.fitted(rect, this.cam.width, this.cam.height));
+    this.touched = false;
+    this.applyCamera(Camera.fitted(rect, this.cam.width, this.cam.height));
   }
 
   /** Zooms around the centre (buttons, + / − keys). */

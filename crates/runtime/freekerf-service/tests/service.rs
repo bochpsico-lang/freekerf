@@ -329,3 +329,67 @@ fn results_are_described_for_the_front_ends() {
     let schema = state.result.as_ref().unwrap();
     assert!(schema["properties"]["machine"].is_object(), "{schema}");
 }
+
+#[test]
+fn view_actions_change_the_view_and_publish_it() {
+    let service = Service::in_memory().unwrap();
+    let events = service.subscribe();
+    let ui = Caller::new(CallerKind::Agent, "agent", Tier::Ui);
+    let v = service.dispatch(&ui, "view.get", json!({})).unwrap();
+    assert_eq!(v["mode"], "produce");
+    service
+        .dispatch(&ui, "view.set_mode", json!({"mode": "design"}))
+        .unwrap();
+    service
+        .dispatch(&ui, "view.show_panel", json!({"panel": "layers"}))
+        .unwrap();
+    service
+        .dispatch(&ui, "view.open_dialog", json!({"dialog": "settings"}))
+        .unwrap();
+    let id = service
+        .dispatch(
+            &ui,
+            "view.toast",
+            json!({"message": "toast.saved", "level": "ok"}),
+        )
+        .unwrap();
+    service
+        .dispatch(
+            &ui,
+            "view.set_viewport",
+            json!({"cx": 10.0, "cy": 5.0, "scale": 3.0}),
+        )
+        .unwrap();
+    service.dispatch(&ui, "view.fit", json!({})).unwrap();
+    let v = service.dispatch(&ui, "view.get", json!({})).unwrap();
+    assert_eq!(v["mode"], "design");
+    assert_eq!(v["panel"], "layers");
+    assert_eq!(v["drawer_open"], true);
+    assert_eq!(v["dialogs"], json!(["settings"]));
+    assert_eq!(v["toasts"][0]["id"], id);
+    assert_eq!(v["viewport"]["scale"], 3.0);
+    assert_eq!(v["fit_request"], 1);
+    service
+        .dispatch(&ui, "view.dismiss_toast", json!({"id": id}))
+        .unwrap();
+    service.dispatch(&ui, "view.close_dialog", json!({})).unwrap();
+    // each change was published
+    let mut views = 0;
+    while let Ok(e) = events.recv_timeout(Duration::from_millis(100)) {
+        if let ServiceEvent::ViewChanged(_) = e {
+            views += 1;
+            assert_eq!(e.to_json()["event"], "view");
+        }
+    }
+    assert_eq!(views, 8);
+    // invalid values are refused, and a read-only caller cannot change the view
+    let bad = service.dispatch(
+        &ui,
+        "view.set_viewport",
+        json!({"cx": 0.0, "cy": 0.0, "scale": 0.0}),
+    );
+    assert!(matches!(bad, Err(ActionError::InvalidParams(_))));
+    let reader = Caller::new(CallerKind::Agent, "reader", Tier::Read);
+    let denied = service.dispatch(&reader, "view.set_mode", json!({"mode": "produce"}));
+    assert!(matches!(denied, Err(ActionError::PermissionDenied { .. })));
+}

@@ -5,9 +5,9 @@ import { decodeHead, decodeToolpath, type HeadFrame, type Toolpath } from '../ca
 import type { AppService } from '../service';
 
 export class PreviewState {
-  toolpath: Toolpath | null = $state.raw(null);
-  head: HeadFrame | null = $state.raw(null);
-  error = $state('');
+  #toolpath: Toolpath | null = $state.raw(null);
+  #head: HeadFrame | null = $state.raw(null);
+  #error = $state('');
 
   constructor(private readonly service: AppService) {
     service.subscribe((e) => {
@@ -15,21 +15,33 @@ export class PreviewState {
     });
     service.subscribeHead((f) => {
       try {
-        this.head = decodeHead(f);
+        this.#head = decodeHead(f);
       } catch (e) {
-        this.error = String(e);
+        this.#error = String(e);
       }
     });
+  }
+
+  get toolpath(): Toolpath | null {
+    return this.#toolpath;
+  }
+
+  get head(): HeadFrame | null {
+    return this.#head;
+  }
+
+  get error(): string {
+    return this.#error;
   }
 
   /** Reads the tool path again. */
   async reload(): Promise<void> {
     try {
       const buf = await this.service.toolpath();
-      this.toolpath = buf.byteLength ? decodeToolpath(buf) : null;
-      this.error = '';
+      this.#toolpath = buf.byteLength ? decodeToolpath(buf) : null;
+      this.#error = '';
     } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
+      this.#error = e instanceof Error ? e.message : String(e);
     }
   }
 }

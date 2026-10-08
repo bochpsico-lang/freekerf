@@ -18,6 +18,12 @@ export type AutomationSettings = {
   mcp?: McpSettings;
 };
 
+/** `view.close_dialog`. */
+export type CloseDialogParams = {
+  /** The dialog; the one on top when absent. */
+  dialog?: Dialog | null;
+};
+
 /** Status of a sent command (`CommandStatus`). */
 export type CommandStatus = "Queued" | "WaitingResponse" | "ResponseGood" | "ResponseBad" | "InvalidResponse";
 
@@ -71,6 +77,21 @@ export type ConsoleRow = {
 export type CustomCodeParams = {
   /** Lines of custom code (`[expr]`, `!`, `~`, `?`, `ctrl-x`, `0xNN` allowed). */
   code: string;
+};
+
+/** Size of controls. */
+export type Density = "auto" | "compact" | "comfortable";
+
+/**
+ * Dialogs. Dialogs are not modal (STOP stays reachable); several can be open,
+ * the last one is on top.
+ */
+export type Dialog = "settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "about";
+
+/** `view.dismiss_toast`. */
+export type DismissToastParams = {
+  /** Id returned by `view.toast`. */
+  id: number;
 };
 
 /** What happened, for the front ends. */
@@ -148,6 +169,12 @@ export type FirmwareVersion = {
   vendor_info?: string | null;
   /** Vendor firmware version (Ortur OLF, Longer software, Vigo build). */
   vendor_version?: string | null;
+};
+
+/** `view.focus`. */
+export type FocusParams = {
+  /** Element with the focus (`canvas`, `console`...), none when absent. */
+  target?: string | null;
 };
 
 /** State of the host for front ends. */
@@ -319,8 +346,17 @@ export type McpSettings = {
 /** Kind of a received message (`GrblMessage.MessageType`). */
 export type MessageKind = "Startup" | "Config" | "Alarm" | "Feedback" | "Position" | "Other" | "Warning" | "Diagnostic";
 
+/** Workspace mode (`design/ux.md`: one workspace, two modes). */
+export type Mode = "design" | "produce";
+
 /** Parameters of actions that take none. */
 export type NoParams = Record<string, never>;
+
+/** `view.open_dialog`. */
+export type OpenDialogParams = {
+  /** The dialog. */
+  dialog: Dialog;
+};
 
 /** `machine.overrides`. */
 export type OverrideParams = {
@@ -331,6 +367,9 @@ export type OverrideParams = {
   /** Rapid override target, % (25, 50 or 100). */
   rapid: number;
 };
+
+/** Panels of the dock (wide layout) or the drawers (medium layout). */
+export type Panel = "layers" | "object" | "machine" | "console";
 
 /** A position (machine or work), in mm, as `float` like LaserGRBL (`GPoint`). */
 export type Point3 = {
@@ -408,6 +447,18 @@ export type SendParams = {
   line: string;
 };
 
+/** `view.set_drawer`. */
+export type SetDrawerParams = {
+  /** Open or closed. */
+  open: boolean;
+};
+
+/** `view.set_mode`. */
+export type SetModeParams = {
+  /** `design` or `produce`. */
+  mode: Mode;
+};
+
 /** `settings.get`. */
 export type SettingsGetParams = {
   /** Dotted key (`machine.baud`); all settings when absent. */
@@ -420,6 +471,12 @@ export type SettingsSetParams = {
   key: string;
   /** New value (JSON). */
   value: unknown;
+};
+
+/** `view.show_panel`. */
+export type ShowPanelParams = {
+  /** `layers`, `object`, `machine` or `console`. */
+  panel: Panel;
 };
 
 /** Result of `state.get`. */
@@ -441,6 +498,82 @@ export type Streaming = "Buffered" | "Synchronous" | "RepeatOnError";
 
 /** The kind of a system operation. */
 export type SystemOpKind = "ReadSettings" | "ReadInfo" | "WriteSettings" | "WriteWifi";
+
+/** Colour theme of the app. */
+export type Theme = "dark" | "light";
+
+/**
+ * A short message. `message` is an i18n key (or plain text when no key exists),
+ * `args` its placeholders.
+ */
+export type Toast = {
+  /** Placeholders. */
+  args?: Record<string, string>;
+  /** Id, increasing. */
+  id: number;
+  /** Kind. */
+  level: ToastLevel;
+  /** i18n key or text. */
+  message: string;
+};
+
+/** Kind of a toast. */
+export type ToastLevel = "info" | "ok" | "warning" | "error";
+
+/** `view.toast`. */
+export type ToastParams = {
+  /** Placeholders of the message. */
+  args?: Record<string, string>;
+  /** `info` (default), `ok`, `warning` or `error`. */
+  level?: ToastLevel;
+  /** i18n key (or plain text). */
+  message: string;
+};
+
+/** Appearance of the desktop app. */
+export type UiSettings = {
+  /** Density of the controls. */
+  density?: Density;
+  /** High contrast (on top of the theme). */
+  high_contrast?: boolean;
+  /** Theme. */
+  theme?: Theme;
+  /** Units shown. */
+  units?: Units;
+};
+
+/** Length units shown in the app (the machine always works in mm). */
+export type Units = "mm" | "in";
+
+/** The whole view state. */
+export type ViewState = {
+  /** Open dialogs, bottom to top. */
+  dialogs: Dialog[];
+  /** The panel drawer is open (medium layout). */
+  drawer_open: boolean;
+  /** Increased by `view.fit`: the UI fits the work area when it changes. */
+  fit_request: number;
+  /** Element with the keyboard focus (`canvas`, `console`... free text), if known. */
+  focus?: string | null;
+  /** Mode. */
+  mode: Mode;
+  /** Active panel of the dock. */
+  panel: Panel;
+  /** Toasts, oldest first (at most [`MAX_TOASTS`]). */
+  toasts: Toast[];
+  /** Viewport, once the UI or a caller set it. */
+  viewport?: Viewport | null;
+};
+
+/** What part of the table is shown: the world point at the centre and the zoom. */
+export type Viewport = {
+  /** Centre X, mm. */
+  cx: number;
+  /** Centre Y, mm. */
+  cy: number;
+  /** Zoom, CSS pixels per mm. */
+  scale: number;
+};
 
 /** `machine.write_settings`. */
 export type WriteSettingsParams = {
@@ -511,6 +644,10 @@ export type EventMessage = {
   event: "settings_changed";
 } | {
   event: "program_loaded";
+} | {
+  event: "view";
+  /** The new view state. */
+  view: ViewState;
 };
 
 /** The whole settings file. */
@@ -523,6 +660,8 @@ export type Settings = {
   jog?: JogSettings;
   /** Machine connection. */
   machine?: MachineSettings;
+  /** Appearance of the desktop app (added in M4a; files without it get the defaults). */
+  ui?: UiSettings;
   /** Format version. */
   version?: number;
 };
@@ -703,6 +842,72 @@ export interface Actions {
     result: State;
     tier: "read";
   };
+  /** Closes a dialog (the one on top when none is given). */
+  "view.close_dialog": {
+    params: CloseDialogParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Removes a toast. */
+  "view.dismiss_toast": {
+    params: DismissToastParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Fits the work area in the canvas. */
+  "view.fit": {
+    params: NoParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Records which element has the keyboard focus. */
+  "view.focus": {
+    params: FocusParams;
+    result: null;
+    tier: "ui";
+  };
+  /** The view state: mode, panel, dialogs, toasts, viewport, focus. */
+  "view.get": {
+    params: NoParams;
+    result: ViewState;
+    tier: "read";
+  };
+  /** Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable). */
+  "view.open_dialog": {
+    params: OpenDialogParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Opens or closes the panel drawer (medium layout). */
+  "view.set_drawer": {
+    params: SetDrawerParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Switches between the Design and Produce modes. */
+  "view.set_mode": {
+    params: SetModeParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Shows the table around a point at a zoom (CSS pixels per mm). */
+  "view.set_viewport": {
+    params: Viewport;
+    result: null;
+    tier: "ui";
+  };
+  /** Shows a panel of the dock (opens the drawer in the medium layout). */
+  "view.show_panel": {
+    params: ShowPanelParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Shows a short message (at most 3 at once); returns its id. */
+  "view.toast": {
+    params: ToastParams;
+    result: number;
+    tier: "ui";
+  };
 }
 
 /** Action names. */
@@ -739,4 +944,15 @@ export const ACTION_TIERS = {
   "settings.get": "read",
   "settings.set": "edit",
   "state.get": "read",
+  "view.close_dialog": "ui",
+  "view.dismiss_toast": "ui",
+  "view.fit": "ui",
+  "view.focus": "ui",
+  "view.get": "read",
+  "view.open_dialog": "ui",
+  "view.set_drawer": "ui",
+  "view.set_mode": "ui",
+  "view.set_viewport": "ui",
+  "view.show_panel": "ui",
+  "view.toast": "ui",
 } as const satisfies Record<ActionName, Tier>;

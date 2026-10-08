@@ -52,6 +52,16 @@
         "support_pwm": true
       }
     },
+    "ui": {
+      "description": "Appearance of the desktop app (added in M4a; files without it get the defaults).",
+      "$ref": "#/$defs/UiSettings",
+      "default": {
+        "density": "auto",
+        "high_contrast": false,
+        "theme": "dark",
+        "units": "mm"
+      }
+    },
     "version": {
       "description": "Format version.",
       "type": "integer",
@@ -103,6 +113,26 @@
         }
       },
       "additionalProperties": false
+    },
+    "Density": {
+      "description": "Size of controls.",
+      "oneOf": [
+        {
+          "description": "From the last input used: touch → comfortable, mouse or pen → compact.",
+          "type": "string",
+          "const": "auto"
+        },
+        {
+          "description": "Mouse and pen.",
+          "type": "string",
+          "const": "compact"
+        },
+        {
+          "description": "Touch (44 px targets).",
+          "type": "string",
+          "const": "comfortable"
+        }
+      ]
     },
     "Firmware": {
       "description": "Firmware family.",
@@ -277,6 +307,63 @@
           "description": "One line at a time, failed job lines retried 3 times.",
           "type": "string",
           "const": "RepeatOnError"
+        }
+      ]
+    },
+    "Theme": {
+      "description": "Colour theme of the app.",
+      "oneOf": [
+        {
+          "description": "Dark (default: workshops with little light).",
+          "type": "string",
+          "const": "dark"
+        },
+        {
+          "description": "Light.",
+          "type": "string",
+          "const": "light"
+        }
+      ]
+    },
+    "UiSettings": {
+      "description": "Appearance of the desktop app.",
+      "type": "object",
+      "properties": {
+        "density": {
+          "description": "Density of the controls.",
+          "$ref": "#/$defs/Density",
+          "default": "auto"
+        },
+        "high_contrast": {
+          "description": "High contrast (on top of the theme).",
+          "type": "boolean",
+          "default": false
+        },
+        "theme": {
+          "description": "Theme.",
+          "$ref": "#/$defs/Theme",
+          "default": "dark"
+        },
+        "units": {
+          "description": "Units shown.",
+          "$ref": "#/$defs/Units",
+          "default": "mm"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Units": {
+      "description": "Length units shown in the app (the machine always works in mm).",
+      "oneOf": [
+        {
+          "description": "Millimetres.",
+          "type": "string",
+          "const": "mm"
+        },
+        {
+          "description": "Inches.",
+          "type": "string",
+          "const": "in"
         }
       ]
     }

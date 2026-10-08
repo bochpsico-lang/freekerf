@@ -19,6 +19,7 @@ use freekerf_protocol::host::decimal;
 use freekerf_protocol::{
     ConsoleRow, Event, FirmwareKind, Host, HostError, HostSnapshot, Issue, JogDirection, ResumeSuggestion,
 };
+use freekerf_session::view::{Dialog, Mode, Panel, ToastLevel, ViewCommand, ViewState, Viewport};
 use freekerf_session::{NoParams, Registry};
 use freekerf_settings::{MachineCache, Settings, SettingsStore};
 use freekerf_transport::{EmulatorTransport, SerialTransport, Transport};
@@ -44,6 +45,8 @@ pub enum ServiceEvent {
     SettingsChanged,
     /// A program was loaded.
     ProgramLoaded,
+    /// The view state changed (`view.*` actions).
+    ViewChanged(ViewState),
 }
 
 /// A [`ServiceEvent`] as front ends receive it (JSON, tagged by `event`).
@@ -69,6 +72,11 @@ pub enum EventMessage {
     SettingsChanged,
     /// A program was loaded.
     ProgramLoaded,
+    /// The view state changed.
+    View {
+        /// The new view state.
+        view: ViewState,
+    },
 }
 
 impl ServiceEvent {
@@ -89,6 +97,7 @@ impl ServiceEvent {
             },
             Self::Machine(MachineEvent::Disconnected { user }) => EventMessage::Disconnected { user: *user },
             Self::Machine(MachineEvent::Host(e)) => EventMessage::Host { data: e.clone() },
+            Self::ViewChanged(v) => EventMessage::View { view: v.clone() },
         }
     }
 
@@ -223,6 +232,7 @@ pub struct Inner {
     settings: Mutex<Settings>,
     stores: Stores,
     loaded: Mutex<Option<Loaded>>,
+    view: Mutex<ViewState>,
     console: Arc<Mutex<VecDeque<ConsoleRow>>>,
     issues: Arc<Mutex<Vec<Issue>>>,
     subscribers: Arc<Mutex<Vec<Sender<ServiceEvent>>>>,
@@ -292,6 +302,7 @@ impl Service {
             settings: Mutex::new(settings),
             stores,
             loaded: Mutex::new(None),
+            view: Mutex::new(ViewState::default()),
             console: Arc::new(Mutex::new(VecDeque::new())),
             issues: Arc::new(Mutex::new(Vec::new())),
             subscribers: Arc::new(Mutex::new(Vec::new())),
@@ -406,6 +417,22 @@ fn start_collector(inner: &Arc<Inner>) {
 impl Inner {
     fn publish(&self, e: &ServiceEvent) {
         lock(&self.subscribers).retain(|s| s.send(e.clone()).is_ok());
+    }
+
+    /// Applies a view command and publishes the new view state when it changed.
+    fn view(&self, cmd: ViewCommand) -> Result<Option<u64>, ActionError> {
+        let (result, changed) = {
+            let mut v = lock(&self.view);
+            let before = v.clone();
+            let r = v
+                .apply(cmd)
+                .map_err(|e| ActionError::InvalidParams(e.to_string()))?;
+            (r, (*v != before).then(|| v.clone()))
+        };
+        if let Some(v) = changed {
+            self.publish(&ServiceEvent::ViewChanged(v));
+        }
+        Ok(result)
     }
 
     fn save_cache(&self) {
@@ -645,6 +672,76 @@ pub struct SettingsSetParams {
 pub struct ConsoleParams {
     /// Only the last `last` rows.
     pub last: Option<usize>,
+}
+
+/// `view.set_mode`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SetModeParams {
+    /// `design` or `produce`.
+    pub mode: Mode,
+}
+
+/// `view.show_panel`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ShowPanelParams {
+    /// `layers`, `object`, `machine` or `console`.
+    pub panel: Panel,
+}
+
+/// `view.set_drawer`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SetDrawerParams {
+    /// Open or closed.
+    pub open: bool,
+}
+
+/// `view.open_dialog`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OpenDialogParams {
+    /// The dialog.
+    pub dialog: Dialog,
+}
+
+/// `view.close_dialog`.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CloseDialogParams {
+    /// The dialog; the one on top when absent.
+    pub dialog: Option<Dialog>,
+}
+
+/// `view.toast`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ToastParams {
+    /// `info` (default), `ok`, `warning` or `error`.
+    #[serde(default)]
+    pub level: ToastLevel,
+    /// i18n key (or plain text).
+    pub message: String,
+    /// Placeholders of the message.
+    #[serde(default)]
+    pub args: BTreeMap<String, String>,
+}
+
+/// `view.dismiss_toast`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DismissToastParams {
+    /// Id returned by `view.toast`.
+    pub id: u64,
+}
+
+/// `view.focus`.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FocusParams {
+    /// Element with the focus (`canvas`, `console`...), none when absent.
+    pub target: Option<String>,
 }
 
 // ====================================================================== results
@@ -1003,8 +1100,92 @@ fn build_registry() -> Registry<Inner> {
         Tier::Safety,
         |s: &Inner, _: NoParams| s.host_result(Host::abort_program),
     ));
+    register_view(&mut r);
     describe_results(&mut r);
     r
+}
+
+/// The `view.*` actions (tier `ui`): what the app shows, as data.
+fn register_view(r: &mut Registry<Inner>) {
+    let add = |result: Result<(), freekerf_session::RegistryError>| {
+        if let Err(e) = result {
+            tracing::error!("action registration: {e}");
+        }
+    };
+    let unit = |s: &Inner, c: ViewCommand| s.view(c).map(|_| ());
+    add(r.register(
+        "view.get",
+        "The view state: mode, panel, dialogs, toasts, viewport, focus.",
+        Tier::Read,
+        |s: &Inner, _: NoParams| Ok(lock(&s.view).clone()),
+    ));
+    add(r.register(
+        "view.set_mode",
+        "Switches between the Design and Produce modes.",
+        Tier::Ui,
+        move |s: &Inner, p: SetModeParams| unit(s, ViewCommand::SetMode(p.mode)),
+    ));
+    add(r.register(
+        "view.show_panel",
+        "Shows a panel of the dock (opens the drawer in the medium layout).",
+        Tier::Ui,
+        move |s: &Inner, p: ShowPanelParams| unit(s, ViewCommand::ShowPanel(p.panel)),
+    ));
+    add(r.register(
+        "view.set_drawer",
+        "Opens or closes the panel drawer (medium layout).",
+        Tier::Ui,
+        move |s: &Inner, p: SetDrawerParams| unit(s, ViewCommand::SetDrawer(p.open)),
+    ));
+    add(r.register(
+        "view.open_dialog",
+        "Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable).",
+        Tier::Ui,
+        move |s: &Inner, p: OpenDialogParams| unit(s, ViewCommand::OpenDialog(p.dialog)),
+    ));
+    add(r.register(
+        "view.close_dialog",
+        "Closes a dialog (the one on top when none is given).",
+        Tier::Ui,
+        move |s: &Inner, p: CloseDialogParams| unit(s, ViewCommand::CloseDialog(p.dialog)),
+    ));
+    add(r.register(
+        "view.toast",
+        "Shows a short message (at most 3 at once); returns its id.",
+        Tier::Ui,
+        |s: &Inner, p: ToastParams| {
+            s.view(ViewCommand::Toast {
+                level: p.level,
+                message: p.message,
+                args: p.args,
+            })
+            .map(|id| id.unwrap_or(0))
+        },
+    ));
+    add(r.register(
+        "view.dismiss_toast",
+        "Removes a toast.",
+        Tier::Ui,
+        move |s: &Inner, p: DismissToastParams| unit(s, ViewCommand::DismissToast(p.id)),
+    ));
+    add(r.register(
+        "view.set_viewport",
+        "Shows the table around a point at a zoom (CSS pixels per mm).",
+        Tier::Ui,
+        move |s: &Inner, p: Viewport| unit(s, ViewCommand::SetViewport(p)),
+    ));
+    add(r.register(
+        "view.fit",
+        "Fits the work area in the canvas.",
+        Tier::Ui,
+        move |s: &Inner, _: NoParams| unit(s, ViewCommand::Fit),
+    ));
+    add(r.register(
+        "view.focus",
+        "Records which element has the keyboard focus.",
+        Tier::Ui,
+        move |s: &Inner, p: FocusParams| unit(s, ViewCommand::Focus(p.target)),
+    ));
 }
 
 /// Result schemas, used to generate the front-end types (`cargo xtask gen-ts`).
@@ -1022,6 +1203,8 @@ fn describe_results(r: &mut Registry<Inner>) {
     add(r.describe_result::<ProgramInfo>("job.load"));
     add(r.describe_result::<ProgramInfo>("job.load_text"));
     add(r.describe_result::<Option<ProgramInfo>>("job.info"));
+    add(r.describe_result::<ViewState>("view.get"));
+    add(r.describe_result::<u64>("view.toast"));
     for name in [
         "settings.set",
         "machine.connect",
@@ -1045,6 +1228,15 @@ fn describe_results(r: &mut Registry<Inner>) {
         "job.run",
         "job.resume",
         "job.abort",
+        "view.set_mode",
+        "view.show_panel",
+        "view.set_drawer",
+        "view.open_dialog",
+        "view.close_dialog",
+        "view.dismiss_toast",
+        "view.set_viewport",
+        "view.fit",
+        "view.focus",
     ] {
         add(r.describe_result::<()>(name));
     }

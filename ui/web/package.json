@@ -20,6 +20,7 @@
     "check:bundle": "node scripts/check-bundle.mjs"
   },
   "dependencies": {
+    "@fluent/bundle": "^0.19.1",
     "@tauri-apps/api": "^2.12.1"
   },
   "devDependencies": {

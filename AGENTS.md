@@ -37,6 +37,7 @@ apps/desktop/      the Tauri 2 app (`src-tauri` = crate freekerf-desktop, thin s
 ui/web/            web front end (Svelte 5 + TypeScript + Vite): src/ipc (Tauri), src/state,
                    src/gen (generated: api.ts, icons.ts), src/dev (fake service, never shipped)
 ui/tokens/         fk-tokens.css generated from freekerf/design (commit in design.lock)
+ui/i18n/           Fluent translations (<locale>/freekerf.ftl): en is the reference
 tests/             cross-crate integration tests (crate freekerf-it)
 tools/xtask/       cargo xtask check-layers | gen-docs | gen-ts | check-docs | sync-tokens
 doc/               documentation (below)
@@ -132,7 +133,7 @@ tested step by step with a simulated clock (`freekerf_testkit::Bench`). Details:
 | native | core |
 | runtime | core, config, native |
 | apps | runtime (`freekerf-service`), config |
-| ui/web | only the `AppService` contract (`src/service.ts`); Tauri only in `src/ipc/`; `src/dev/` only in tests and `dev.html` (ESLint) |
+| ui/web | only the `AppService` contract (`src/service.ts`); Tauri only in `src/ipc/`; `src/dev/` only in tests and `dev.html`; app state read-only outside `src/state/`, changed only by `dispatch` (ESLint `freekerf/no-app-state-mutation`) |
 | testing | anything, but only as a dev-dependency of others |
 
 The core builds for `wasm32-unknown-unknown` (CI). `unsafe_code` is forbidden in
@@ -194,4 +195,5 @@ never delete it or loosen it for the C# host.
 - Logging with `tracing`; no `println!` in libraries.
 - No telemetry.
 - Documentation, commit messages and PR descriptions in English; UI text goes
-  through i18n (from M4).
+  through i18n: `t('message-id')` with the id in `ui/i18n/en/freekerf.ftl` and
+  every other locale (a test checks the ids match).

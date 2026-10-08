@@ -37,12 +37,22 @@ export function visualState(status: MachineStatus | undefined): VisualState {
 
 /** Reactive machine state fed by the service. */
 export class MachineState {
-  state: State | null = $state(null);
-  readonly visual: VisualState = $derived(visualState(this.state?.machine.status));
+  #state: State | null = $state(null);
+  #visual: VisualState = $derived(visualState(this.#state?.machine.status));
   private pending: Promise<void> | null = null;
 
   constructor(private readonly service: AppService) {
     service.subscribe((e) => this.onEvent(e));
+  }
+
+  /** The last `state.get` (patched by events until the next read). */
+  get state(): State | null {
+    return this.#state;
+  }
+
+  /** One of the six visual states. */
+  get visual(): VisualState {
+    return this.#visual;
   }
 
   /** Reads `state.get` again (coalesced). */
@@ -50,7 +60,7 @@ export class MachineState {
     this.pending ??= this.service
       .dispatch('state.get', {})
       .then((s) => {
-        this.state = s;
+        this.#state = s;
       })
       .finally(() => {
         this.pending = null;
@@ -61,8 +71,8 @@ export class MachineState {
   private onEvent(e: EventMessage): void {
     switch (e.event) {
       case 'host':
-        if (typeof e.data === 'object' && 'StatusChanged' in e.data && this.state) {
-          this.state.machine.status = e.data.StatusChanged.new;
+        if (typeof e.data === 'object' && 'StatusChanged' in e.data && this.#state) {
+          this.#state.machine.status = e.data.StatusChanged.new;
         }
         void this.refresh();
         break;

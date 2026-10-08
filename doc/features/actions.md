@@ -35,6 +35,17 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `settings.get` | read | Reads the settings (all, or one dotted key). |
 | `settings.set` | edit | Changes one setting and saves the file. Automation settings are user-only and refused here. |
 | `state.get` | read | Machine state, loaded program, issues and resume offer. |
+| `view.close_dialog` | ui | Closes a dialog (the one on top when none is given). |
+| `view.dismiss_toast` | ui | Removes a toast. |
+| `view.fit` | ui | Fits the work area in the canvas. |
+| `view.focus` | ui | Records which element has the keyboard focus. |
+| `view.get` | read | The view state: mode, panel, dialogs, toasts, viewport, focus. |
+| `view.open_dialog` | ui | Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable). |
+| `view.set_drawer` | ui | Opens or closes the panel drawer (medium layout). |
+| `view.set_mode` | ui | Switches between the Design and Produce modes. |
+| `view.set_viewport` | ui | Shows the table around a point at a zoom (CSS pixels per mm). |
+| `view.show_panel` | ui | Shows a panel of the dock (opens the drawer in the medium layout). |
+| `view.toast` | ui | Shows a short message (at most 3 at once); returns its id. |
 
 ## Parameters
 
@@ -254,3 +265,91 @@ Changes one setting and saves the file. Automation settings are user-only and re
 Machine state, loaded program, issues and resume offer.
 
 No parameters.
+
+### `view.close_dialog`
+
+Closes a dialog (the one on top when none is given).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `dialog` | no | The dialog; the one on top when absent. |
+
+### `view.dismiss_toast`
+
+Removes a toast.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `id` | yes | Id returned by `view.toast`. |
+
+### `view.fit`
+
+Fits the work area in the canvas.
+
+No parameters.
+
+### `view.focus`
+
+Records which element has the keyboard focus.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `target` | no | Element with the focus (`canvas`, `console`...), none when absent. |
+
+### `view.get`
+
+The view state: mode, panel, dialogs, toasts, viewport, focus.
+
+No parameters.
+
+### `view.open_dialog`
+
+Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `dialog` | yes | The dialog. |
+
+### `view.set_drawer`
+
+Opens or closes the panel drawer (medium layout).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `open` | yes | Open or closed. |
+
+### `view.set_mode`
+
+Switches between the Design and Produce modes.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `mode` | yes | `design` or `produce`. |
+
+### `view.set_viewport`
+
+Shows the table around a point at a zoom (CSS pixels per mm).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `cx` | yes | Centre X, mm. |
+| `cy` | yes | Centre Y, mm. |
+| `scale` | yes | Zoom, CSS pixels per mm. |
+
+### `view.show_panel`
+
+Shows a panel of the dock (opens the drawer in the medium layout).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `panel` | yes | `layers`, `object`, `machine` or `console`. |
+
+### `view.toast`
+
+Shows a short message (at most 3 at once); returns its id.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `args` | no | Placeholders of the message. |
+| `level` | no | `info` (default), `ok`, `warning` or `error`. |
+| `message` | yes | i18n key (or plain text). |
