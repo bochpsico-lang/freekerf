@@ -45,22 +45,49 @@ pub enum ServiceEvent {
     ProgramLoaded,
 }
 
+/// A [`ServiceEvent`] as front ends receive it (JSON, tagged by `event`).
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum EventMessage {
+    /// The link opened.
+    Connected {
+        /// Transport description.
+        transport: String,
+    },
+    /// The link closed.
+    Disconnected {
+        /// Closed by the user (else: lost or failed).
+        user: bool,
+    },
+    /// A protocol event.
+    Host {
+        /// The event.
+        data: Event,
+    },
+    /// Settings changed.
+    SettingsChanged,
+    /// A program was loaded.
+    ProgramLoaded,
+}
+
 impl ServiceEvent {
-    /// The event as JSON for front ends (`{"event": "...", ...}`).
+    /// The event as JSON for front ends (`{"event": "...", ...}`, see [`EventMessage`]).
     #[must_use]
     pub fn to_json(&self) -> Value {
+        serde_json::to_value(self.message()).unwrap_or(Value::Null)
+    }
+
+    /// The event in its wire shape.
+    #[must_use]
+    pub fn message(&self) -> EventMessage {
         match self {
-            Self::SettingsChanged => serde_json::json!({"event": "settings_changed"}),
-            Self::ProgramLoaded => serde_json::json!({"event": "program_loaded"}),
-            Self::Machine(MachineEvent::Connected { transport }) => {
-                serde_json::json!({"event": "connected", "transport": transport})
-            }
-            Self::Machine(MachineEvent::Disconnected { user }) => {
-                serde_json::json!({"event": "disconnected", "user": user})
-            }
-            Self::Machine(MachineEvent::Host(e)) => {
-                serde_json::json!({"event": "host", "data": serde_json::to_value(e).unwrap_or(Value::Null)})
-            }
+            Self::SettingsChanged => EventMessage::SettingsChanged,
+            Self::ProgramLoaded => EventMessage::ProgramLoaded,
+            Self::Machine(MachineEvent::Connected { transport }) => EventMessage::Connected {
+                transport: transport.clone(),
+            },
+            Self::Machine(MachineEvent::Disconnected { user }) => EventMessage::Disconnected { user: *user },
+            Self::Machine(MachineEvent::Host(e)) => EventMessage::Host { data: e.clone() },
         }
     }
 
@@ -607,7 +634,7 @@ pub struct ConsoleParams {
 // ====================================================================== results
 
 /// Summary of the loaded program.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct ProgramInfo {
     /// Name.
     pub name: String,
@@ -622,7 +649,7 @@ pub struct ProgramInfo {
 }
 
 /// Result of `state.get`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct State {
     /// Machine.
     pub machine: HostSnapshot,
@@ -960,7 +987,51 @@ fn build_registry() -> Registry<Inner> {
         Tier::Safety,
         |s: &Inner, _: NoParams| s.host_result(Host::abort_program),
     ));
+    describe_results(&mut r);
     r
+}
+
+/// Result schemas, used to generate the front-end types (`cargo xtask gen-ts`).
+/// Actions not listed here (`settings.get`, and new actions until they are added)
+/// are typed as unknown.
+fn describe_results(r: &mut Registry<Inner>) {
+    let add = |result: Result<(), freekerf_session::RegistryError>| {
+        if let Err(e) = result {
+            tracing::error!("result description: {e}");
+        }
+    };
+    add(r.describe_result::<State>("state.get"));
+    add(r.describe_result::<Vec<ConsoleRow>>("console.get"));
+    add(r.describe_result::<Vec<String>>("machine.list_ports"));
+    add(r.describe_result::<ProgramInfo>("job.load"));
+    add(r.describe_result::<ProgramInfo>("job.load_text"));
+    add(r.describe_result::<Option<ProgramInfo>>("job.info"));
+    for name in [
+        "settings.set",
+        "machine.connect",
+        "machine.disconnect",
+        "machine.stop",
+        "machine.feed_hold",
+        "machine.jog_stop",
+        "machine.safety_door",
+        "machine.resume",
+        "machine.unlock",
+        "machine.home",
+        "machine.set_zero",
+        "machine.jog",
+        "machine.jog_to",
+        "machine.overrides",
+        "machine.read_settings",
+        "machine.write_settings",
+        "machine.send",
+        "machine.custom_code",
+        "machine.select_laser",
+        "job.run",
+        "job.resume",
+        "job.abort",
+    ] {
+        add(r.describe_result::<()>(name));
+    }
 }
 
 fn load_program(s: &Inner, name: String, bytes: &[u8]) -> Result<ProgramInfo, ActionError> {

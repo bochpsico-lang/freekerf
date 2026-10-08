@@ -314,3 +314,18 @@ fn load_from_a_file() {
     assert_eq!(info["lines"], 2);
     assert!(s.snapshot().program_lines == 2);
 }
+
+#[test]
+fn results_are_described_for_the_front_ends() {
+    let service = Service::in_memory().unwrap();
+    let untyped: Vec<String> = service
+        .specs()
+        .into_iter()
+        .filter(|s| s.result.is_none())
+        .map(|s| s.name)
+        .collect();
+    assert_eq!(untyped, ["settings.get"]);
+    let state = service.registry().spec("state.get").unwrap();
+    let schema = state.result.as_ref().unwrap();
+    assert!(schema["properties"]["machine"].is_object(), "{schema}");
+}

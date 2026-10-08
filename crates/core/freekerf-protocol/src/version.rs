@@ -2,10 +2,11 @@
 
 use std::cmp::Ordering;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Version of the firmware on the board, with vendor flags.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct FirmwareVersion {
     /// Major (`1` in `1.1f`).
     pub major: u32,

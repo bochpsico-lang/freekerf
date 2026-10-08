@@ -2,11 +2,12 @@
 
 use freekerf_gcode::Decimal;
 use freekerf_gcode::number::format_fixed;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Direction of a jog step (`JogDirection`, without `Abort`/`Position`, which are
 /// separate calls).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub enum JogDirection {
     /// Back to X0 Y0.
     Home,

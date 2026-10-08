@@ -13,6 +13,7 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 | Human fire confirmation of `laser` actions | needs the desktop UI | M4 |
 | Sounds, notifications, hotkeys, safety countdown | UI concerns | M4 |
 | Importing LaserGRBL settings (`Settings.bin`), buttons, counters | `freekerf-migrate` | M2 |
+| Tauri dependencies flagged unmaintained (gtk-rs 0.18 macros, `unic-*` via `urlpattern`) | ignored in `deny.toml` (no vulnerability); upstream Tauri must move | when Tauri updates |
 
 ## Decided
 

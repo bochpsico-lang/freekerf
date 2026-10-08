@@ -8,7 +8,8 @@ guide is how to work on what exists.
 
 FreeKerf designs jobs and drives laser machines (Grbl, grblHAL, Smoothie, Marlin,
 VigoWork). It is the GPL-3.0-or-later successor of LaserGRBL, in Rust. Done so far:
-M0 (workspace, CI, docs) and M1 (headless machine core and the `freekerf` CLI).
+M0 (workspace, CI, docs) and M1 (headless machine core and the `freekerf` CLI); M4a
+(desktop app shell in Tauri 2 + Svelte 5) is in progress.
 The behaviour of LaserGRBL's core is specified by
 [`freekerf/conformance`](https://github.com/freekerf/conformance); FreeKerf passes
 its protocol and golden (G-code) layers (`make test-rust` there).
@@ -32,8 +33,12 @@ crates/runtime/    orchestration
 crates/testing/
   freekerf-testkit     simulated clock, host+device bench, fixtures (dev-dependency only)
 apps/cli/          the `freekerf` binary (thin shell over the service)
+apps/desktop/      the Tauri 2 app (`src-tauri` = crate freekerf-desktop, thin shell over the service)
+ui/web/            web front end (Svelte 5 + TypeScript + Vite): src/ipc (Tauri), src/state,
+                   src/gen (generated: api.ts, icons.ts), src/dev (fake service, never shipped)
+ui/tokens/         fk-tokens.css generated from freekerf/design (commit in design.lock)
 tests/             cross-crate integration tests (crate freekerf-it)
-tools/xtask/       cargo xtask check-layers | gen-docs | check-docs
+tools/xtask/       cargo xtask check-layers | gen-docs | gen-ts | check-docs | sync-tokens
 doc/               documentation (below)
 ```
 
@@ -44,9 +49,10 @@ cargo test --workspace                       # all tests (no hardware, no networ
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 cargo xtask check-layers                     # layer rules
-cargo xtask gen-docs                         # regenerate doc/features/actions.md, doc/schema/*
-cargo xtask check-docs                       # CI: generated docs are committed
-cargo llvm-cov --workspace --exclude xtask --exclude freekerf-testkit --summary-only
+cargo xtask gen-docs                         # regenerate doc/features/actions.md, doc/schema/*, ui/web/src/gen/api.ts
+cargo xtask check-docs                       # CI: generated docs and TypeScript types are committed
+cargo xtask sync-tokens                      # tokens, icons, fonts from ../design at ui/tokens/design.lock
+cargo llvm-cov --workspace --exclude xtask --exclude freekerf-testkit --exclude freekerf-desktop --summary-only
 cargo bench -p freekerf-gcode                # 1M-line analysis (doc/benchmarks.md)
 cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session
 cargo deny check
@@ -56,13 +62,28 @@ cargo run -p freekerf-cli -- send file.nc --emulator
 cargo run -p freekerf-cli -- emulate --pty   # prints a /dev/pts path any program can open
 ```
 
+Desktop app (Linux needs WebKitGTK 4.1: `libwebkit2gtk-4.1-dev`, see
+`.github/actions/tauri-deps`; `freekerf-desktop` needs Rust ≥ 1.90):
+
+```bash
+cd ui/web && npm ci                          # once
+npm run dev                                  # Vite on :5173 (dev.html = UI on the fake service, in a browser)
+cargo run -p freekerf-desktop                # the app, loading the Vite dev server
+npm run build && cargo run -p freekerf-desktop --features custom-protocol   # embedded front end
+npm run lint && npm run check && npm test    # ESLint (architecture rules), svelte-check, Vitest
+npm run coverage                             # Vitest + V8 coverage (report in ui/web/coverage)
+npm run format                               # Prettier
+npm run check:bundle                         # after build: the fake service is not in dist/
+npm run licenses                             # npm license allow-list (GPL-3.0 compatible)
+```
+
 Conformance (in a checkout of `freekerf/conformance`):
 `FREEKERF_BIN=/path/to/target/debug/freekerf make test-rust`.
 
 ## Architecture on one screen
 
 ```
- front ends:  CLI · host --stdio · (desktop UI, scripts, MCP later)
+ front ends:  CLI · host --stdio · desktop (Tauri: dispatch/catalog/subscribe) · (scripts, MCP later)
                    │ dispatch(action, json)          ▲ ServiceEvent
  runtime:     freekerf-service ── Registry<Inner> (tier check on every call)
                    │ Machine::call(|host, now| ...)   ▲ MachineEvent
@@ -111,12 +132,14 @@ tested step by step with a simulated clock (`freekerf_testkit::Bench`). Details:
 | native | core |
 | runtime | core, config, native |
 | apps | runtime (`freekerf-service`), config |
+| ui/web | only the `AppService` contract (`src/service.ts`); Tauri only in `src/ipc/`; `src/dev/` only in tests and `dev.html` (ESLint) |
 | testing | anything, but only as a dev-dependency of others |
 
 The core builds for `wasm32-unknown-unknown` (CI). `unsafe_code` is forbidden in
 the whole workspace (no crate needs it today).
 
-**Licenses**: GPL-3.0-or-later; `deny.toml` is an allow-list (`cargo deny check`).
+**Licenses**: GPL-3.0-or-later; `deny.toml` is an allow-list (`cargo deny check`);
+npm packages pass `ui/web/scripts/check-licenses.mjs` (`npm run licenses`).
 Porting LaserGRBL code is allowed (GPLv3, credit in `NOTICE`).
 
 **Errors**: libraries return errors (`thiserror`), `anyhow` only in apps; no
@@ -134,6 +157,8 @@ A change is done when its tests and docs are updated in the same PR.
 | an action (added, renamed, new parameter, new tier) | `cargo xtask gen-docs` (`doc/features/actions.md`, checked in CI) |
 | settings format | `doc/features/settings.md`, a migration in `freekerf-settings` and its test, `cargo xtask gen-docs` |
 | crates, traits, data flow, layers | `doc/architecture.md`, this file, `tools/xtask/src/layers.rs` |
+| a type crossing to the UI (result, event, settings) | `cargo xtask gen-ts` (`ui/web/src/gen/api.ts`, checked in CI) |
+| the design commit (tokens, icons, fonts) | `ui/tokens/design.lock`, `cargo xtask sync-tokens` |
 | a decision | a new ADR in `doc/adr/` |
 | something postponed | `doc/roadmap.md` |
 | a milestone item | §13 of `PLAN.md` |

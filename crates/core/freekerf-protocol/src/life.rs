@@ -5,6 +5,7 @@
 //! saves them with the settings). Dates are set by the application too, since the
 //! core has no wall clock. Nothing is uploaded (no telemetry: DIV-027).
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use freekerf_gcode::Decimal;
@@ -16,7 +17,7 @@ use crate::status::MachineStatus;
 const MAX_DELTA_MS: u64 = 600_000;
 
 /// Usage of one laser module.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct LaserLifeCounter {
     /// Unique id.
     pub id: String,
@@ -110,7 +111,7 @@ fn round_ms(v: f64) -> u64 {
 }
 
 /// The counters and the one of the connected module.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct LaserLife {
     /// All modules.
     pub counters: Vec<LaserLifeCounter>,

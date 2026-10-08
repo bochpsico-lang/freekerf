@@ -406,6 +406,7 @@ Updated by every PR that delivers a milestone item.
 | M1: large files | `freekerf-gcode` (`rayon`, feature `parallel`) | `benches/analysis.rs` | `doc/benchmarks.md` |
 | M1: divergences | — | conformance (no marker needed so far) | `doc/divergences.md` |
 | M3: UI toolkit decision (Tauri 2) | — | — | `doc/research/ui-toolkit.md`, `doc/adr/0006-ui-toolkit.md` |
+| M4a: desktop skeleton (Tauri app, Svelte front end, generated types, design tokens, CI) | `apps/desktop/src-tauri` (`freekerf-desktop`), `ui/web`, `ui/tokens`, `tools/xtask/src/{ts,design}.rs`, `Registry::describe_result`, `EventMessage` | `bridge.rs` unit tests, `ui/web` Vitest (`src/**/*.test.ts`, `tests/unit/`), xtask `ts`/`design` tests, CI `ui`, `desktop`, `desktop-platforms` | `doc/features/desktop-app.md`, ADR 0011 (framework), ADR 0013 (types), `ui/CREDITS.md` |
 
 ## 14. Decisions already taken
 

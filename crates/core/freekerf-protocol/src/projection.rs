@@ -2,13 +2,14 @@
 //!
 //! Times are milliseconds of the injected monotonic clock.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::status::Point3;
 
 /// Why a job stopped before its end (`DetectedIssue`). Negative codes are caused by
 /// the user and are not reported as problems.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub enum Issue {
     /// No issue.
     Unknown,
@@ -61,7 +62,7 @@ impl std::fmt::Display for Issue {
 }
 
 /// Counters and timers of the running job.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct TimeProjection {
     estimated_target_ms: i64,
     estimated_progress_ms: i64,

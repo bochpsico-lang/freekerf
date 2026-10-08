@@ -2,6 +2,7 @@
 //! defaults are Grbl's behaviour, the variants override what differs
 //! (`SmoothieCore`, `MarlinCore`, `VigoCore` of LaserGRBL).
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use freekerf_gcode::Command;
@@ -11,7 +12,7 @@ use crate::status::{MachineStatus, Point3, parse_f32};
 use crate::version::FirmwareVersion;
 
 /// The firmware families FreeKerf talks to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub enum FirmwareKind {
     /// Grbl 0.9/1.1 and grblHAL (and the many vendor builds of them).
     Grbl,

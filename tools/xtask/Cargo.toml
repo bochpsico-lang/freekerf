@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-description = "Repository automation: check-layers, generated docs"
+description = "Repository automation: check-layers, generated docs and TypeScript types, tokens"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,6 +13,7 @@ publish.workspace = true
 anyhow.workspace = true
 freekerf-service.workspace = true
 freekerf-settings.workspace = true
+schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

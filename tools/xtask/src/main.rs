@@ -4,7 +4,13 @@
 //!   forbidden third-party crate in the core) breaks the layer rules of
 //!   `PLAN.md` §3 / `AGENTS.md`;
 //! * `gen-docs`: regenerates the generated documentation;
-//! * `check-docs`: fails when the committed generated documentation is stale.
+//! * `check-docs`: fails when the committed generated documentation (and the
+//!   generated TypeScript types) are stale;
+//! * `sync-tokens [--design <dir>] [--check]`: tokens, icons, fonts and app icons
+//!   from `freekerf/design` at the commit of `ui/tokens/design.lock` (default
+//!   checkout: `$FREEKERF_DESIGN` or `../design`);
+//! * `gen-ts`: same as `gen-docs` (the TypeScript types of `ui/web/src/gen/` are
+//!   generated files too).
 
 #![allow(clippy::print_stdout, clippy::print_stderr)] // a command-line tool
 
@@ -12,17 +18,21 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
 use anyhow::{Context, Result, bail};
+use serde_json::Value;
 
+mod design;
 mod layers;
+mod ts;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("check-layers") => check_layers(),
-        Some("gen-docs") => gen_docs(false),
+        Some("gen-docs" | "gen-ts") => gen_docs(false),
         Some("check-docs") => gen_docs(true),
+        Some("sync-tokens") => sync_tokens(&args[1..]),
         _ => {
-            eprintln!("usage: cargo xtask <check-layers|gen-docs|check-docs>");
+            eprintln!("usage: cargo xtask <check-layers|gen-docs|gen-ts|check-docs|sync-tokens>");
             return ExitCode::from(2);
         }
     };
@@ -77,7 +87,52 @@ fn generated() -> Result<Vec<(PathBuf, String)>> {
             root().join("doc/schema/settings.schema.json"),
             freekerf_settings::json_schema(),
         ),
+        (root().join("ui/web/src/gen/api.ts"), typescript(&service)?),
     ])
+}
+
+/// `ui/web/src/gen/api.ts`.
+fn typescript(service: &freekerf_service::Service) -> Result<String> {
+    let value = |s: schemars::Schema| serde_json::to_value(s).unwrap_or(Value::Null);
+    let settings: Value = serde_json::from_str(&freekerf_settings::json_schema())?;
+    let events = value(schemars::schema_for!(freekerf_service::EventMessage));
+    let error = value(schemars::schema_for!(freekerf_service::ActionError));
+    let tier = value(schemars::schema_for!(freekerf_service::Tier));
+    let spec = value(schemars::schema_for!(freekerf_service::ActionSpec));
+    let roots = [
+        ts::Root {
+            name: "Tier",
+            schema: &tier,
+        },
+        ts::Root {
+            name: "ActionError",
+            schema: &error,
+        },
+        ts::Root {
+            name: "ActionSpec",
+            schema: &spec,
+        },
+        ts::Root {
+            name: "EventMessage",
+            schema: &events,
+        },
+        ts::Root {
+            name: "Settings",
+            schema: &settings,
+        },
+    ];
+    let specs = service.specs();
+    let actions: Vec<ts::Action<'_>> = specs
+        .iter()
+        .map(|s| ts::Action {
+            name: &s.name,
+            tier: s.tier.as_str(),
+            description: &s.description,
+            params: &s.params,
+            result: s.result.as_ref(),
+        })
+        .collect();
+    ts::generate(&roots, &actions)
 }
 
 fn gen_docs(check: bool) -> Result<()> {
@@ -102,6 +157,43 @@ fn gen_docs(check: bool) -> Result<()> {
     } else {
         bail!(
             "generated docs are stale (run `cargo xtask gen-docs`): {}",
+            stale.join(", ")
+        )
+    }
+}
+
+fn sync_tokens(args: &[String]) -> Result<()> {
+    let check = args.iter().any(|a| a == "--check");
+    let design = args
+        .iter()
+        .position(|a| a == "--design")
+        .and_then(|i| args.get(i + 1))
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("FREEKERF_DESIGN").map(PathBuf::from))
+        .unwrap_or_else(|| root().join("../design"));
+    let commit = design::pinned(&root())?;
+    let mut stale = Vec::new();
+    for out in design::outputs(&design, &commit)? {
+        let path = root().join(&out.path);
+        if std::fs::read(&path).ok().as_deref() == Some(out.bytes.as_slice()) {
+            continue;
+        }
+        if check {
+            stale.push(out.path.display().to_string());
+        } else {
+            if let Some(dir) = path.parent() {
+                std::fs::create_dir_all(dir)?;
+            }
+            std::fs::write(&path, &out.bytes)?;
+            println!("wrote {}", out.path.display());
+        }
+    }
+    if stale.is_empty() {
+        println!("design {commit}: in sync");
+        Ok(())
+    } else {
+        bail!(
+            "files differ from design {commit} (run `cargo xtask sync-tokens`): {}",
             stale.join(", ")
         )
     }

@@ -4,10 +4,11 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Kind of a received message (`GrblMessage.MessageType`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum MessageKind {
     /// Welcome banner.
     Startup,
@@ -49,7 +50,7 @@ impl MessageKind {
 }
 
 /// Status of a sent command (`CommandStatus`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum CommandStatus {
     /// Not sent yet.
     Queued,
@@ -80,7 +81,7 @@ impl CommandStatus {
 }
 
 /// One row of the console.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum ConsoleRow {
     /// A command was sent. `id` matches the [`ConsoleRow::Result`] that follows.
     Command {

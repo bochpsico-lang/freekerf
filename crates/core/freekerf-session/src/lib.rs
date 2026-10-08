@@ -121,7 +121,7 @@ impl Caller {
 }
 
 /// Error of an action.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", content = "message", rename_all = "snake_case")]
 pub enum ActionError {
     /// No action with this name.
@@ -158,10 +158,13 @@ pub enum RegistryError {
     /// The description is empty.
     #[error("action `{0}` has no description")]
     NoDescription(String),
+    /// No action with this name (describing a result).
+    #[error("action `{0}` is not registered")]
+    NotRegistered(String),
 }
 
 /// Public description of an action.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ActionSpec {
     /// `namespace.name`.
     pub name: String,
@@ -171,6 +174,10 @@ pub struct ActionSpec {
     pub tier: Tier,
     /// JSON schema of the parameters.
     pub params: Value,
+    /// JSON schema of the result, when the registrant described it
+    /// ([`Registry::describe_result`]); front ends type the result as unknown otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<Value>,
 }
 
 type Handler<C> = Box<dyn Fn(&C, Value) -> Result<Value, ActionError> + Send + Sync>;
@@ -263,8 +270,23 @@ impl<C> Registry<C> {
             description: description.trim().into(),
             tier,
             params,
+            result: None,
         };
         self.actions.insert(name.into(), Entry { spec, handler });
+        Ok(())
+    }
+
+    /// Records the JSON schema of the result of `name` (used to generate front-end
+    /// types; dispatching is not affected).
+    ///
+    /// # Errors
+    /// No action with this name.
+    pub fn describe_result<R: JsonSchema>(&mut self, name: &str) -> Result<(), RegistryError> {
+        let entry = self
+            .actions
+            .get_mut(name)
+            .ok_or_else(|| RegistryError::NotRegistered(name.into()))?;
+        entry.spec.result = Some(serde_json::to_value(schemars::schema_for!(R)).unwrap_or(Value::Null));
         Ok(())
     }
 
@@ -383,6 +405,24 @@ mod tests {
         /// Times.
         #[serde(default)]
         times: Option<u32>,
+    }
+
+    #[test]
+    fn results_can_be_described() {
+        let mut r = registry();
+        assert_eq!(r.spec("test.echo").unwrap().result, None);
+        r.describe_result::<String>("test.echo").unwrap();
+        assert_eq!(
+            r.spec("test.echo").unwrap().result.as_ref().unwrap()["type"],
+            "string"
+        );
+        assert_eq!(
+            r.describe_result::<String>("test.nope"),
+            Err(RegistryError::NotRegistered("test.nope".into()))
+        );
+        // not serialized when absent (older catalogues stay the same)
+        let v = serde_json::to_value(r.spec("machine.stop").unwrap()).unwrap();
+        assert!(v.get("result").is_none());
     }
 
     fn registry() -> Registry<()> {

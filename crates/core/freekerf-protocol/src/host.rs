@@ -11,6 +11,7 @@ use std::collections::VecDeque;
 
 use freekerf_gcode::number::decimal_from_f64;
 use freekerf_gcode::{Command, Decimal, MachineState, Program};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::console::{CommandStatus, ConsoleRow, MessageKind, decode_message, decode_result};
@@ -40,7 +41,7 @@ const COLLECT_MAX_MS: u64 = 5_000;
 const STUCK_MS: u64 = 10_000;
 
 /// How lines are streamed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub enum StreamingMode {
     /// Fill the board's RX buffer (character counting).
     Buffered,
@@ -64,7 +65,7 @@ impl StreamingMode {
 }
 
 /// Automatic cooling: hold the job `off_ms` every `on_ms` of work.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct AutoCooling {
     /// Working time between pauses.
     pub on_ms: u64,
@@ -73,7 +74,7 @@ pub struct AutoCooling {
 }
 
 /// Options that change what goes on the wire.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct HostOptions {
     /// Streaming mode (Smoothie and Marlin always stream synchronously).
     pub streaming_mode: StreamingMode,
@@ -136,7 +137,7 @@ pub enum Output {
 }
 
 /// Where a queued command came from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum Origin {
     /// Typed by the user, a button, a jog, custom code.
     Manual,
@@ -147,7 +148,7 @@ pub enum Origin {
 }
 
 /// The kind of a system operation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum SystemOpKind {
     /// `$$`.
     ReadSettings,
@@ -160,7 +161,7 @@ pub enum SystemOpKind {
 }
 
 /// What happened, for the front ends.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub enum Event {
     /// The machine state changed.
     StatusChanged {
@@ -290,7 +291,7 @@ enum JogTarget {
 }
 
 /// Information to offer a job resume after an interruption.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ResumeSuggestion {
     /// Commands executed.
     pub executed: usize,
@@ -2259,7 +2260,7 @@ fn format_duration(ms: u64) -> String {
 }
 
 /// State of the host for front ends.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct HostSnapshot {
     /// Firmware kind.
     pub firmware: FirmwareKind,

@@ -12,3 +12,7 @@ version. See the LICENSE file for the full text.
 "FreeKerf" and the FreeKerf logo are names of the FreeKerf project. The license
 above covers the code and documents; it does not grant rights to use the name or
 logo in a way that suggests endorsement by the project.
+
+Bundled third-party assets of the desktop app (ui/CREDITS.md):
+- Inter, JetBrains Mono and Space Grotesk fonts (subsets), SIL Open Font License 1.1
+  (ui/web/public/fonts/OFL.txt).

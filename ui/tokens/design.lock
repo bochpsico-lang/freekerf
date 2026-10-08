@@ -1,0 +1,3 @@
+# Commit of freekerf/design that ui/tokens, the fonts, the icons and the app icons come from.
+# Change it, then run `cargo xtask sync-tokens` (CI runs it with --check).
+e284367854f6d57ab87aa20ebe306458ac4e0689

@@ -6,6 +6,7 @@ use std::str::FromStr;
 use freekerf_gcode::Decimal;
 use freekerf_gcode::TimingConfig;
 use freekerf_gcode::command::parse_settings_line;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::version::FirmwareVersion;
@@ -17,7 +18,7 @@ const MAX_SIZE: i64 = 2_000_000;
 const MAX_ACCEL: i64 = 2_000_000;
 
 /// Settings read with `$$` (number → raw value), and the version they came from.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct GrblSettings {
     version: Option<FirmwareVersion>,
     values: BTreeMap<u32, String>,

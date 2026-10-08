@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window: only the FreeKerf commands (dispatch, catalog, subscribe). No core plugins: no file system, shell or network access from the web view.",
+  "windows": ["main"],
+  "permissions": []
+}

@@ -2,7 +2,8 @@
 
 FreeKerf is a Cargo workspace split in layers with machine-checked dependency
 rules (`cargo xtask check-layers`, PLAN §3). This page describes what exists after
-M1: the headless machine core and the `freekerf` command line.
+M1 (the headless machine core and the `freekerf` command line) and the desktop app
+of M4a.
 
 ## Layers and crates
 
@@ -10,6 +11,7 @@ M1: the headless machine core and the `freekerf` command line.
 flowchart TB
   subgraph apps
     cli[freekerf-cli<br/>the freekerf binary]
+    desktop[freekerf-desktop<br/>Tauri 2 window]
   end
   subgraph runtime
     service[freekerf-service<br/>action registry, settings, program]
@@ -30,6 +32,7 @@ flowchart TB
   end
   cli --> service
   cli --> settings
+  desktop --> service
   service --> machine
   service --> transport
   service --> platform
@@ -50,11 +53,37 @@ flowchart TB
 | config | settings | core only; files through the `SettingsStore` trait |
 | native | transport, platform | core only |
 | runtime | machine, service | core, config, native |
-| apps | cli | the service (and config for `freekerf config`) |
+| apps | cli, desktop | the service (and config for `freekerf config`) |
 | testing | testkit | dev-dependency only |
 
 `freekerf-gcode` may parse large programs on all cores (`rayon`, feature
 `parallel`, on by default; the runtime enables it, the wasm build does not).
+
+## Desktop app (M4a)
+
+```mermaid
+flowchart LR
+  subgraph webview[ui/web: Svelte 5 in the system WebView]
+    comp[components] -->|dispatch| svc[AppService]
+    state[src/state: projections] --> comp
+  end
+  svc -->|"invoke: dispatch, catalog"| cmds[freekerf-desktop commands]
+  cmds -->|"Channel: EventMessage JSON"| state
+  cmds --> service[freekerf-service]
+```
+
+- `apps/desktop/src-tauri` (crate `freekerf-desktop`) exposes three Tauri commands:
+  `dispatch(action, params)`, `catalog()` and `subscribe(channel)`. The window acts
+  as `Caller { kind: User, name: "desktop", max_tier: machine }`: `laser` actions
+  are refused until the fire confirmation exists (PLAN §9.5).
+- `ui/web` reaches the app only through the `AppService` interface
+  (`src/service.ts`); `src/ipc/` is the only code that imports Tauri, and the fake
+  service of `src/dev/` (browser development, component tests) never reaches a
+  production build (lint + `npm run check:bundle`).
+- Types crossing the boundary are generated from the Rust schemas into
+  `ui/web/src/gen/api.ts` (ADR 0013). Bulk data uses raw binary payloads (ADR 0006).
+- Tokens, icons, fonts and app icons come from `freekerf/design` at the commit
+  pinned in `ui/tokens/design.lock` (`cargo xtask sync-tokens`).
 
 ## Data flow
 

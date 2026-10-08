@@ -13,6 +13,7 @@ env:
   # keep in sync with rust-toolchain.toml and `rust-version` in Cargo.toml
   TOOLCHAIN: "1.97.0"
   MSRV: "1.88"
+  NODE: "24"
 
 jobs:
   licenses:
@@ -32,12 +33,23 @@ jobs:
           toolchain: ${{ env.TOOLCHAIN }}
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/tauri-deps
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: layer rules
         run: cargo xtask check-layers
-      - name: generated docs are up to date
+      - name: generated docs and TypeScript types are up to date
         run: cargo xtask check-docs
+      - name: design commit pinned in ui/tokens/design.lock
+        id: design
+        run: echo "commit=$(grep -v '^#' ui/tokens/design.lock | head -n1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: freekerf/design
+          ref: ${{ steps.design.outputs.commit }}
+          path: design
+      - name: tokens, icons and fonts match freekerf/design
+        run: cargo xtask sync-tokens --design design --check
       - name: rustdoc
         run: cargo doc --workspace --no-deps
         env:
@@ -53,9 +65,11 @@ jobs:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
-      # thresholds: doc/coverage.md (90 % workspace, 95 % freekerf-gcode and freekerf-protocol)
+      - uses: ./.github/actions/tauri-deps
+      # thresholds: doc/coverage.md (90 % workspace, 95 % freekerf-gcode and freekerf-protocol);
+      # the desktop shell has its own job (window code needs a display)
       - name: tests with coverage (workspace >= 90 % lines)
-        run: cargo llvm-cov --workspace --exclude xtask --exclude freekerf-testkit --fail-under-lines 90 --summary-only
+        run: cargo llvm-cov --workspace --exclude xtask --exclude freekerf-testkit --exclude freekerf-desktop --fail-under-lines 90 --summary-only
       - name: freekerf-gcode >= 95 % lines
         run: cargo llvm-cov -p freekerf-gcode --fail-under-lines 95 --summary-only
       - name: freekerf-protocol >= 95 % lines
@@ -85,7 +99,22 @@ jobs:
           toolchain: ${{ env.TOOLCHAIN }}
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --workspace --all-targets --target ${{ matrix.target }}
+      # the desktop app needs the native toolchains (resource compiler, Objective-C): job desktop-platforms
+      - run: cargo check --workspace --all-targets --exclude freekerf-desktop --target ${{ matrix.target }}
+
+  desktop-platforms:
+    # the Tauri app compiles on Windows (WebView2) and macOS (WKWebView)
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p freekerf-desktop --all-targets
 
   msrv:
     runs-on: ubuntu-latest
@@ -95,7 +124,68 @@ jobs:
         with:
           toolchain: ${{ env.MSRV }}
       - uses: Swatinem/rust-cache@v2
-      - run: cargo +${{ env.MSRV }} check --workspace --all-targets
+      # Tauri 2 needs Rust 1.90: the desktop app has its own rust-version
+      - run: cargo +${{ env.MSRV }} check --workspace --all-targets --exclude freekerf-desktop
+
+  ui:
+    # the web front end: format, lint (architecture rules), types, tests with
+    # coverage, production build without the fake service, npm licenses
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE }}
+          cache: npm
+          cache-dependency-path: ui/web/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run check
+      - name: unit and component tests with coverage
+        run: npm run coverage
+      - run: npm run build
+      - name: the fake service is not in the production bundle
+        run: npm run check:bundle
+      - name: npm licenses (allow-list compatible with GPL-3.0-or-later)
+        run: npm run licenses
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-coverage
+          path: ui/web/coverage/
+
+  desktop:
+    # the Tauri app: clippy, tests, release build with the embedded front end and a
+    # smoke run on a virtual display
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/tauri-deps
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE }}
+          cache: npm
+          cache-dependency-path: ui/web/package-lock.json
+      - run: npm ci && npm run build
+        working-directory: ui/web
+      - run: cargo clippy -p freekerf-desktop --all-targets --features custom-protocol -- -D warnings
+      - run: cargo test -p freekerf-desktop
+      - run: cargo build -p freekerf-desktop --features custom-protocol
+      - name: the app starts and stays up on X11 (Xvfb)
+        run: |
+          export FREEKERF_HOME="$(mktemp -d)"
+          set +e
+          xvfb-run -a timeout 15 target/debug/freekerf-desktop
+          code=$?
+          test "$code" -eq 124 || { echo "the app exited with $code"; exit 1; }
 
   conformance:
     # conformance's protocol and golden (G-code) layers against the Rust build

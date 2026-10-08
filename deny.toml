@@ -15,7 +15,16 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
-ignore = []
+# Only "unmaintained" notices, all transitive dependencies of Tauri 2 (no known
+# vulnerability). Revisit when Tauri updates them (doc/roadmap.md).
+ignore = [
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error: build-time macro of glib-macros (gtk-rs 0.18, Tauri on Linux)" },
+    { id = "RUSTSEC-2025-0075", reason = "unic-char-range: via urlpattern (Tauri capabilities)" },
+    { id = "RUSTSEC-2025-0080", reason = "unic-common: via urlpattern (Tauri capabilities)" },
+    { id = "RUSTSEC-2025-0081", reason = "unic-char-property: via urlpattern (Tauri capabilities)" },
+    { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version: via urlpattern (Tauri capabilities)" },
+    { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident: via urlpattern (Tauri capabilities)" },
+]
 
 [licenses]
 version = 2

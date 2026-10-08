@@ -1,11 +1,12 @@
 //! Machine states and the parsing of real-time status reports (`<...>`).
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::version::FirmwareVersion;
 
 /// State of the machine as the host sees it (`MacStatus`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub enum MachineStatus {
     /// No connection.
     Disconnected,
@@ -96,7 +97,7 @@ impl std::fmt::Display for MachineStatus {
 }
 
 /// A position (machine or work), in mm, as `float` like LaserGRBL (`GPoint`).
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Point3 {
     /// X.
     pub x: f32,
