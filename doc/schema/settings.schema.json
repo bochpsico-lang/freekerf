@@ -36,6 +36,7 @@
       "description": "Machine connection.",
       "$ref": "#/$defs/MachineSettings",
       "default": {
+        "accept_broken_ok": true,
         "auto_cooling": {
           "enabled": false,
           "off_s": 60,
@@ -174,6 +175,11 @@
       "description": "How to reach the machine and how to talk to it.",
       "type": "object",
       "properties": {
+        "accept_broken_ok": {
+          "description": "Count a garbled line that contains `ok` as an `ok` (tolerates a noisy link).",
+          "type": "boolean",
+          "default": true
+        },
         "auto_cooling": {
           "description": "Automatic cooling cycles.",
           "$ref": "#/$defs/AutoCoolingSettings",
