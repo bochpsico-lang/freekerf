@@ -26,7 +26,8 @@ crates/core/       pure logic, no I/O, builds for wasm32
   freekerf-planner     document -> G-code (LaserGRBL writer, images), generators, Hershey
   freekerf-protocol    sans-IO host state machine (port of GrblCore) + firmware variants
   freekerf-emulator    sans-IO Grbl 1.1 device (simulator, tests)
-  freekerf-session     action registry: names, JSON schemas, permission tiers
+  freekerf-session     action registry (names, JSON schemas, tiers); the session: document,
+                       selection, view, undo/transactions, change events, their actions
 crates/config/     persistent data
   freekerf-settings    settings.toml model, migrations, JSON schema
   freekerf-materials   material library packages (freekerf/library by git), recipes on layers

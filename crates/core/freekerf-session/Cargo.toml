@@ -10,6 +10,11 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+base64.workspace = true
+freekerf-document.workspace = true
+freekerf-geometry.workspace = true
+freekerf-import.workspace = true
+freekerf-raster.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

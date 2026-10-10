@@ -920,6 +920,11 @@ dependencies = [
 name = "freekerf-session"
 version = "0.1.0"
 dependencies = [
+ "base64",
+ "freekerf-document",
+ "freekerf-geometry",
+ "freekerf-import",
+ "freekerf-raster",
  "schemars",
  "serde",
  "serde_json",

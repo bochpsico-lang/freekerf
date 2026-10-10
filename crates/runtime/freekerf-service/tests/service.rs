@@ -314,3 +314,75 @@ fn load_from_a_file() {
     assert_eq!(info["lines"], 2);
     assert!(s.snapshot().program_lines == 2);
 }
+
+#[test]
+fn document_session_actions_and_events() {
+    use freekerf_service::ServiceEvent;
+    let s = Service::in_memory().unwrap();
+    let user = Caller::user();
+    let dir = tempfile::tempdir().unwrap();
+    let svg = dir.path().join("a.svg");
+    std::fs::write(
+        &svg,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="20mm" viewBox="0 0 20 20">
+           <rect x="1" y="1" width="5" height="5" stroke="red" fill="none"/></svg>"##,
+    )
+    .unwrap();
+    let events = s.subscribe();
+    let out = s
+        .dispatch(&user, "document.import", json!({"path": svg.to_string_lossy()}))
+        .unwrap();
+    let id = out["objects"][0].as_u64().unwrap();
+    let ev: Vec<Value> = events.try_iter().map(|e: ServiceEvent| e.to_json()).collect();
+    assert!(
+        ev.iter()
+            .any(|e| e["event"] == "session" && e["change"] == "document"),
+        "{ev:?}"
+    );
+    s.dispatch(&user, "document.select", json!({"ids": [id]}))
+        .unwrap();
+    s.dispatch(&user, "document.translate", json!({"dx": 5.0, "dy": 5.0}))
+        .unwrap();
+    let snap = s.dispatch(&user, "session.snapshot", Value::Null).unwrap();
+    assert_eq!(snap["selection"], json!([id]));
+    assert_eq!(snap["undo"], json!(["import", "move"]));
+    assert!(snap["dirty"].as_bool().unwrap());
+    // save, change, open again
+    let proj = dir.path().join("p.fkproj");
+    s.dispatch(&user, "document.save", json!({"path": proj.to_string_lossy()}))
+        .unwrap();
+    assert_eq!(
+        s.dispatch(&user, "session.snapshot", Value::Null).unwrap()["dirty"],
+        json!(false)
+    );
+    s.dispatch(&user, "document.delete", Value::Null).unwrap();
+    s.dispatch(&user, "document.open", json!({"path": proj.to_string_lossy()}))
+        .unwrap();
+    let snap = s.dispatch(&user, "session.snapshot", Value::Null).unwrap();
+    assert_eq!(snap["document"]["objects"].as_array().unwrap().len(), 1);
+    assert_eq!(snap["undo"], json!([]));
+    // plan the document into the job
+    let info = s.dispatch(&user, "job.from_document", Value::Null).unwrap();
+    assert!(info["lines"].as_u64().unwrap() > 3);
+    assert_eq!(
+        s.dispatch(&user, "job.info", Value::Null).unwrap()["name"],
+        "document"
+    );
+    // errors
+    assert!(
+        s.dispatch(&user, "document.open", json!({"path": "/no/such.fkproj"}))
+            .is_err()
+    );
+    assert!(
+        s.dispatch(&user, "document.import", json!({"path": proj.to_string_lossy()}))
+            .is_err()
+    );
+    assert!(
+        s.dispatch(&user, "document.import", json!({"path": "/no/such.svg"}))
+            .is_err()
+    );
+    assert!(
+        s.dispatch(&user, "document.save", json!({"path": "/proc/nope/x.fkproj"}))
+            .is_err()
+    );
+}

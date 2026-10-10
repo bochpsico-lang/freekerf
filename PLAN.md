@@ -441,6 +441,7 @@ Updated by every PR that delivers a milestone item.
 | M2: material library | `crates/config/freekerf-materials` (git dependency on `freekerf-library`, `rev` pinned; `deny.toml` allow-git) | `tests/package.rs` (package built locally with the library's packaging function) | `doc/features/materials.md` |
 | M2: LaserGRBL migration (Settings.bin, laser counters) | `crates/config/freekerf-migrate`, `freekerf-service/src/migrate.rs`, `freekerf migrate lasergrbl` | `tests/lasergrbl_files.rs` (fixtures written by LaserGRBL's code), `tests/properties.rs`, CLI test | `doc/features/migration.md`, `doc/features/cli.md` |
 | M2: import → plan → stream integration tests; fuzzing | `tests/it/import_plan_stream.rs`, `fuzz/` (targets `gcode`, `svg`, `dxf`, `nrbf`), `.github/workflows/fuzz.yml` (weekly) | `cargo test -p freekerf-it` (PTY emulator, 7 jobs), fuzz runs | `doc/fuzzing.md`, `doc/divergences.md` (DIV-109) |
+| M2 (B1): session actions, undo/redo, transactions, snapshots, change events | `crates/core/freekerf-session/src/{session,actions}.rs`, `freekerf-service` (`document.open/save/import`, `job.from_document`, `ServiceEvent::Session`) | unit tests, `freekerf-service/tests/service.rs` | `doc/features/session.md`, `doc/features/actions.md` |
 | M3: UI toolkit decision (Tauri 2) | — | — | `doc/research/ui-toolkit.md`, `doc/adr/0006-ui-toolkit.md` |
 | M4a: plan split into M4a / M4b | `PLAN.md` §10 | — | `PLAN.md` |
 

@@ -19,6 +19,8 @@ use freekerf_protocol::host::decimal;
 use freekerf_protocol::{
     ConsoleRow, Event, FirmwareKind, Host, HostError, HostSnapshot, Issue, JogDirection, ResumeSuggestion,
 };
+use freekerf_session::actions::SessionHost;
+use freekerf_session::session::{Session, SessionEvent};
 use freekerf_session::{NoParams, Registry};
 use freekerf_settings::{MachineCache, Settings, SettingsStore};
 use freekerf_transport::{EmulatorTransport, SerialTransport, Transport};
@@ -46,6 +48,8 @@ pub enum ServiceEvent {
     SettingsChanged,
     /// A program was loaded.
     ProgramLoaded,
+    /// The session (document, selection, view, history) changed.
+    Session(SessionEvent),
 }
 
 impl ServiceEvent {
@@ -55,6 +59,9 @@ impl ServiceEvent {
         match self {
             Self::SettingsChanged => serde_json::json!({"event": "settings_changed"}),
             Self::ProgramLoaded => serde_json::json!({"event": "program_loaded"}),
+            Self::Session(e) => {
+                serde_json::json!({"event": "session", "revision": e.revision, "change": e.change})
+            }
             Self::Machine(MachineEvent::Connected { transport }) => {
                 serde_json::json!({"event": "connected", "transport": transport})
             }
@@ -199,6 +206,13 @@ pub struct Inner {
     console: Arc<Mutex<VecDeque<ConsoleRow>>>,
     issues: Arc<Mutex<Vec<Issue>>>,
     subscribers: Arc<Mutex<Vec<Sender<ServiceEvent>>>>,
+    session: Mutex<Session>,
+}
+
+impl SessionHost for Inner {
+    fn session(&self) -> &Mutex<Session> {
+        &self.session
+    }
 }
 
 impl std::fmt::Debug for Inner {
@@ -268,6 +282,7 @@ impl Service {
             console: Arc::new(Mutex::new(VecDeque::new())),
             issues: Arc::new(Mutex::new(Vec::new())),
             subscribers: Arc::new(Mutex::new(Vec::new())),
+            session: Mutex::new(Session::new()),
         });
         start_collector(&inner);
         Ok(Self {
@@ -290,7 +305,9 @@ impl Service {
     /// See [`ActionError`].
     pub fn dispatch(&self, caller: &Caller, action: &str, params: Value) -> Result<Value, ActionError> {
         tracing::debug!(caller = %caller.name, action, "dispatch");
-        self.registry.dispatch(&self.inner, caller, action, params)
+        let r = self.registry.dispatch(&self.inner, caller, action, params);
+        self.inner.publish_session_events();
+        r
     }
 
     /// The registry (specs, docs).
@@ -366,6 +383,41 @@ fn start_collector(inner: &Arc<Inner>) {
 impl Inner {
     fn publish(&self, e: &ServiceEvent) {
         lock(&self.subscribers).retain(|s| s.send(e.clone()).is_ok());
+    }
+
+    /// Sends the session's changes to the subscribers.
+    fn publish_session_events(&self) {
+        let events = lock(&self.session).drain_events();
+        for e in events {
+            self.publish(&ServiceEvent::Session(e));
+        }
+    }
+
+    /// The planner's machine options from the settings and the board's `$30`.
+    fn planner_options(&self) -> freekerf_planner::PlanOptions {
+        let st = lock(&self.settings);
+        let max_pwm = self
+            .machine
+            .call(|h, _| h.settings().max_pwm())
+            .ok()
+            .and_then(|d| d.to_string().parse::<f64>().ok())
+            .filter(|v| *v > 0.0 && *v < f64::from(u32::MAX));
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let machine = freekerf_planner::MachineOptions {
+            firmware: match st.machine.firmware {
+                freekerf_settings::Firmware::Grbl => freekerf_planner::Firmware::Grbl,
+                freekerf_settings::Firmware::Smoothie => freekerf_planner::Firmware::Smoothie,
+                freekerf_settings::Firmware::Marlin => freekerf_planner::Firmware::Marlin,
+                freekerf_settings::Firmware::VigoWork => freekerf_planner::Firmware::VigoWork,
+            },
+            support_pwm: st.machine.support_pwm,
+            max_pwm: max_pwm.map_or(1000, |v| v as u32),
+            ..freekerf_planner::MachineOptions::default()
+        };
+        freekerf_planner::PlanOptions {
+            machine,
+            ..freekerf_planner::PlanOptions::default()
+        }
     }
 
     fn save_cache(&self) {
@@ -914,6 +966,55 @@ fn build_registry() -> Registry<Inner> {
     ));
 
     // ---- job
+    // ---- document files (the session actions are registered below)
+    add(r.register(
+        "document.open",
+        "Opens a `.fkproj` project file (the undo history starts again).",
+        Tier::Edit,
+        |s: &Inner, p: LoadParams| {
+            let bytes = freekerf_platform::read(Path::new(&p.path))
+                .map_err(|e| ActionError::Failed(e.to_string()))?;
+            let doc = freekerf_document::Document::from_fkproj(&bytes)
+                .map_err(|e| ActionError::Failed(e.to_string()))?;
+            lock(&s.session).replace_document(doc);
+            Ok(serde_json::json!({"path": p.path}))
+        },
+    ));
+    add(r.register(
+        "document.save",
+        "Saves the document as a `.fkproj` project file (written atomically).",
+        Tier::Edit,
+        |s: &Inner, p: LoadParams| {
+            let text = lock(&s.session).document().to_fkproj();
+            freekerf_platform::write_atomic(Path::new(&p.path), text.as_bytes())
+                .map_err(|e| ActionError::Failed(e.to_string()))?;
+            lock(&s.session).mark_saved();
+            Ok(serde_json::json!({"path": p.path}))
+        },
+    ));
+    add(r.register(
+        "document.import",
+        "Imports an SVG, DXF or image file into the document (format from the extension). One undo step.",
+        Tier::Edit,
+        |s: &Inner, p: LoadParams| {
+            let bytes = freekerf_platform::read(Path::new(&p.path))
+                .map_err(|e| ActionError::Failed(e.to_string()))?;
+            let ids = freekerf_session::actions::import_file(&mut lock(&s.session), &p.path, &bytes)?;
+            Ok(serde_json::json!({"objects": ids}))
+        },
+    ));
+    add(r.register(
+        "job.from_document",
+        "Plans the document (vectors, then images; centerline uses the `autotrace` program) and loads it as the job.",
+        Tier::Edit,
+        |s: &Inner, _: NoParams| {
+            let doc = lock(&s.session).document().clone();
+            let tracer = autotrace::ExternalAutotrace::default();
+            let job = freekerf_planner::plan_with(&doc, &s.planner_options(), Some(&tracer))
+                .map_err(|e| ActionError::Failed(e.to_string()))?;
+            load_program(s, "document".into(), job.lines.join("\n").as_bytes())
+        },
+    ));
     add(r.register(
         "job.load",
         "Loads and analyzes a G-code file.",
@@ -963,6 +1064,7 @@ fn build_registry() -> Registry<Inner> {
         Tier::Safety,
         |s: &Inner, _: NoParams| s.host_result(Host::abort_program),
     ));
+    add(freekerf_session::actions::register_session_actions(&mut r));
     r
 }
 

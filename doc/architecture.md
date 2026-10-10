@@ -25,7 +25,7 @@ flowchart TB
     migrate[freekerf-migrate<br/>LaserGRBL import, read only]
   end
   subgraph core
-    session[freekerf-session<br/>registry, tiers]
+    session[freekerf-session<br/>registry, tiers, session]
     protocol[freekerf-protocol<br/>sans-IO host + firmware variants]
     gcode[freekerf-gcode<br/>parser, state, analysis]
     emulator[freekerf-emulator<br/>sans-IO Grbl 1.1 device]
@@ -42,6 +42,8 @@ flowchart TB
   service --> platform
   service --> settings
   service --> session
+  session --> import
+  session --> raster
   service --> protocol
   machine --> protocol
   machine --> transport

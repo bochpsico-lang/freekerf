@@ -7,7 +7,27 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | Action | Tier | Description |
 | --- | --- | --- |
 | `console.get` | read | Console rows (sent commands, answers, messages). |
+| `document.add_layer` | edit | Adds a layer of a colour (line, 1000 mm/min, power 1000, 1 pass unless given). One undo step. |
+| `document.clear_selection` | ui | Selects nothing. |
+| `document.delete` | edit | Deletes objects (default: the selection). One undo step. |
+| `document.from_fkproj` | edit | Replaces the document with a `.fkproj` text (the undo history starts again). |
+| `document.get` | read | The whole document (layers, objects with geometry and images), as in a `.fkproj` file. |
+| `document.import` | edit | Imports an SVG, DXF or image file into the document (format from the extension). One undo step. |
+| `document.import_data` | edit | Imports a file given as base64 bytes into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step. |
+| `document.move_to_layer` | edit | Moves objects (default: the selection) to another layer. One undo step. |
+| `document.new` | edit | Starts an empty document (the undo history starts again). |
+| `document.open` | edit | Opens a `.fkproj` project file (the undo history starts again). |
+| `document.remove_layer` | edit | Removes a layer and its objects. One undo step. |
+| `document.save` | edit | Saves the document as a `.fkproj` project file (written atomically). |
+| `document.select` | ui | Selects objects (replace, add to or remove from the selection). Unknown ids are ignored. |
+| `document.select_all` | ui | Selects every object. |
+| `document.to_fkproj` | read | The document as `.fkproj` text. |
+| `document.translate` | edit | Moves objects (default: the selection) by `dx`, `dy` mm. One undo step. |
+| `document.update_layer` | edit | Changes a layer's name, mode, speed, power, passes, visibility or filling. One undo step. |
+| `history.redo` | edit | Redoes the last undone change. |
+| `history.undo` | edit | Undoes the last document change. |
 | `job.abort` | safety | Stops streaming the job and sends `M5` (lines already in the board still run; use machine.stop to stop at once). Always allowed. |
+| `job.from_document` | edit | Plans the document (vectors, then images; centerline uses the `autotrace` program) and loads it as the job. |
 | `job.info` | read | The loaded program (name, lines, estimated time, range). |
 | `job.load` | edit | Loads and analyzes a G-code file. |
 | `job.load_text` | edit | Loads and analyzes G-code given as text. |
@@ -32,9 +52,17 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `machine.stop` | safety | STOP: soft reset of the board (laser off, queues flushed). Always allowed. |
 | `machine.unlock` | machine | Unlocks the alarm state (`$X`). |
 | `machine.write_settings` | machine | Writes board settings (`$N=V`), one at a time; returns when the board answered all of them. |
+| `session.snapshot` | read | The session as front ends and agents read it: revision, selection, view, undo/redo labels, layers and objects without geometry. |
 | `settings.get` | read | Reads the settings (all, or one dotted key). |
 | `settings.set` | edit | Changes one setting and saves the file. Automation settings are user-only and refused here. |
 | `state.get` | read | Machine state, loaded program, issues and resume offer. |
+| `view.close_dialog` | ui | Closes a dialog (default: the top one). |
+| `view.close_panel` | ui | Closes a panel by name. |
+| `view.get` | read | The view: mode, open panels, viewport, dialogs. |
+| `view.open_dialog` | ui | Opens a dialog by name (on top of the others). |
+| `view.open_panel` | ui | Opens a panel by name (`layers`, `console`, `jog`...). |
+| `view.set_mode` | ui | Switches between design and produce. |
+| `view.set_viewport` | ui | Centres the view on a point (mm) at a zoom (pixels per mm). |
 
 ## Parameters
 
@@ -46,9 +74,178 @@ Console rows (sent commands, answers, messages).
 | --- | --- | --- |
 | `last` | no | Only the last `last` rows. |
 
+### `document.add_layer`
+
+Adds a layer of a colour (line, 1000 mm/min, power 1000, 1 pass unless given). One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `color` | yes | Colour, `#RRGGBB`. |
+| `fill_pattern` | no | Filling pattern. |
+| `lines_per_mm` | no | Filling lines per mm. |
+| `mode` | no | `line`, `fill`, `fill_and_line`, `cut` or `ignore`. |
+| `name` | no | Name. |
+| `passes` | no | Passes (at least 1). |
+| `power` | no | `S` power. |
+| `speed_mm_min` | no | Speed, mm/min. |
+| `visible` | no | Shown and planned. |
+
+### `document.clear_selection`
+
+Selects nothing.
+
+No parameters.
+
+### `document.delete`
+
+Deletes objects (default: the selection). One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `ids` | no | Object ids (default: the selection). |
+
+### `document.from_fkproj`
+
+Replaces the document with a `.fkproj` text (the undo history starts again).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `text` | yes | The project file's text (`.fkproj`, JSON). |
+
+### `document.get`
+
+The whole document (layers, objects with geometry and images), as in a `.fkproj` file.
+
+No parameters.
+
+### `document.import`
+
+Imports an SVG, DXF or image file into the document (format from the extension). One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `path` | yes | Path of a G-code file. |
+
+### `document.import_data`
+
+Imports a file given as base64 bytes into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `data` | yes | The file's bytes, base64. |
+| `dpi` | no | Images: resolution in dots per inch (default 96); position is the origin. |
+| `format` | yes | File format. |
+| `name` | no | Name of the file (kept as the objects' source). |
+| `power` | no | Power of new layers, `S` (default 1000). |
+| `speed_mm_min` | no | Speed of new layers, mm/min (default 1000). |
+
+### `document.move_to_layer`
+
+Moves objects (default: the selection) to another layer. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `ids` | no | Object ids (default: the selection). |
+| `layer` | yes | Layer id. |
+
+### `document.new`
+
+Starts an empty document (the undo history starts again).
+
+No parameters.
+
+### `document.open`
+
+Opens a `.fkproj` project file (the undo history starts again).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `path` | yes | Path of a G-code file. |
+
+### `document.remove_layer`
+
+Removes a layer and its objects. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `id` | yes | Layer id. |
+
+### `document.save`
+
+Saves the document as a `.fkproj` project file (written atomically).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `path` | yes | Path of a G-code file. |
+
+### `document.select`
+
+Selects objects (replace, add to or remove from the selection). Unknown ids are ignored.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `ids` | yes | Object ids. |
+| `mode` | no | Replace (default), add or remove. |
+
+### `document.select_all`
+
+Selects every object.
+
+No parameters.
+
+### `document.to_fkproj`
+
+The document as `.fkproj` text.
+
+No parameters.
+
+### `document.translate`
+
+Moves objects (default: the selection) by `dx`, `dy` mm. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `dx` | yes | Distance along X, mm. |
+| `dy` | yes | Distance along Y, mm. |
+| `ids` | no | Object ids (default: the selection). |
+
+### `document.update_layer`
+
+Changes a layer's name, mode, speed, power, passes, visibility or filling. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `fill_pattern` | no | Filling pattern. |
+| `id` | yes | Layer id. |
+| `lines_per_mm` | no | Filling lines per mm. |
+| `mode` | no | `line`, `fill`, `fill_and_line`, `cut` or `ignore`. |
+| `name` | no | Name. |
+| `passes` | no | Passes (at least 1). |
+| `power` | no | `S` power. |
+| `speed_mm_min` | no | Speed, mm/min. |
+| `visible` | no | Shown and planned. |
+
+### `history.redo`
+
+Redoes the last undone change.
+
+No parameters.
+
+### `history.undo`
+
+Undoes the last document change.
+
+No parameters.
+
 ### `job.abort`
 
 Stops streaming the job and sends `M5` (lines already in the board still run; use machine.stop to stop at once). Always allowed.
+
+No parameters.
+
+### `job.from_document`
+
+Plans the document (vectors, then images; centerline uses the `autotrace` program) and loads it as the job.
 
 No parameters.
 
@@ -232,6 +429,12 @@ Writes board settings (`$N=V`), one at a time; returns when the board answered a
 | --- | --- | --- |
 | `settings` | yes | Values by setting number (`{"110": "6000"}`). |
 
+### `session.snapshot`
+
+The session as front ends and agents read it: revision, selection, view, undo/redo labels, layers and objects without geometry.
+
+No parameters.
+
 ### `settings.get`
 
 Reads the settings (all, or one dotted key).
@@ -254,3 +457,58 @@ Changes one setting and saves the file. Automation settings are user-only and re
 Machine state, loaded program, issues and resume offer.
 
 No parameters.
+
+### `view.close_dialog`
+
+Closes a dialog (default: the top one).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `name` | no | Dialog name (default: the top one). |
+
+### `view.close_panel`
+
+Closes a panel by name.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `name` | yes | Name of the panel or dialog. |
+
+### `view.get`
+
+The view: mode, open panels, viewport, dialogs.
+
+No parameters.
+
+### `view.open_dialog`
+
+Opens a dialog by name (on top of the others).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `name` | yes | Name of the panel or dialog. |
+
+### `view.open_panel`
+
+Opens a panel by name (`layers`, `console`, `jog`...).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `name` | yes | Name of the panel or dialog. |
+
+### `view.set_mode`
+
+Switches between design and produce.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `mode` | yes | `design` or `produce`. |
+
+### `view.set_viewport`
+
+Centres the view on a point (mm) at a zoom (pixels per mm).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `center` | yes | Centre, mm. |
+| `zoom` | yes | Pixels per mm. |

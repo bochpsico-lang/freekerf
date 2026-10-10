@@ -57,6 +57,10 @@ All notable changes to FreeKerf are documented here. The format follows
 - Integration tests: SVG, DXF and images imported, planned and streamed to the
   emulator over a PTY. Fuzz targets (G-code, SVG, DXF, LaserGRBL files) run weekly
   in CI; the bugs they found are fixed (DIV-109).
+- The session (`freekerf-session`): document, selection, view state, undo/redo,
+  transactions and change events, with their actions (select, import, move, layers,
+  history, view) and the service's file actions (`document.open`, `document.save`,
+  `document.import`, `job.from_document`).
 - `freekerf import-case`: runs `conformance` importer golden cases.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.

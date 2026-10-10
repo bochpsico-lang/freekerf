@@ -17,6 +17,9 @@
 //! assert_eq!(v, serde_json::json!(3));
 //! ```
 
+pub mod actions;
+pub mod session;
+
 use std::collections::BTreeMap;
 use std::fmt;
 
