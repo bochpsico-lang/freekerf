@@ -23,6 +23,7 @@ pub mod fill;
 pub mod generators;
 pub mod hershey;
 mod hershey_table;
+pub mod image;
 pub mod vector;
 pub mod writer;
 
@@ -120,6 +121,9 @@ pub enum PlanError {
     /// The document has something this planner cannot write.
     #[error("not supported: {0}")]
     Unsupported(String),
+    /// An image could not be processed.
+    #[error("image: {0}")]
+    Image(String),
 }
 
 impl From<freekerf_geometry::clipper::ClipperError> for PlanError {
@@ -160,12 +164,35 @@ impl Job {
 /// # Errors
 /// Images (raster planning comes with `freekerf-raster`) or a failed filling.
 pub fn plan(doc: &Document, options: &PlanOptions) -> Result<Job, PlanError> {
-    if doc.objects.iter().any(|o| matches!(o.kind, ObjectKind::Image(_))) {
-        return Err(PlanError::Unsupported("raster images".into()));
+    plan_with(doc, options, None)
+}
+
+/// [`plan`] with a centerline tracer for images that use it. The vector objects
+/// come first, then every image in document order, each as LaserGRBL's raster
+/// dialog generates it ([`image::plan_image_object`]).
+///
+/// # Errors
+/// As [`plan`], or an image that cannot be processed (centerline without a tracer).
+pub fn plan_with(
+    doc: &Document,
+    options: &PlanOptions,
+    tracer: Option<&dyn freekerf_raster::centerline::Tracer>,
+) -> Result<Job, PlanError> {
+    let has_vectors = doc
+        .objects
+        .iter()
+        .any(|o| !matches!(o.kind, ObjectKind::Image(_)));
+    let mut lines = if has_vectors || doc.objects.is_empty() {
+        vector::plan_vectors(doc, options)?
+    } else {
+        Vec::new()
+    };
+    for o in &doc.objects {
+        if let ObjectKind::Image(img) = &o.kind {
+            lines.extend(image::plan_image_object(img, &options.machine, tracer)?);
+        }
     }
-    Ok(Job {
-        lines: vector::plan_vectors(doc, options)?,
-    })
+    Ok(Job { lines })
 }
 
 #[cfg(test)]
@@ -211,10 +238,17 @@ mod tests {
             })),
         )
         .unwrap();
+        // images are planned (an empty one engraves nothing visible)
+        assert!(plan(&d, &PlanOptions::default()).is_ok());
+        let mut c = d.clone();
+        if let ObjectKind::Image(img) = &mut c.objects[0].kind {
+            img.settings.tool = freekerf_document::RasterTool::Centerline;
+        }
         assert!(matches!(
-            plan(&d, &PlanOptions::default()),
+            plan(&c, &PlanOptions::default()),
             Err(PlanError::Unsupported(_))
         ));
+        assert!(PlanError::Image("x".into()).to_string().contains("image"));
         let e: PlanError = freekerf_geometry::clipper::ClipperError::Range.into();
         assert!(e.to_string().contains("range"));
     }

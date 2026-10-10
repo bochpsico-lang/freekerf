@@ -41,6 +41,30 @@ G0 disabled), optionally in one direction only, with a border speed and
 fractions. `L2lConf` holds the raster settings, `L2lOptions` the machine options
 that matter (`disable_g0`, `unidirectional`, `max_pwm`).
 
+## Images in jobs
+
+`freekerf_raster::processor` is the raster dialog's pipeline
+(`RasterConverter.ImageProcessor`) and `freekerf_planner::image` turns its result
+into G-code:
+
+1. the image as loaded (semi-transparent pixels rounded through premultiplied
+   alpha, as GDI+ does when LaserGRBL copies it), tested for grey on every tenth pixel
+   (DIV-050), then the edits of the document (`ImageEdit`: crop, auto-trim, quarter
+   turns, flips, invert, flood fill, outline; points in preview coordinates);
+2. the resolution: the tool's quality in dots/mm (10 for centerline, 10 or the
+   adaptive value for vectorize, the file's dpi for pass-through), limited so the
+   bitmap stays under 22000² pixels; zero is an error ("target size too big");
+3. the bitmap: resized to `size_mm × res` (vectorize may first down-sample),
+   converted to grey (`Red/100`, `Green/100`, `Blue/100`, brightness
+   `-(100 - Brightness)/100`, `Contrast/100`; grey images always use the simple
+   average), white-clipped, then thresholded, dithered, or thresholded twice for
+   centerline;
+4. the job: Line2Line (line by line, dithering, pass-through), Potrace (vectorize)
+   or the external tracer (centerline), at the image's position.
+
+`plan_image(original, job, machine, tracer)` does it for one image;
+`plan_image_object` for a document's `ImageObject`.
+
 ## Platform differences
 
 The GDI+ steps (colour matrix, threshold, resize) are implemented in Rust, so the

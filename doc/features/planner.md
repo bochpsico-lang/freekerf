@@ -49,8 +49,10 @@ engraving (LaserGRBL settings of the same meaning).
 
 ## Limits
 
-- Raster images are planned by `freekerf-raster` (line by line, dithering,
-  vectorize, centerline); `plan` refuses documents with images until then.
+- Raster images: after the vector objects, every image in document order, as the
+  raster dialog generates it (`image::plan_image_object`, see
+  [raster.md](raster.md#images-in-jobs)). Centerline images need a tracer:
+  `plan_with(doc, options, Some(&tracer))`; `plan` refuses them.
 - No travel optimization of outlines yet: they keep the drawing order (as LaserGRBL).
 
 ## Tests

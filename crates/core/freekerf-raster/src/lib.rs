@@ -24,6 +24,7 @@ pub mod image;
 pub mod l2l;
 pub mod ops;
 pub mod potrace;
+pub mod processor;
 mod render;
 pub mod vectorize;
 

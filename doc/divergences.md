@@ -105,11 +105,11 @@ import-case --kinds`); kinds not implemented yet are skipped.
 | DIV-046 | Vectorize with raster filling: the filling header follows the raster PWM option, the outlines the machine's "Support Hardware PWM" | Same | kept (golden `potrace_raster_fill_no_pwm`) | conformance `potrace_raster_fill_no_pwm` |
 | DIV-047 | The raster filling sets `vectorfilling` on the caller's `L2LConf` | Settings are passed by value; nothing of the caller's changes | not applicable | — |
 | DIV-048 | A failing or missing autotrace is only logged; the empty output then fails as "Root element is missing" | The tracer's error is returned with its cause; empty output is an error too | fixed | `autotrace.rs::centerline_with_a_double` |
-| DIV-049 | Centerline reads speed, power, laser commands and offset from the raster dialog settings, not from the `L2LConf` it receives | Every value is an explicit parameter of `autotrace::centerline` (conformance maps the settings) | not applicable | conformance `centerline_settings` |
+| DIV-049 | Centerline reads speed, power, laser commands and offset from the raster dialog settings, not from the `L2LConf` it receives | Every value is an explicit parameter of `freekerf_planner::image::centerline` (conformance maps the settings) | not applicable | conformance `centerline_settings` |
+| DIV-050 | "Is grey scale" samples one pixel in ten in each direction (tolerance 20): colour details off that grid count as grey, and then the formula and the RGB weights are ignored | Same (`processor::is_gray`) | kept (golden `ip_gray_image_ignores_formula`) | conformance `ip_gray_image_ignores_formula` |
 | DIV-043 | A malformed saved layer setting is half loaded | Layer settings are document data, validated when read | not applicable | — |
 | DIV-044 | Every layer pass starts with a comment-only line (an empty command); pen up/down lines keep a space before their comment (`S0 `) | Same | kept (every `svg_*`/`dxf_*` golden) | conformance `svg_*`, `dxf_*` |
 
-DIV-050 (raster dialog pipeline) gets its entry with `image_processor`.
 
 ## FreeKerf only
 

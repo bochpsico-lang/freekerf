@@ -637,6 +637,8 @@ dependencies = [
  "freekerf-document",
  "freekerf-gcode",
  "freekerf-geometry",
+ "freekerf-import",
+ "freekerf-raster",
  "proptest",
  "schemars",
  "serde",
@@ -670,6 +672,7 @@ dependencies = [
 name = "freekerf-raster"
 version = "0.1.0"
 dependencies = [
+ "freekerf-document",
  "freekerf-gcode",
  "freekerf-geometry",
  "image",

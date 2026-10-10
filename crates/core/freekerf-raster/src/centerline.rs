@@ -3,6 +3,22 @@
 //! converts the SVG it prints. This module builds that request; running the
 //! program is the runtime's job (ADR 0010), converting the SVG the importer's.
 
+/// Stands for the input file in the arguments given to a [`Tracer`].
+pub const INPUT_PLACEHOLDER: &str = "<png>";
+
+/// Runs the tracer: `args` (from [`autotrace_args`] with [`INPUT_PLACEHOLDER`] as
+/// the input) name the input file, which the tracer replaces with the file it
+/// writes `png` to; returns the SVG it prints. Running a program is I/O, so the
+/// implementation lives in the runtime (`freekerf_service::autotrace`); tests use
+/// doubles.
+pub trait Tracer {
+    /// Traces `png`.
+    ///
+    /// # Errors
+    /// The program failed, with its cause.
+    fn trace(&self, png: &[u8], args: &[String]) -> Result<String, String>;
+}
+
 /// Thresholds of the centerline dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CenterlineOptions {

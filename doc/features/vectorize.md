@@ -25,14 +25,15 @@ fall-backs are LaserGRBL's (DIV-045).
 
 ## Centerline (autotrace)
 
-`freekerf_service::autotrace::centerline(img, options, tracer, offset, smart_bezier, machine)`
+`freekerf_planner::image::centerline(img, options, tracer, offset, smart_bezier, machine)`
 does `GrblFile.LoadImageCenterline`: the image goes as a PNG to the external
 `autotrace` program with `-centerline` and the thresholds (`CenterlineOptions`:
 corner 110°, line 1.0 by default; each can be off), and the SVG it prints is
 converted like any SVG, scaled so its larger side is a tenth of the image's larger
 side in pixels (the 10 px/mm the raster dialog uses for this tool), moved by the
-offset. `ExternalAutotrace` runs the program (`autotrace` on the `PATH` by default);
-tests use a double ([ADR 0010](../adr/0010-autotrace.md)).
+offset. The tracer is a `freekerf_raster::centerline::Tracer`;
+`freekerf_service::autotrace::ExternalAutotrace` runs the program (`autotrace` on
+the `PATH` by default); tests use a double ([ADR 0010](../adr/0010-autotrace.md)).
 
 ## Limits
 
@@ -52,7 +53,8 @@ applicable). See [divergences](../divergences.md).
 ## Tests
 
 Unit tests in `crates/core/freekerf-raster/src/potrace/`, `vectorize.rs`,
-`render.rs` (the drawing against libgdiplus' pixels), `centerline.rs`;
+`render.rs` (the drawing against libgdiplus' pixels), `centerline.rs`,
+`freekerf-planner/src/image.rs` (centerline with a tracer double);
 `freekerf-raster/tests/properties.rs` (tracing and vectorizing never panic, paths
-closed); `freekerf-service/src/autotrace.rs` (a tracer double, the external program
-with a stand-in); conformance `potrace_*`, `centerline_*`, `svgtext_*` (`make test-rust`).
+closed); `freekerf-service/src/autotrace.rs` (the external program with a
+stand-in); conformance `potrace_*`, `centerline_*`, `svgtext_*` (`make test-rust`).

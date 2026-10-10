@@ -46,6 +46,10 @@ All notable changes to FreeKerf are documented here. The format follows
 - Vectorization: Potrace (a port of LaserGRBL's CsPotrace, outlines as biarcs,
   vector and raster fillings) and centerline through the external `autotrace`
   program, identical to LaserGRBL on the conformance goldens (ADR 0009, 0010).
+- Images in jobs: the raster dialog's pipeline (edits, resolution, resize, grey,
+  white clip, threshold or dithering) and its tools (line by line, dithering,
+  pass-through, vectorize, centerline) in `freekerf_raster::processor` and
+  `freekerf_planner::image`; `plan` now plans documents with images.
 - `freekerf import-case`: runs `conformance` importer golden cases.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.

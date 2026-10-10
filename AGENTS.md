@@ -23,7 +23,7 @@ crates/core/       pure logic, no I/O, builds for wasm32
   freekerf-document    project model (layers, objects, cut/raster settings), .fkproj
   freekerf-import      SVG / DXF bytes -> document (colour layers)
   freekerf-raster      bitmaps: image operations, dithering, Line2Line, Potrace vectorize
-  freekerf-planner     document -> G-code (LaserGRBL writer), generators, Hershey
+  freekerf-planner     document -> G-code (LaserGRBL writer, images), generators, Hershey
   freekerf-protocol    sans-IO host state machine (port of GrblCore) + firmware variants
   freekerf-emulator    sans-IO Grbl 1.1 device (simulator, tests)
   freekerf-session     action registry: names, JSON schemas, permission tiers
@@ -31,7 +31,7 @@ crates/config/     persistent data
   freekerf-settings    settings.toml model, migrations, JSON schema
 crates/native/     operating system and hardware
   freekerf-transport   Transport trait: serial, emulator, emulator on a PTY
-  freekerf-platform    directories, atomic writes
+  freekerf-platform    directories, atomic writes, running external programs
 crates/runtime/    orchestration
   freekerf-machine     I/O thread: host + link + clock, priority STOP
   freekerf-service     the facade: every action of every front end

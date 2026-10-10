@@ -14,7 +14,7 @@ The headless front end. Every command goes through the action registry of
 | `freekerf config path\|get\|set\|schema` | settings file ([settings.md](settings.md)) | 0, 2 |
 | `freekerf actions [--json\|--markdown]` | the action catalogue | 0 |
 | `freekerf run ACTION [JSON]` | runs one action, prints its JSON result | 0, 2 |
-| `freekerf import-case CASE [--inputs DIR]` / `--kinds` | runs a `conformance` importer golden case (`-` reads it from stdin) and prints the harness's JSON; `--kinds` lists the case kinds this build runs (`generator`, `hershey`, `svg`, `dxf`, `svg_text`, `centerline`, `raster`, `potrace`, `image_op`) | 0, 2 |
+| `freekerf import-case CASE [--inputs DIR]` / `--kinds` | runs a `conformance` importer golden case (`-` reads it from stdin) and prints the harness's JSON; `--kinds` lists the case kinds this build runs (`generator`, `hershey`, `svg`, `dxf`, `svg_text`, `centerline`, `raster`, `potrace`, `image_op`, `image_processor`) | 0, 2 |
 
 Examples:
 

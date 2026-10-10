@@ -50,6 +50,8 @@ flowchart TB
   document --> geometry
   planner --> document
   planner --> gcode
+  planner --> raster
+  planner --> import
   service --> planner
   service --> import
   import --> document

@@ -10,6 +10,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+freekerf-document.workspace = true
 freekerf-gcode.workspace = true
 freekerf-geometry.workspace = true
 image.workspace = true

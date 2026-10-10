@@ -7,21 +7,25 @@
 //! they map to FreeKerf's planner options. Input files are read through the
 //! caller's reader (relative names under the cases' `inputs` directory).
 
+use freekerf_document::{
+    Adjustments, DitherMode as DocDither, GrayFormula, ImageEdit, Interpolation as DocInterpolation,
+    LineDirection, RasterSettings, RasterTool, VectorFill, VectorizeSettings,
+};
 use freekerf_document::{Color, Document, FillSettings, Layer, LayerId, LayerMode, Source, SourceFormat};
 use freekerf_gcode::report::{millis_to_seconds, num};
 use freekerf_gcode::{AnalysisOptions, Command, Decimal, Program, TimingConfig};
 use freekerf_geometry::hatch::FillPattern;
 use freekerf_import::{Import, dxf, svg};
 use freekerf_planner::generators::{self, CuttingTest, GreyscaleTest, ShakeTest};
+use freekerf_planner::image::{self, DEFAULT_DPI, ImageJob};
 use freekerf_planner::{Firmware, Job, MachineOptions, PlanOptions, VectorStyle, hershey};
 use freekerf_raster::centerline::CenterlineOptions;
+use freekerf_raster::centerline::Tracer;
 use freekerf_raster::dither::DitherMode;
 use freekerf_raster::image::{Argb, Image, argb};
 use freekerf_raster::l2l::{Direction, L2lConf, L2lOptions, load_image_l2l};
 use freekerf_raster::ops::{self, Formula, Interpolation};
 use freekerf_raster::potrace::TraceOptions;
-
-use crate::autotrace;
 use freekerf_raster::vectorize::{Filling, PotraceOptions, load_image_potrace};
 use serde_json::{Value, json};
 
@@ -36,6 +40,7 @@ pub const SUPPORTED_KINDS: &[&str] = &[
     "raster",
     "potrace",
     "image_op",
+    "image_processor",
 ];
 
 /// Error of a case: malformed, unsupported or failing to read its input.
@@ -308,11 +313,235 @@ fn planned(
     .map_err(|e| CaseError::Invalid(e.to_string()))
 }
 
-/// The harness' autotrace double: prints a recorded SVG.
-struct Recorded(String);
+/// Raster settings, target size (mm) and offset (mm) of an `image_processor` case.
+type ProcessorCase = (RasterSettings, [f64; 2], (f32, f32));
 
-impl autotrace::Tracer for Recorded {
-    fn trace(&self, _png: &[u8], _args: &[String]) -> Result<String, autotrace::CenterlineError> {
+/// `IP_DEFAULTS` of the harness (the raster dialog's defaults) with the case's
+/// `options`, as the document's raster settings, plus the case's `target`.
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+fn processor_settings(case: &Value) -> Result<ProcessorCase, CaseError> {
+    let mut o = json!({
+        "SelectedTool": "Line2Line", "LineDirection": "Horizontal", "Quality": 3.0,
+        "UseSpotRemoval": false, "SpotRemoval": 2.0, "UseSmoothing": false, "Smoothing": 1.0,
+        "UseOptimize": false, "UseAdaptiveQuality": false, "Optimize": 0.2, "UseDownSampling": false,
+        "DownSampling": 2.0, "OptimizeFast": false, "FillingDirection": "None", "FillingQuality": 3.0,
+        "Interpolation": "HighQualityBicubic", "Formula": "SimpleAverage", "Red": 100, "Green": 100,
+        "Blue": 100, "Brightness": 100, "Contrast": 100, "UseThreshold": false, "Threshold": 50,
+        "WhiteClip": 5, "DitheringMode": "FloydSteinberg", "UseLineThreshold": true, "LineThreshold": 10,
+        "UseCornerThreshold": true, "CornerThreshold": 110
+    });
+    if let (Some(dst), Some(src)) = (o.as_object_mut(), case.get("options").and_then(Value::as_object)) {
+        for (k, v) in src {
+            dst.insert(k.clone(), v.clone());
+        }
+    }
+    let bad = |k: &str| CaseError::Invalid(format!("option `{k}`"));
+    let st = |k: &str| o.get(k).and_then(Value::as_str).ok_or_else(|| bad(k));
+    let num = |k: &str| o.get(k).and_then(Value::as_f64).ok_or_else(|| bad(k));
+    let flag = |k: &str| o.get(k).and_then(Value::as_bool).ok_or_else(|| bad(k));
+    let int = |k: &str| num(k).map(|v| v as u32);
+    let line_dir = |name: &str| -> Option<LineDirection> {
+        match name {
+            "Horizontal" => Some(LineDirection::Horizontal),
+            "Vertical" => Some(LineDirection::Vertical),
+            "Diagonal" => Some(LineDirection::Diagonal),
+            _ => None,
+        }
+    };
+    let tool = match st("SelectedTool")? {
+        "Line2Line" => RasterTool::LineToLine,
+        "Dithering" => RasterTool::Dithering,
+        "Vectorize" => RasterTool::Vectorize,
+        "Centerline" => RasterTool::Centerline,
+        "NoProcessing" => RasterTool::Passthrough,
+        _ => return Err(bad("SelectedTool")),
+    };
+    let fill = match st("FillingDirection")? {
+        "None" => None,
+        other => match line_dir(other) {
+            Some(d) => Some(VectorFill::Raster(d)),
+            None => Some(VectorFill::Hatch(
+                fill_pattern(other).ok_or_else(|| bad("FillingDirection"))?,
+            )),
+        },
+    };
+    let optional = |on: &str, value: &str| -> Result<Option<f64>, CaseError> {
+        Ok(if flag(on)? { Some(num(value)?) } else { None })
+    };
+    let settings = RasterSettings {
+        tool,
+        direction: line_dir(st("LineDirection")?).ok_or_else(|| bad("LineDirection"))?,
+        lines_per_mm: num("Quality")?,
+        adjustments: Adjustments {
+            formula: match st("Formula")? {
+                "SimpleAverage" => GrayFormula::SimpleAverage,
+                "WeightAverage" => GrayFormula::WeightAverage,
+                "OpticalCorrect" => GrayFormula::OpticalCorrect,
+                "Custom" => GrayFormula::Custom,
+                _ => return Err(bad("Formula")),
+            },
+            red: int("Red")?,
+            green: int("Green")?,
+            blue: int("Blue")?,
+            brightness: int("Brightness")?,
+            contrast: int("Contrast")?,
+            threshold: if flag("UseThreshold")? {
+                Some(int("Threshold")?)
+            } else {
+                None
+            },
+            white_clip: int("WhiteClip")?,
+        },
+        dithering: match st("DitheringMode")? {
+            "Atkinson" => DocDither::Atkinson,
+            "FloydSteinberg" => DocDither::FloydSteinberg,
+            "Burks" => DocDither::Burks,
+            "Jarvis" => DocDither::Jarvis,
+            "Random" => DocDither::Random,
+            "Sierra2" => DocDither::Sierra2,
+            "Sierra3" => DocDither::Sierra3,
+            "SierraLight" => DocDither::SierraLight,
+            "Stucki" => DocDither::Stucki,
+            _ => return Err(bad("DitheringMode")),
+        },
+        interpolation: match st("Interpolation")? {
+            "NearestNeighbor" => DocInterpolation::NearestNeighbor,
+            "Bilinear" => DocInterpolation::Bilinear,
+            "Bicubic" => DocInterpolation::Bicubic,
+            "HighQualityBilinear" => DocInterpolation::HighQualityBilinear,
+            _ => DocInterpolation::HighQualityBicubic,
+        },
+        vectorize: VectorizeSettings {
+            // the dialog's decimals: `(int)SpotRemoval`
+            spot_removal: optional("UseSpotRemoval", "SpotRemoval")?.map(|v| v as u32),
+            smoothing: optional("UseSmoothing", "Smoothing")?,
+            optimize: optional("UseOptimize", "Optimize")?,
+            adaptive_quality: flag("UseAdaptiveQuality")?,
+            down_sampling: optional("UseDownSampling", "DownSampling")?,
+            optimize_fast: flag("OptimizeFast")?,
+            fill,
+            fill_lines_per_mm: num("FillingQuality")?,
+        },
+        centerline: freekerf_document::CenterlineSettings {
+            corner_threshold: if flag("UseCornerThreshold")? {
+                Some(int("CornerThreshold")?)
+            } else {
+                None
+            },
+            line_threshold: if flag("UseLineThreshold")? {
+                Some(int("LineThreshold")?)
+            } else {
+                None
+            },
+        },
+        ..RasterSettings::default()
+    };
+    let t = case.get("target").cloned().unwrap_or_else(|| json!({}));
+    let pair = |k: &str, d: [f64; 2]| -> [f64; 2] {
+        t.get(k).and_then(Value::as_array).map_or(d, |a| {
+            [
+                a.first().and_then(Value::as_f64).unwrap_or(d[0]),
+                a.get(1).and_then(Value::as_f64).unwrap_or(d[1]),
+            ]
+        })
+    };
+    let tint = |k: &str, d: u32| t.get(k).and_then(Value::as_u64).map_or(d, |v| v as u32);
+    let tstr = |k: &str, d: &str| t.get(k).and_then(Value::as_str).unwrap_or(d).to_owned();
+    let offset = pair("offset", [0.0, 0.0]);
+    let settings = RasterSettings {
+        border_speed_mm_min: tint("border_speed", 1000),
+        mark_speed_mm_min: tint("mark_speed", 1000),
+        min_power: tint("min_power", 0),
+        max_power: tint("max_power", 1000),
+        laser_on: tstr("laser_on", "M3"),
+        laser_off: tstr("laser_off", "M5"),
+        ..settings
+    };
+    Ok((
+        settings,
+        pair("size", [1.0, 1.0]),
+        (offset[0] as f32, offset[1] as f32),
+    ))
+}
+
+/// The case's `edits` as the document's.
+fn processor_edits(case: &Value) -> Result<Vec<ImageEdit>, CaseError> {
+    let pair = |e: &Value, k: &str| -> Result<[i32; 2], CaseError> {
+        let a = e
+            .get(k)
+            .and_then(Value::as_array)
+            .ok_or_else(|| CaseError::Invalid(format!("edit `{k}`")))?;
+        let n = |i: usize| {
+            a.get(i)
+                .and_then(Value::as_i64)
+                .and_then(|v| i32::try_from(v).ok())
+                .unwrap_or(0)
+        };
+        Ok([n(0), n(1)])
+    };
+    let mut out = Vec::new();
+    for e in case.get("edits").and_then(Value::as_array).into_iter().flatten() {
+        out.push(match e.get("op").and_then(Value::as_str).unwrap_or_default() {
+            "crop" => {
+                let r = e
+                    .get("rect")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| CaseError::Invalid("crop".into()))?;
+                let n = |i: usize| {
+                    r.get(i)
+                        .and_then(Value::as_i64)
+                        .and_then(|v| i32::try_from(v).ok())
+                        .unwrap_or(0)
+                };
+                ImageEdit::Crop {
+                    rect: [n(0), n(1), n(2), n(3)],
+                    reference: pair(e, "rsize")?,
+                }
+            }
+            "autotrim" => ImageEdit::AutoTrim,
+            "rotate_cw" => ImageEdit::RotateCw,
+            "rotate_ccw" => ImageEdit::RotateCcw,
+            "invert" => ImageEdit::Invert,
+            "flip_h" => ImageEdit::FlipH,
+            "flip_v" => ImageEdit::FlipV,
+            "fill" => {
+                let c = pixel_token(e.get("color").and_then(Value::as_str).unwrap_or(""))?;
+                ImageEdit::Fill {
+                    at: pair(e, "at")?,
+                    reference: pair(e, "rsize")?,
+                    argb: c.to_be_bytes(),
+                    tolerance: e
+                        .get("tolerance")
+                        .and_then(Value::as_u64)
+                        .and_then(|v| u32::try_from(v).ok())
+                        .unwrap_or(0),
+                }
+            }
+            "outline" => ImageEdit::Outline {
+                at: pair(e, "at")?,
+                reference: pair(e, "rsize")?,
+            },
+            other => return Err(CaseError::Invalid(format!("unknown edit `{other}`"))),
+        });
+    }
+    Ok(out)
+}
+
+/// The harness' autotrace double: prints a recorded SVG (and keeps the arguments
+/// it was given when asked to).
+struct Recorded(String, Option<std::sync::Mutex<(Vec<String>, Vec<u8>)>>);
+
+impl Tracer for Recorded {
+    fn trace(&self, png: &[u8], args: &[String]) -> Result<String, String> {
+        if let Some(log) = &self.1
+            && let Ok(mut l) = log.lock()
+        {
+            *l = (args.to_vec(), png.to_vec());
+        }
         Ok(self.0.clone())
     }
 }
@@ -677,9 +906,8 @@ pub fn run(case: &Value, read: &Reader<'_>) -> Result<Value, CaseError> {
                 });
             #[allow(clippy::cast_possible_truncation)]
             let max_size = float(case, "max_size")? as f32;
-            let job =
-                autotrace::replay_svg(&bytes, max_size, offset, settings.smart_bezier, &settings.machine)
-                    .map_err(|e| CaseError::Invalid(e.to_string()))?;
+            let job = image::replay_svg(&bytes, max_size, offset, settings.smart_bezier, &settings.machine)
+                .map_err(|e| CaseError::Invalid(e.to_string()))?;
             // LaserGRBL returns the converter text: lines joined with CRLF, split on LF
             let mut lines = job.lines;
             lines.push(String::new());
@@ -700,10 +928,10 @@ pub fn run(case: &Value, read: &Reader<'_>) -> Result<Value, CaseError> {
                 .unwrap_or_default()
                 .to_owned();
             let svg_text = read(&name).map_err(|e| CaseError::Input(name.clone(), e))?;
-            let tracer = Recorded(String::from_utf8_lossy(&svg_text).into_owned());
+            let tracer = Recorded(String::from_utf8_lossy(&svg_text).into_owned(), None);
             #[allow(clippy::cast_possible_truncation)]
             let offset = (settings.offset.0 as f32, settings.offset.1 as f32);
-            let c = autotrace::centerline(
+            let c = image::centerline(
                 &img,
                 &options,
                 &tracer,
@@ -744,6 +972,57 @@ pub fn run(case: &Value, read: &Reader<'_>) -> Result<Value, CaseError> {
             Ok(file_result(&program_of(&lines, &settings)))
         }
         "image_op" => Ok(json!({ "pixels": dump_image(&image_op(case)?) })),
+        "image_processor" => {
+            let img = case_image(field(case, "image")?)?;
+            let (raster, size_mm, offset) = processor_settings(case)?;
+            let edits = processor_edits(case)?;
+            let tracer = match case.get("autotrace_output").and_then(Value::as_str) {
+                Some(name) => {
+                    let svg_text = read(name).map_err(|e| CaseError::Input(name.to_owned(), e))?;
+                    Some(Recorded(
+                        String::from_utf8_lossy(&svg_text).into_owned(),
+                        Some(std::sync::Mutex::new((Vec::new(), Vec::new()))),
+                    ))
+                }
+                None => None,
+            };
+            let job = ImageJob {
+                settings: &raster,
+                edits: &edits,
+                size_mm,
+                offset,
+                file_dpi: DEFAULT_DPI,
+                smart_bezier: settings.smart_bezier,
+            };
+            // the raster dialog checks PWM support itself (`conf.pwm`)
+            let result = image::plan_image(
+                &img,
+                &job,
+                &settings.machine,
+                tracer.as_ref().map(|t| t as &dyn Tracer),
+            );
+            let (lines, error) = match result {
+                Ok(l) => (l, Value::Null),
+                Err(freekerf_planner::PlanError::Image(m)) if m.contains("too big") => (
+                    Vec::new(),
+                    json!("System.InvalidOperationException: Target size too big for processing!"),
+                ),
+                Err(e) => (Vec::new(), json!(e.to_string())),
+            };
+            let mut out = file_result(&program_of(&lines, &settings));
+            out["generation_error"] = error;
+            if let Some(t) = &tracer {
+                let (args, png) =
+                    t.1.as_ref()
+                        .and_then(|m| m.lock().ok().map(|a| a.clone()))
+                        .unwrap_or_default();
+                out["autotrace_args"] = json!(args);
+                if let Ok(given) = Image::decode(&png) {
+                    out["autotrace_input"] = dump_image(&given);
+                }
+            }
+            Ok(out)
+        }
         other => Err(CaseError::Unsupported(other.to_owned())),
     }
 }
@@ -937,6 +1216,83 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn image_processor_cases() {
+        let image = json!({"ascii": ["......", ".####.", ".####.", "......"]});
+        let ip = |options: Value, extra: Value| {
+            let mut c = json!({"kind": "image_processor", "image": image, "options": options,
+                               "target": {"size": [0.6, 0.4], "laser_on": "M4"}});
+            if let (Some(o), Some(e)) = (c.as_object_mut(), extra.as_object()) {
+                for (k, v) in e {
+                    o.insert(k.clone(), v.clone());
+                }
+            }
+            run(&c, &no_files)
+        };
+        let ok = |options: Value| {
+            let r = ip(options.clone(), json!({})).unwrap();
+            assert!(r["generation_error"].is_null(), "{options}: {r}");
+        };
+        ok(json!({"Quality": 10}));
+        ok(json!({"SelectedTool": "Dithering", "DitheringMode": "Stucki", "Formula": "WeightAverage"}));
+        ok(json!({"SelectedTool": "NoProcessing", "Interpolation": "NearestNeighbor"}));
+        ok(
+            json!({"SelectedTool": "Vectorize", "FillingDirection": "NewCross", "UseSpotRemoval": true,
+                  "UseSmoothing": true, "UseOptimize": true, "UseDownSampling": true, "Interpolation": "Bilinear"}),
+        );
+        ok(
+            json!({"SelectedTool": "Vectorize", "FillingDirection": "Vertical", "Formula": "OpticalCorrect",
+                  "UseThreshold": true, "Interpolation": "Bicubic"}),
+        );
+        for (dir, mode) in [("Diagonal", "Atkinson"), ("Vertical", "Burks")] {
+            ok(json!({"LineDirection": dir, "DitheringMode": mode, "Interpolation": "HighQualityBilinear"}));
+        }
+        for mode in [
+            "FloydSteinberg",
+            "Jarvis",
+            "Random",
+            "Sierra2",
+            "Sierra3",
+            "SierraLight",
+        ] {
+            ok(json!({"SelectedTool": "Dithering", "DitheringMode": mode}));
+        }
+        // centerline without a recorded tracer output: an error, not a crash
+        let c = ip(
+            json!({"SelectedTool": "Centerline", "UseCornerThreshold": false, "UseLineThreshold": false}),
+            json!({}),
+        )
+        .unwrap();
+        assert!(c["generation_error"].as_str().unwrap().contains("autotrace"));
+        let z = ip(json!({"Quality": 0}), json!({})).unwrap();
+        assert!(z["generation_error"].as_str().unwrap().contains("too big"));
+        let edits = json!({"edits": [
+            {"op": "crop", "rect": [0, 0, 50, 50], "rsize": [100, 100]}, {"op": "autotrim"},
+            {"op": "rotate_cw"}, {"op": "rotate_ccw"}, {"op": "invert"}, {"op": "flip_h"}, {"op": "flip_v"},
+            {"op": "fill", "at": [1, 1], "rsize": [6, 4], "color": "FF0000", "tolerance": 5},
+            {"op": "outline", "at": [1, 1], "rsize": [6, 4]}]});
+        assert!(ip(json!({}), edits).is_ok());
+        for bad in [
+            json!({"SelectedTool": "Laser"}),
+            json!({"LineDirection": "Up"}),
+            json!({"Formula": "x"}),
+            json!({"DitheringMode": "x"}),
+            json!({"FillingDirection": "Sideways"}),
+            json!({"Quality": "high"}),
+            json!({"UseThreshold": 1}),
+        ] {
+            assert!(ip(bad.clone(), json!({})).is_err(), "{bad}");
+        }
+        for bad in [
+            json!({"edits": [{"op": "zoom"}]}),
+            json!({"edits": [{"op": "crop"}]}),
+            json!({"edits": [{"op": "outline"}]}),
+            json!({"autotrace_output": "missing.svg"}),
+        ] {
+            assert!(ip(json!({}), bad.clone()).is_err(), "{bad}");
+        }
     }
 
     #[test]

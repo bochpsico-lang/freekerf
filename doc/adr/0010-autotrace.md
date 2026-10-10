@@ -24,12 +24,13 @@ Options:
 ## Decision
 
 Option 2. The core builds the request (`freekerf_raster::centerline::autotrace_args`,
-the PNG with `Image::encode_png`); `freekerf_service::autotrace` defines a `Tracer`
-trait and `ExternalAutotrace`, which writes the PNG to a temporary file, runs
+the PNG with `Image::encode_png`) and defines the `Tracer` trait
+(`freekerf_raster::centerline`); `freekerf_service::autotrace::ExternalAutotrace`
+implements it: it writes the PNG to a temporary file, runs
 `autotrace` (on the `PATH`, or a configured path) without a shell through
 `freekerf_platform::run_capture`, deletes the file and returns the SVG; the SVG is
-converted with the SVG importer and planner (`autotrace::replay_svg`, shared with the
-`svg_text` conformance kind). Tests and headless runs use a `Tracer` double.
+converted with the SVG importer and planner (`freekerf_planner::image::replay_svg`,
+shared with the `svg_text` conformance kind). Tests and headless runs use a `Tracer` double.
 
 A failing or silent tracer is reported as an error with its cause (LaserGRBL logs it
 and then fails on the empty output as "Root element is missing", DIV-048).
