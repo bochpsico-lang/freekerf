@@ -121,6 +121,29 @@ pub fn fill_flat(
     fill_paths(&paths, width, height, pattern, step)
 }
 
+/// The most pattern elements (lines, crosses, squares) a filling may have: a
+/// full 400 × 400 mm bed of crosses at 10 lines/mm is 16 million. Beyond it a
+/// filling is refused instead of exhausting memory (DIV-109).
+pub const MAX_PATTERN_ELEMENTS: f64 = 2.0e7;
+
+/// About how many elements `pattern` needs over `width × height` at `step`.
+fn pattern_elements(width: f64, height: f64, pattern: FillPattern, step: f64) -> f64 {
+    let (nx, ny) = (width / step + 1.0, height / step + 1.0);
+    match pattern {
+        FillPattern::Horizontal => ny,
+        FillPattern::Vertical => nx,
+        FillPattern::Diagonal | FillPattern::ReverseDiagonal => nx + ny,
+        FillPattern::Grid | FillPattern::DiagonalGrid => 2.0 * (nx + ny),
+        // grids of small marks, and zig-zags whose points cover the area
+        FillPattern::Cross
+        | FillPattern::DiagonalCross
+        | FillPattern::Squares
+        | FillPattern::ZigZag
+        | FillPattern::Inset => nx * ny,
+        FillPattern::Hilbert => 0.0,
+    }
+}
+
 fn fill_paths(
     shapes: &Paths,
     width: f64,
@@ -128,6 +151,15 @@ fn fill_paths(
     pattern: FillPattern,
     step: f64,
 ) -> Result<Vec<Vec<Point>>, ClipperError> {
+    let n = pattern_elements(width, height, pattern, step);
+    if n.is_nan() || n > MAX_PATTERN_ELEMENTS {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        return Err(ClipperError::TooLarge(if n.is_finite() {
+            n as u64
+        } else {
+            u64::MAX
+        }));
+    }
     if pattern == FillPattern::Inset {
         return inset(shapes, step);
     }
@@ -367,6 +399,33 @@ fn hilbert(depth: i32, delta: f32) -> Vec<(f32, f32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn huge_fillings_are_refused() {
+        let square = vec![vec![
+            Point::new(0.0, 0.0),
+            Point::new(1.0, 0.0),
+            Point::new(1.0, 1.0),
+        ]];
+        assert!(matches!(
+            fill(&square, 1e9, 1e9, FillPattern::Horizontal, 0.1),
+            Err(ClipperError::TooLarge(_))
+        ));
+        assert!(matches!(
+            fill(&square, f64::INFINITY, 1.0, FillPattern::Cross, 0.1),
+            Err(ClipperError::TooLarge(u64::MAX))
+        ));
+        assert!(pattern_elements(400.0, 400.0, FillPattern::Cross, 0.1) <= MAX_PATTERN_ELEMENTS);
+        assert!(fill(&square, 2.0, 2.0, FillPattern::Cross, 0.5).is_ok());
+        for p in [
+            FillPattern::Vertical,
+            FillPattern::Diagonal,
+            FillPattern::Grid,
+            FillPattern::Hilbert,
+        ] {
+            assert!(pattern_elements(10.0, 10.0, p, 1.0) < 100.0);
+        }
+    }
 
     fn square(x0: f64, y0: f64, x1: f64, y1: f64) -> Vec<Point> {
         vec![

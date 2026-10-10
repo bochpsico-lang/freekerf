@@ -37,6 +37,9 @@ fn triangle_area(a: Point, b: Point, c: Point) -> f64 {
     (a.x * b.y + b.x * c.y + c.x * a.y - a.y * b.x - b.y * c.x - c.y * a.x).abs() / 2.0
 }
 
+/// Curves with a control point beyond this (mm, a kilometre) are not subdivided.
+pub const MAX_COORDINATE: f64 = 1.0e6;
+
 fn flatten_segment(
     seg: &[Point; 4],
     error: f64,
@@ -45,10 +48,27 @@ fn flatten_segment(
     out: &mut Vec<Point>,
     skip_first: bool,
 ) {
-    if subdivisions >= max
-        || (triangle_area(seg[0], seg[1], seg[2]).sqrt() < error
-            && triangle_area(seg[1], seg[2], seg[3]).sqrt() < error)
+    // a curve with a non-finite point, or one reaching beyond any machine, never
+    // looks flat: LaserGRBL subdivides it to the limit (2^20 pieces); it is drawn
+    // as it is instead (DIV-109)
+    if subdivisions == 0
+        && !seg
+            .iter()
+            .all(|p| p.x.abs() <= MAX_COORDINATE && p.y.abs() <= MAX_COORDINATE)
     {
+        out.extend(seg.iter().skip(usize::from(skip_first)));
+        return;
+    }
+    // a negative tolerance (a drawing scaled by a negative size) is taken as
+    // positive, and a straight piece is flat whatever the tolerance: LaserGRBL
+    // subdivides those to the limit (DIV-109); with a positive tolerance and a
+    // curve piece this is LaserGRBL's test
+    let error = error.abs();
+    let (a1, a2) = (
+        triangle_area(seg[0], seg[1], seg[2]),
+        triangle_area(seg[1], seg[2], seg[3]),
+    );
+    if subdivisions >= max || (a1.sqrt() < error && a2.sqrt() < error) || (a1 == 0.0 && a2 == 0.0) {
         out.extend(seg.iter().skip(usize::from(skip_first)));
         return;
     }
@@ -104,6 +124,30 @@ pub fn uniform(cp: &[Point; 4], segments: u32) -> Vec<Point> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn non_finite_curves_are_not_subdivided() {
+        let cp = [
+            Point::new(0.0, 0.0),
+            Point::new(1.0, f64::NEG_INFINITY),
+            Point::new(2.0, 1.0),
+            Point::new(3.0, 0.0),
+        ];
+        assert_eq!(flatten(&cp, 0.2, 20).len(), 4);
+        assert_eq!(flatten_chain(&cp, 0.2, 20).len(), 4);
+        let far = [cp[0], Point::new(1.0, 1e26), cp[2], cp[3]];
+        assert_eq!(flatten(&far, 0.2, 20).len(), 4);
+        // negative or zero tolerances do not subdivide to the limit
+        let round = [
+            Point::new(0.0, 0.0),
+            Point::new(0.0, 10.0),
+            Point::new(10.0, 10.0),
+            Point::new(10.0, 0.0),
+        ];
+        assert_eq!(flatten(&round, -0.2, 20), flatten(&round, 0.2, 20));
+        let flat = [Point::new(0.0, 0.0); 4];
+        assert_eq!(flatten(&flat, 0.0, 20).len(), 4);
+    }
 
     const CURVE: [Point; 4] = [
         Point::new(0.0, 0.0),

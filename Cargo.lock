@@ -764,7 +764,13 @@ dependencies = [
 name = "freekerf-it"
 version = "0.1.0"
 dependencies = [
+ "freekerf-document",
  "freekerf-emulator",
+ "freekerf-gcode",
+ "freekerf-geometry",
+ "freekerf-import",
+ "freekerf-planner",
+ "freekerf-raster",
  "freekerf-service",
  "freekerf-settings",
  "freekerf-testkit",

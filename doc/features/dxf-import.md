@@ -32,6 +32,9 @@ error; the current document is not touched.
 
 ## Limits
 
+- A drawing whose blocks expand to more than a million entities or two million
+  segments is refused (DIV-109); blocks nest up to 32 levels, as in LaserGRBL.
+
 Text, dimensions, hatches, 3D solids and meshes are ignored.
 
 ## Tests

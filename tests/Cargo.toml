@@ -17,6 +17,12 @@ name = "it"
 path = "it/main.rs"
 
 [dev-dependencies]
+freekerf-document.workspace = true
+freekerf-gcode.workspace = true
+freekerf-geometry.workspace = true
+freekerf-import.workspace = true
+freekerf-planner.workspace = true
+freekerf-raster.workspace = true
 freekerf-emulator.workspace = true
 freekerf-service.workspace = true
 freekerf-settings.workspace = true

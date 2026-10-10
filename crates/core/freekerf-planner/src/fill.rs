@@ -52,7 +52,7 @@ pub fn join_open_paths(shapes: &[Vec<Point>]) -> Vec<Vec<Point>> {
         let (cx, cy) = cell(p);
         for dx in -1..=1 {
             for dy in -1..=1 {
-                if let Some(list) = index.get(&(cx + dx, cy + dy)) {
+                if let Some(list) = index.get(&(cx.saturating_add(dx), cy.saturating_add(dy))) {
                     for &i in list {
                         if !used[i] && (near(open[i][0], p) || near(open[i][open[i].len() - 1], p)) {
                             return Some(i);
@@ -143,6 +143,14 @@ pub fn build(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Found by fuzzing: coordinates near `i64::MAX` cells overflowed the lookup.
+    #[test]
+    fn huge_coordinates_do_not_overflow() {
+        let far = vec![Point::new(1e300, 2.0), Point::new(3.0, 1e300)];
+        let other = vec![Point::new(-1e300, 0.0), Point::new(0.0, 1.0)];
+        assert_eq!(join_open_paths(&[far, other]).len(), 2);
+    }
 
     #[test]
     fn open_sides_are_joined_into_a_closed_shape() {

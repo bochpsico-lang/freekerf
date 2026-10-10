@@ -1,6 +1,7 @@
 //! ASCII DXF import as LaserGRBL reads it (`SvgConverter/DxfReader.cs`): lines and
 //! true arcs in millimetres, one colour per DXF colour (true colour, ACI, ByLayer,
-//! ByBlock), blocks (`INSERT`, `MINSERT`, nested up to 32 levels), `LWPOLYLINE` and
+//! ByBlock), blocks (`INSERT`, `MINSERT`, nested up to 32 levels as in LaserGRBL,
+//! at most a million drawn entities), `LWPOLYLINE` and
 //! `POLYLINE` with bulges, `CIRCLE`, `ARC`, `ELLIPSE` (lines), `SPLINE` (sampled,
 //! then fitted with arcs within a tolerance). The drawing is moved so its bounds
 //! start at the origin.
@@ -17,8 +18,13 @@ use crate::netparse::{parse_double, parse_long};
 use crate::svg::decode_text;
 use crate::{ColorCount, Import, ImportError, ImportedObject};
 
-/// Protection against blocks that insert themselves.
+/// Protection against deeply nested blocks.
 const MAX_BLOCK_DEPTH: u32 = 32;
+/// The most entities a drawing may expand to through its blocks (`INSERT`,
+/// `MINSERT` grids): beyond it the file is refused (DIV-109).
+const MAX_DRAWN: usize = 1 << 20;
+/// The most path segments an import may produce (a few hundred MB at most).
+const MAX_SEGMENTS: usize = 1 << 21;
 /// Max distance (mm) between an arc and its approximation.
 const ARC_TOLERANCE: f64 = 0.02;
 /// Length (mm) of the segments that sample splines.
@@ -371,6 +377,8 @@ struct Builder<'d> {
     tolerance: f64,
     spline_tolerance: f64,
     count: usize,
+    drawn: usize,
+    segments_out: usize,
 }
 
 impl Builder<'_> {
@@ -400,6 +408,12 @@ impl Builder<'_> {
     }
 
     fn draw_entity(&mut self, e: &Entity, ctx: &Context) -> Result<(), ImportError> {
+        self.drawn += 1;
+        if self.drawn > MAX_DRAWN || self.segments_out > MAX_SEGMENTS {
+            return Err(ImportError::Invalid(format!(
+                "the drawing expands to more than {MAX_DRAWN} entities or {MAX_SEGMENTS} segments"
+            )));
+        }
         if e.int(60, 0)? == 1 {
             return Ok(()); // invisible
         }
@@ -505,7 +519,8 @@ impl Builder<'_> {
     }
 
     fn insert(&mut self, e: &Entity, ctx: &Context, color: Color) -> Result<(), ImportError> {
-        let Some(block) = self.doc.blocks.get(&key(&e.string(2, ""))) else {
+        let name = key(&e.string(2, ""));
+        let Some(block) = self.doc.blocks.get(&name) else {
             return Ok(()); // block not found
         };
         if ctx.depth >= MAX_BLOCK_DEPTH {
@@ -698,6 +713,17 @@ impl Builder<'_> {
         self.path = None;
     }
 
+    /// Adds a segment to the current path, within the segment budget.
+    fn push(&mut self, seg: Segment) {
+        if self.segments_out > MAX_SEGMENTS {
+            return;
+        }
+        if let Some(path) = &mut self.path {
+            path.segments.push(seg);
+            self.segments_out += 1;
+        }
+    }
+
     fn end(&mut self, color: Color, closed: bool) {
         let Some(mut path) = self.path.take() else {
             return;
@@ -726,9 +752,7 @@ impl Builder<'_> {
 
     fn line_to(&mut self, t: &Transform, x: f64, y: f64) {
         let p = self.to_drawing(t, x, y);
-        if let Some(path) = &mut self.path {
-            path.segments.push(Segment::line(p));
-        }
+        self.push(Segment::line(p));
     }
 
     /// A circular arc in local coordinates, sweep in radians (positive = counterclockwise).
@@ -748,9 +772,7 @@ impl Builder<'_> {
             for i in 1..=pieces {
                 let a = start + sweep * f64::from(i) / f64::from(pieces);
                 let end = self.to_drawing(t, cx + r * a.cos(), cy + r * a.sin());
-                if let Some(path) = &mut self.path {
-                    path.segments.push(Segment::arc(end, center, ccw));
-                }
+                self.push(Segment::arc(end, center, ccw));
             }
         } else {
             let segments = self.segments(r, sweep.abs());
@@ -817,6 +839,8 @@ pub fn import(bytes: &[u8], options: &DxfOptions) -> Result<Import, ImportError>
         tolerance: 0.0,
         spline_tolerance: options.spline_tolerance,
         count: 0,
+        drawn: 0,
+        segments_out: 0,
     };
     let ctx = Context {
         transform: Transform::IDENTITY,
@@ -872,6 +896,29 @@ mod tests {
             "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n0\nSECTION\n2\nTABLES\n0\nLAYER\n2\nRED\n62\n1\n0\nLAYER\n2\nOFF\n62\n-3\n0\nENDSEC\n0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n2\nB\n10\n0\n20\n0\n0\nLINE\n8\n0\n10\n0\n20\n0\n11\n1\n21\n0\n0\nENDBLK\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n{entities}0\nENDSEC\n0\nEOF\n"
         )
         .into_bytes()
+    }
+
+    #[test]
+    fn blocks_inside_themselves_and_huge_grids() {
+        // B inserts itself twice: 2^32 copies at LaserGRBL's depth limit, refused
+        let looped = "0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n2\nB\n10\n0\n20\n0\n\
+                      0\nLINE\n10\n0\n20\n0\n11\n1\n21\n0\n\
+                      0\nINSERT\n2\nB\n10\n1\n20\n0\n0\nINSERT\n2\nB\n10\n0\n20\n1\n\
+                      0\nENDBLK\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n0\nINSERT\n2\nB\n10\n0\n20\n0\n\
+                      0\nENDSEC\n0\nEOF\n";
+        assert!(matches!(
+            import(looped.as_bytes(), &DxfOptions::default()),
+            Err(ImportError::Invalid(_))
+        ));
+        // a MINSERT grid of 2000 × 2000 copies is refused
+        let grid = "0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n2\nG\n10\n0\n20\n0\n\
+                    0\nLINE\n10\n0\n20\n0\n11\n1\n21\n0\n0\nENDBLK\n0\nENDSEC\n\
+                    0\nSECTION\n2\nENTITIES\n0\nINSERT\n2\nG\n10\n0\n20\n0\n70\n2000\n71\n2000\n44\n1\n45\n1\n\
+                    0\nENDSEC\n0\nEOF\n";
+        assert!(matches!(
+            import(grid.as_bytes(), &DxfOptions::default()),
+            Err(ImportError::Invalid(_))
+        ));
     }
 
     #[test]

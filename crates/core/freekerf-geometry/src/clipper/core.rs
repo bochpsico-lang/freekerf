@@ -41,6 +41,10 @@ pub enum ClipperError {
     /// Internal inconsistency of the sweep (`DoMaxima`, `UpdateEdgeIntoAEL`).
     #[error("clipping failed: {0}")]
     Internal(&'static str),
+    /// A filling pattern would need more elements than FreeKerf generates
+    /// (`hatch::MAX_PATTERN_ELEMENTS`; not a Clipper error).
+    #[error("filling too large: about {0} pattern elements")]
+    TooLarge(u64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

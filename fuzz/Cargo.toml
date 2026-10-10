@@ -1,0 +1,51 @@
+[package]
+name = "freekerf-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+description = "cargo-fuzz targets (nightly): G-code, SVG, DXF, LaserGRBL BinaryFormatter files"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+freekerf-gcode = { path = "../crates/core/freekerf-gcode" }
+freekerf-import = { path = "../crates/core/freekerf-import" }
+freekerf-planner = { path = "../crates/core/freekerf-planner" }
+freekerf-migrate = { path = "../crates/config/freekerf-migrate" }
+freekerf-document = { path = "../crates/core/freekerf-document" }
+freekerf-settings = { path = "../crates/config/freekerf-settings" }
+
+# its own workspace: the nightly-only fuzzing build stays out of the main one
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "gcode"
+path = "fuzz_targets/gcode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "svg"
+path = "fuzz_targets/svg.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dxf"
+path = "fuzz_targets/dxf.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "nrbf"
+path = "fuzz_targets/nrbf.rs"
+test = false
+doc = false
+bench = false

@@ -54,6 +54,9 @@ All notable changes to FreeKerf are documented here. The format follows
   dependency), search, hazards, recipes applied to layers, LaserGRBL material import.
 - `freekerf-migrate` and `freekerf migrate lasergrbl`: LaserGRBL settings and laser
   module counters (a read-only `BinaryFormatter` reader), dry run or `--apply`.
+- Integration tests: SVG, DXF and images imported, planned and streamed to the
+  emulator over a PTY. Fuzz targets (G-code, SVG, DXF, LaserGRBL files) run weekly
+  in CI; the bugs they found are fixed (DIV-109).
 - `freekerf import-case`: runs `conformance` importer golden cases.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.

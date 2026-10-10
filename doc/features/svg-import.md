@@ -52,6 +52,8 @@ let document = imported.into_document_with_defaults(1000, 1000, Some(source));
 - Numbers in path data with an upper-case exponent (`1E3`) are read as LaserGRBL
   reads them (the `E` starts a new, unknown command).
 - An arc with a zero radius draws nothing, as in LaserGRBL (DIV-035).
+- Curves with control points beyond a kilometre (or not finite) are kept as one
+  piece instead of being subdivided to LaserGRBL's limit (DIV-109).
 
 ## Divergences
 

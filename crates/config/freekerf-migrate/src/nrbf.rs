@@ -172,11 +172,30 @@ struct Reader<'a> {
     classes: HashMap<i32, ClassMeta>,
     objects: HashMap<i32, Raw>,
     depth: usize,
+    budget: usize,
 }
 
 const MAX_DEPTH: usize = 200;
 
+/// The most values a stream may produce, read or expanded from references
+/// (LaserGRBL's files have a few hundred): a crafted file cannot exhaust memory.
+const MAX_VALUES: usize = 1 << 18;
+
 impl<'a> Reader<'a> {
+    fn spend(&mut self, n: usize) -> Result<(), NrbfError> {
+        self.budget = self
+            .budget
+            .checked_sub(n)
+            .ok_or_else(|| NrbfError::Invalid("too many values".into()))?;
+        Ok(())
+    }
+
+    /// A capacity to reserve for `n` items: never more than the bytes left (each
+    /// item takes at least one) nor a few thousand.
+    fn room(&self, n: usize) -> usize {
+        n.min(self.data.len() - self.pos).min(4096)
+    }
+
     fn take(&mut self, n: usize) -> Result<&'a [u8], NrbfError> {
         let end = self
             .pos
@@ -273,7 +292,7 @@ impl<'a> Reader<'a> {
         let id = self.i32()?;
         let name = self.string()?;
         let n = self.count()?;
-        let mut members = Vec::with_capacity(n.min(4096));
+        let mut members = Vec::with_capacity(self.room(n));
         for _ in 0..n {
             members.push(self.string()?);
         }
@@ -310,17 +329,26 @@ impl<'a> Reader<'a> {
     /// The values of `count` slots (members or array elements), each a record or,
     /// for primitive slots, a raw value.
     fn slots(&mut self, types: Option<&[MemberType]>, count: usize) -> Result<Vec<Raw>, NrbfError> {
-        let mut out = Vec::with_capacity(count.min(65536));
+        let mut out = Vec::with_capacity(self.room(count));
         while out.len() < count {
             let i = out.len();
             if let Some(MemberType::Primitive(t)) = types.and_then(|t| t.get(i)) {
                 let t = *t;
+                self.spend(1)?;
                 out.push(Raw::Value(self.primitive(t)?));
                 continue;
             }
             match self.record()? {
-                Some(Raw::Nulls(n)) => out.extend(std::iter::repeat_n(Raw::Value(Value::Null), n.max(1))),
-                Some(r) => out.push(r),
+                Some(Raw::Nulls(n)) => {
+                    // a run never covers more than the slots left
+                    let n = n.max(1).min(count - out.len());
+                    self.spend(n)?;
+                    out.extend(std::iter::repeat_n(Raw::Value(Value::Null), n));
+                }
+                Some(r) => {
+                    self.spend(1)?;
+                    out.push(r);
+                }
                 None => return Err(NrbfError::Invalid("message end inside an object".into())),
             }
         }
@@ -334,13 +362,14 @@ impl<'a> Reader<'a> {
             class: meta.name.clone(),
             members: meta.members.iter().cloned().zip(values).collect(),
         };
-        self.objects.insert(id, raw.clone());
-        Ok(raw)
+        Ok(self.keep(id, raw))
     }
 
+    /// Stores a record with an id once; the tree refers to it (no copies while
+    /// reading, references are expanded at the end).
     fn keep(&mut self, id: i32, raw: Raw) -> Raw {
-        self.objects.insert(id, raw.clone());
-        raw
+        self.objects.insert(id, raw);
+        Raw::Ref(id)
     }
 
     /// One record; `None` at `MessageEnd`.
@@ -414,10 +443,21 @@ impl<'a> Reader<'a> {
                 let t = self.member_types(1)?;
                 let total = lengths.iter().try_fold(1usize, |a, &l| a.checked_mul(l));
                 let total = total
-                    .filter(|&t| t <= 1 << 24)
+                    .filter(|&t| t <= MAX_VALUES)
                     .ok_or_else(|| NrbfError::Invalid("array too big".into()))?;
-                let types = vec![t[0].clone(); total];
-                let items = self.slots(Some(&types), total)?;
+                let items = if let MemberType::Primitive(p) = t[0] {
+                    if p != 17 && total > self.data.len() - self.pos {
+                        return Err(NrbfError::Invalid("array too big".into()));
+                    }
+                    self.spend(total)?;
+                    let mut items = Vec::with_capacity(self.room(total));
+                    for _ in 0..total {
+                        items.push(Raw::Value(self.primitive(p)?));
+                    }
+                    items
+                } else {
+                    self.slots(None, total)?
+                };
                 Some(self.keep(id, Raw::Array(items)))
             }
             8 => {
@@ -440,18 +480,21 @@ impl<'a> Reader<'a> {
                 let id = self.i32()?;
                 let n = self.count()?;
                 let t = self.u8()?;
-                if n > 1 << 24 {
+                // every primitive but null takes at least a byte
+                if n > MAX_VALUES || (t != 17 && n > self.data.len() - self.pos) {
                     return Err(NrbfError::Invalid("array too big".into()));
                 }
-                let items = (0..n)
-                    .map(|_| self.primitive(t).map(Raw::Value))
-                    .collect::<Result<_, _>>()?;
+                self.spend(n)?;
+                let mut items = Vec::with_capacity(self.room(n));
+                for _ in 0..n {
+                    items.push(Raw::Value(self.primitive(t)?));
+                }
                 Some(self.keep(id, Raw::Array(items)))
             }
             16 | 17 => {
                 let id = self.i32()?;
                 let n = self.count()?;
-                if n > 1 << 24 {
+                if n > MAX_VALUES {
                     return Err(NrbfError::Invalid("array too big".into()));
                 }
                 let items = self.slots(None, n)?;
@@ -463,23 +506,26 @@ impl<'a> Reader<'a> {
         Ok(r)
     }
 
-    fn resolve(&self, raw: &Raw, depth: usize) -> Value {
-        if depth > MAX_DEPTH {
+    fn resolve(&self, raw: &Raw, depth: usize, left: &mut usize) -> Value {
+        if depth > MAX_DEPTH || *left == 0 {
             return Value::Null;
         }
+        *left -= 1;
         match raw {
             Raw::Value(v) => v.clone(),
             Raw::Nulls(_) => Value::Null,
             Raw::Ref(id) => self
                 .objects
                 .get(id)
-                .map_or(Value::Null, |r| self.resolve(r, depth + 1)),
-            Raw::Array(items) => Value::Array(items.iter().map(|r| self.resolve(r, depth + 1)).collect()),
+                .map_or(Value::Null, |r| self.resolve(r, depth + 1, left)),
+            Raw::Array(items) => {
+                Value::Array(items.iter().map(|r| self.resolve(r, depth + 1, left)).collect())
+            }
             Raw::Object { class, members } => Value::Object {
                 class: class.clone(),
                 members: members
                     .iter()
-                    .map(|(n, r)| (n.clone(), self.resolve(r, depth + 1)))
+                    .map(|(n, r)| (n.clone(), self.resolve(r, depth + 1, left)))
                     .collect(),
             },
         }
@@ -487,7 +533,7 @@ impl<'a> Reader<'a> {
 }
 
 /// Reads a `BinaryFormatter` stream: the root object with every reference resolved
-/// (cycles cut at a fixed depth).
+/// (cycles cut at a fixed depth; at most 262 144 values in all, the rest null).
 ///
 /// # Errors
 /// Truncated or malformed data, or records this reader does not support.
@@ -498,6 +544,7 @@ pub fn read(data: &[u8]) -> Result<Value, NrbfError> {
         classes: HashMap::new(),
         objects: HashMap::new(),
         depth: 0,
+        budget: MAX_VALUES,
     };
     if data.first() != Some(&0) {
         return Err(NrbfError::Invalid("not a BinaryFormatter stream".into()));
@@ -508,7 +555,9 @@ pub fn read(data: &[u8]) -> Result<Value, NrbfError> {
         first.get_or_insert(raw);
     }
     let root = first.ok_or_else(|| NrbfError::Invalid("empty stream".into()))?;
-    Ok(r.resolve(&root, 0))
+    // references are expanded into copies: the same budget bounds the tree
+    let mut left = MAX_VALUES;
+    Ok(r.resolve(&root, 0, &mut left))
 }
 
 /// The ticks of a `DateTime` as `YYYY-MM-DD` (proleptic Gregorian calendar).
@@ -726,6 +775,19 @@ mod tests {
         cyc.extend_from_slice(&i32b(1));
         cyc.push(11);
         assert!(read(&cyc).is_ok());
+    }
+
+    /// Found by fuzzing: a 16-million element null array took half a second.
+    #[test]
+    fn huge_counts_are_refused_quickly() {
+        let data = [
+            0x00, 0x13, 0x43, 0x43, 0x43, 0x43, 0x25, 0x43, 0xff, 0xff, 0xff, 0xff, 0x43, 0x43, 0x43, 0x43,
+            0x11, 0x0f, 0x00, 0x00, 0x00, 0xbd, 0xbc, 0xfe, 0xff, 0x00, 0x11, 0x0f, 0xfd, 0x00, 0x00, 0x67,
+            0x00, 0x00, 0x00, 0x89, 0x65,
+        ];
+        let t = std::time::Instant::now();
+        assert!(read(&data).is_err());
+        assert!(t.elapsed() < std::time::Duration::from_millis(100));
     }
 
     #[test]
