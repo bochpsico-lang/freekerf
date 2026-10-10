@@ -37,6 +37,10 @@ freekerf-protocol = { path = "crates/core/freekerf-protocol" }
 freekerf-emulator = { path = "crates/core/freekerf-emulator" }
 freekerf-session = { path = "crates/core/freekerf-session" }
 freekerf-geometry = { path = "crates/core/freekerf-geometry" }
+freekerf-materials = { path = "crates/config/freekerf-materials" }
+freekerf-migrate = { path = "crates/config/freekerf-migrate" }
+# the materials library, by git (no release yet; PLAN §2)
+freekerf-library = { git = "https://github.com/freekerf/library", rev = "e27f3c07001739d436d074b7871b0f475db82856" }
 freekerf-document = { path = "crates/core/freekerf-document" }
 freekerf-planner = { path = "crates/core/freekerf-planner" }
 freekerf-import = { path = "crates/core/freekerf-import" }

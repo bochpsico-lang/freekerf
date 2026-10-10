@@ -29,6 +29,8 @@ crates/core/       pure logic, no I/O, builds for wasm32
   freekerf-session     action registry: names, JSON schemas, permission tiers
 crates/config/     persistent data
   freekerf-settings    settings.toml model, migrations, JSON schema
+  freekerf-materials   material library packages (freekerf/library by git), recipes on layers
+  freekerf-migrate     LaserGRBL import, read only: BinaryFormatter reader, settings, laser counters
 crates/native/     operating system and hardware
   freekerf-transport   Transport trait: serial, emulator, emulator on a PTY
   freekerf-platform    directories, atomic writes, running external programs

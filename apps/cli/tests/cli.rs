@@ -314,3 +314,44 @@ fn import_case_runs_conformance_cases() {
         .assert()
         .failure();
 }
+
+#[test]
+fn migrate_lasergrbl() {
+    let home = tempfile::tempdir().unwrap();
+    let lg = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../crates/config/freekerf-migrate/tests/fixtures");
+    freekerf(home.path())
+        .args(["migrate", "lasergrbl"])
+        .arg(&lg)
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("Serial Speed -> machine.baud")
+                .and(predicate::str::contains("nothing written")),
+        );
+    freekerf(home.path())
+        .args(["config", "get", "machine.baud"])
+        .assert()
+        .success()
+        .stdout("115200\n");
+    let out = freekerf(home.path())
+        .args(["migrate", "lasergrbl", "--apply", "--json"])
+        .arg(&lg)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let report: Value = serde_json::from_slice(&out).unwrap();
+    assert_eq!(report["applied"], json!(true));
+    assert_eq!(report["laser_counters"], json!(["Default", "Diode 10 W"]));
+    freekerf(home.path())
+        .args(["config", "get", "machine.baud"])
+        .assert()
+        .success()
+        .stdout("250000\n");
+    freekerf(home.path())
+        .args(["migrate", "lasergrbl", "/no/such/folder"])
+        .assert()
+        .failure();
+}

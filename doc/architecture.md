@@ -21,6 +21,8 @@ flowchart TB
   end
   subgraph config
     settings[freekerf-settings<br/>settings.toml, schema, migrations]
+    materials[freekerf-materials<br/>library packages, recipes]
+    migrate[freekerf-migrate<br/>LaserGRBL import, read only]
   end
   subgraph core
     session[freekerf-session<br/>registry, tiers]
@@ -58,12 +60,15 @@ flowchart TB
   raster --> gcode
   raster --> geometry
   service --> raster
+  service --> migrate
+  migrate --> settings
+  materials --> document
 ```
 
 | Layer | Crates | Rule |
 | --- | --- | --- |
 | core | gcode, protocol, emulator, session, geometry, document, planner, import, raster | no I/O, no threads of their own, no clock; builds for `wasm32-unknown-unknown` |
-| config | settings | core only; files through the `SettingsStore` trait |
+| config | settings, materials, migrate | core and config; settings files through the `SettingsStore` trait (materials reads package files with `freekerf-library`) |
 | native | transport, platform | core only |
 | runtime | machine, service | core, config, native |
 | apps | cli | the service (and config for `freekerf config`) |

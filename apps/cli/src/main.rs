@@ -82,6 +82,11 @@ enum Command {
         #[arg(long)]
         persistent: bool,
     },
+    /// Imports data from another program (read only on its side).
+    Migrate {
+        #[command(subcommand)]
+        from: MigrateFrom,
+    },
     /// Reads or changes the settings file.
     Config {
         #[command(subcommand)]
@@ -115,6 +120,22 @@ enum Command {
         /// Parameters as JSON.
         #[arg(default_value = "{}")]
         params: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum MigrateFrom {
+    /// LaserGRBL: settings and laser module counters from its data folder
+    /// (`%APPDATA%\LaserGRBL` by default on Windows). Without `--apply` nothing is written.
+    Lasergrbl {
+        /// LaserGRBL's data folder.
+        dir: Option<PathBuf>,
+        /// Write the result into FreeKerf's settings and machine cache.
+        #[arg(long)]
+        apply: bool,
+        /// Print the report as JSON.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -196,6 +217,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Config { op } => cmd_config(home.as_deref(), op),
+        Command::Migrate { from } => cmd_migrate(home.as_deref(), from),
         Command::Actions { json, markdown } => {
             let service = Service::in_memory()?;
             let mut out = std::io::stdout().lock();
@@ -528,6 +550,49 @@ fn cmd_emulate(pty: bool, timed: bool) -> Result<ExitCode> {
 #[cfg(not(unix))]
 fn cmd_emulate(_pty: bool, _timed: bool) -> Result<ExitCode> {
     bail!("`emulate --pty` needs a Unix system; use `--emulator` with send/console")
+}
+
+fn cmd_migrate(home: Option<&std::path::Path>, from: MigrateFrom) -> Result<ExitCode> {
+    let MigrateFrom::Lasergrbl { dir, apply, json } = from;
+    let dir = dir
+        .or_else(freekerf_service::migrate::default_lasergrbl_dir)
+        .ok_or_else(|| anyhow!("give LaserGRBL's data folder (no default on this system)"))?;
+    if !dir.is_dir() {
+        bail!("{}: not a folder", dir.display());
+    }
+    let stores = Stores::files(home).map_err(|e| anyhow!(e))?;
+    let r = freekerf_service::migrate::lasergrbl(&dir, &stores, apply).map_err(|e| anyhow!(e))?;
+    let mut out = std::io::stdout().lock();
+    if json {
+        writeln!(out, "{}", serde_json::to_string_pretty(&r)?)?;
+        return Ok(ExitCode::SUCCESS);
+    }
+    writeln!(out, "LaserGRBL data: {}", r.source)?;
+    writeln!(out, "settings taken: {}", r.settings_applied.len())?;
+    for (lg, fk) in &r.settings_applied {
+        writeln!(out, "  {lg} -> {fk}")?;
+    }
+    writeln!(out, "settings not taken: {}", r.settings_skipped.len())?;
+    writeln!(out, "laser counters: {}", r.laser_counters.join(", "))?;
+    if r.user_materials_found {
+        writeln!(
+            out,
+            "UserMaterials.psh found (imported with the material library, later)"
+        )?;
+    }
+    for (file, e) in &r.errors {
+        writeln!(out, "cannot read {file}: {e}")?;
+    }
+    writeln!(
+        out,
+        "{}",
+        if r.applied {
+            "written"
+        } else {
+            "nothing written (use --apply)"
+        }
+    )?;
+    Ok(ExitCode::SUCCESS)
 }
 
 fn cmd_config(home: Option<&std::path::Path>, op: ConfigOp) -> Result<ExitCode> {

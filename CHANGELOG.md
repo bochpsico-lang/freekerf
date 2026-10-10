@@ -50,6 +50,10 @@ All notable changes to FreeKerf are documented here. The format follows
   white clip, threshold or dithering) and its tools (line by line, dithering,
   pass-through, vectorize, centerline) in `freekerf_raster::processor` and
   `freekerf_planner::image`; `plan` now plans documents with images.
+- `freekerf-materials`: material library packages of `freekerf/library` (git
+  dependency), search, hazards, recipes applied to layers, LaserGRBL material import.
+- `freekerf-migrate` and `freekerf migrate lasergrbl`: LaserGRBL settings and laser
+  module counters (a read-only `BinaryFormatter` reader), dry run or `--apply`.
 - `freekerf import-case`: runs `conformance` importer golden cases.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.

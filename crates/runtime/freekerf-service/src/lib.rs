@@ -29,6 +29,7 @@ use serde_json::Value;
 pub mod analysis;
 pub mod autotrace;
 pub mod import_case;
+pub mod migrate;
 
 pub use freekerf_session::{ActionError, ActionSpec, Caller, CallerKind, Tier};
 
