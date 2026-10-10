@@ -301,6 +301,26 @@ impl Session {
         label: &str,
         f: impl FnOnce(&mut Document, &mut BTreeSet<ObjectId>) -> Result<bool, E>,
     ) -> Result<bool, E> {
+        // inside a transaction the transaction's snapshot is the undo point: no
+        // copy per change (a script may make thousands); actions validate before
+        // they change anything, so an error leaves the document as it was
+        if self.transaction.is_some() {
+            let sel = self.selection.clone();
+            let changed = f(&mut self.document, &mut self.selection)?;
+            if changed {
+                let doc = &self.document;
+                self.selection.retain(|id| doc.object(*id).is_some());
+                if let Some(t) = &mut self.transaction {
+                    t.changed = true;
+                }
+                self.dirty = true;
+                self.emit(Change::Document);
+                if self.selection != sel {
+                    self.emit(Change::Selection);
+                }
+            }
+            return Ok(changed);
+        }
         let before = self.current(label);
         match f(&mut self.document, &mut self.selection) {
             Ok(false) => Ok(false),
@@ -308,12 +328,8 @@ impl Session {
                 // ids that no longer exist leave the selection
                 let doc = &self.document;
                 self.selection.retain(|id| doc.object(*id).is_some());
-                if let Some(t) = &mut self.transaction {
-                    t.changed = true;
-                } else {
-                    self.push_undo(before.clone());
-                    self.emit(Change::History);
-                }
+                self.push_undo(before.clone());
+                self.emit(Change::History);
                 self.dirty = true;
                 if self.document != before.document {
                     self.emit(Change::Document);
