@@ -12,7 +12,7 @@ the same way, with the caller's tier checked on every call.
 | --- | --- | --- |
 | read | `session.snapshot` (revision, selection, view, undo/redo labels, layers and objects without geometry), `document.get`, `document.to_fkproj`, `view.get` | read |
 | selection and view | `document.select` (replace/add/remove), `document.select_all`, `document.clear_selection`, `view.set_mode`, `view.open_panel`, `view.close_panel`, `view.set_viewport`, `view.open_dialog`, `view.close_dialog` | ui |
-| document | `document.new`, `document.from_fkproj`, `document.import_data` (base64 bytes), `document.delete`, `document.translate`, `document.move_to_layer`, `document.add_layer`, `document.update_layer`, `document.remove_layer`, `history.undo`, `history.redo` | edit |
+| document | `document.new`, `document.from_fkproj`, `document.import_data` (base64 bytes, or text for SVG/DXF), `document.delete`, `document.translate`, `document.move_to_layer`, `document.add_layer`, `document.update_layer`, `document.remove_layer`, `history.undo`, `history.redo` | edit |
 | files (service) | `document.open`, `document.save`, `document.import` (a path; format from the extension), `job.from_document` (plan the document and load it as the job) | edit |
 
 Parameters and results: [actions.md](actions.md) (generated). Object ids default to

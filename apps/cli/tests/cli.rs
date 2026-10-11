@@ -355,3 +355,70 @@ fn migrate_lasergrbl() {
         .assert()
         .failure();
 }
+
+#[test]
+fn run_a_script() {
+    let home = tempfile::tempdir().unwrap();
+    let out_file = home.path().join("out.fkproj");
+    let script = home.path().join("make.js");
+    std::fs::write(
+        &script,
+        format!(
+            r#"const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="20mm"><rect x="1" y="1" width="5" height="5" stroke="red" fill="none"/></svg>';
+app.document.importData({{format: "svg", text: svg}});
+app.document.save({{path: {:?}}});
+console.log("saved");
+app.session.snapshot().document.objects.length"#,
+            out_file.display().to_string()
+        ),
+    )
+    .unwrap();
+    // a dry run simulates the save
+    let out = freekerf(home.path())
+        .args(["run", "--dry-run"])
+        .arg(&script)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let report: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(report["value"], json!(1));
+    assert_eq!(report["simulated"], json!(["document.save"]));
+    assert!(!out_file.exists());
+    // a real run writes the project
+    let out = freekerf(home.path()).arg("run").arg(&script).output().unwrap();
+    assert!(out.status.success());
+    let report: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(report["log"], json!(["saved"]));
+    assert!(out_file.exists());
+    // below `edit` the import is denied
+    freekerf(home.path())
+        .args(["run", "--tier", "read"])
+        .arg(&script)
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("permission denied"));
+    // laser actions are refused from the command line (the tier stops below them)
+    let laser = home.path().join("laser.js");
+    std::fs::write(&laser, "app.job.run({})").unwrap();
+    freekerf(home.path())
+        .arg("run")
+        .arg(&laser)
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("needs tier `laser`"));
+    freekerf(home.path())
+        .args(["run", "--tier", "laser"])
+        .arg(&laser)
+        .assert()
+        .code(2);
+    freekerf(home.path())
+        .args(["run", "--tier", "bogus"])
+        .arg(&laser)
+        .assert()
+        .code(2);
+    freekerf(home.path())
+        .args(["run", "missing.js"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("reading missing.js"));
+}

@@ -3,7 +3,8 @@
 //! * `check-layers`: fails when a dependency between workspace crates (or a
 //!   forbidden third-party crate in the core) breaks the layer rules of
 //!   `PLAN.md` §3 / `AGENTS.md`;
-//! * `gen-docs`: regenerates the generated documentation;
+//! * `gen-docs`: regenerates the generated documentation (action catalogue,
+//!   schemas, the script API's `api.d.ts`);
 //! * `check-docs`: fails when the committed generated documentation is stale.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)] // a command-line tool
@@ -73,6 +74,7 @@ fn generated() -> Result<Vec<(PathBuf, String)>> {
             root().join("doc/features/actions.md"),
             service.registry().to_markdown(),
         ),
+        (root().join("doc/scripting/api.d.ts"), service.api_dts()),
         (
             root().join("doc/schema/settings.schema.json"),
             freekerf_settings::json_schema(),

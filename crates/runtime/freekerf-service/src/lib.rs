@@ -32,6 +32,7 @@ pub mod analysis;
 pub mod autotrace;
 pub mod import_case;
 pub mod migrate;
+pub mod script;
 
 pub use freekerf_session::{ActionError, ActionSpec, Caller, CallerKind, Tier};
 
@@ -207,6 +208,8 @@ pub struct Inner {
     issues: Arc<Mutex<Vec<Issue>>>,
     subscribers: Arc<Mutex<Vec<Sender<ServiceEvent>>>>,
     session: Mutex<Session>,
+    /// Cancel flags of the running scripts.
+    scripts: Mutex<Vec<Arc<std::sync::atomic::AtomicBool>>>,
 }
 
 impl SessionHost for Inner {
@@ -228,6 +231,7 @@ impl std::fmt::Debug for Inner {
 pub struct Service {
     inner: Arc<Inner>,
     registry: Arc<Registry<Inner>>,
+    dry: Arc<Registry<script::DryContext>>,
 }
 
 impl std::fmt::Debug for Service {
@@ -283,11 +287,13 @@ impl Service {
             issues: Arc::new(Mutex::new(Vec::new())),
             subscribers: Arc::new(Mutex::new(Vec::new())),
             session: Mutex::new(Session::new()),
+            scripts: Mutex::new(Vec::new()),
         });
         start_collector(&inner);
         Ok(Self {
             inner,
             registry: Arc::new(build_registry()),
+            dry: Arc::new(script::dry_registry()),
         })
     }
 
@@ -336,8 +342,10 @@ impl Service {
         self.inner.machine.snapshot()
     }
 
-    /// STOP without going through the registry (also bound to Ctrl-C by the CLI).
+    /// STOP without going through the registry (also bound to Ctrl-C by the CLI):
+    /// cancels the running scripts, then stops the machine.
     pub fn stop(&self) {
+        self.inner.cancel_scripts();
         self.inner.machine.stop();
     }
 }
@@ -836,9 +844,10 @@ fn build_registry() -> Registry<Inner> {
     // ---- machine: safety
     add(r.register(
         "machine.stop",
-        "STOP: soft reset of the board (laser off, queues flushed). Always allowed.",
+        "STOP: cancels running scripts, then soft resets the board (laser off, queues flushed). Always allowed.",
         Tier::Safety,
         |s: &Inner, _: NoParams| {
+            s.cancel_scripts();
             s.machine.stop();
             Ok(())
         },

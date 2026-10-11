@@ -73,8 +73,13 @@ enum ImportFormat {
 struct ImportParams {
     /// File format.
     format: ImportFormat,
-    /// The file's bytes, base64.
-    data: String,
+    /// The file's bytes, base64 (or `text`).
+    #[serde(default)]
+    data: Option<String>,
+    /// SVG or DXF: the file as text instead of `data` (for scripts that build a
+    /// drawing).
+    #[serde(default)]
+    text: Option<String>,
     /// Name of the file (kept as the objects' source).
     #[serde(default)]
     name: String,
@@ -365,7 +370,8 @@ pub fn import_file(session: &mut Session, name: &str, bytes: &[u8]) -> Result<Ve
     let base = name.rsplit(['/', '\\']).next().unwrap_or(name).to_owned();
     let p = ImportParams {
         format,
-        data: String::new(),
+        data: None,
+        text: None,
         name: base,
         dpi: None,
         speed_mm_min: None,
@@ -431,12 +437,19 @@ pub fn register_session_actions<C: SessionHost>(r: &mut Registry<C>) -> Result<(
     )?;
     r.register(
         "document.import_data",
-        "Imports a file given as base64 bytes into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step.",
+        "Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step.",
         Tier::Edit,
         |c: &C, p: ImportParams| {
-            let bytes = base64::engine::general_purpose::STANDARD
-                .decode(p.data.as_bytes())
-                .map_err(|e| ActionError::InvalidParams(format!("data: {e}")))?;
+            let bytes = match (&p.data, &p.text) {
+                (Some(data), None) => base64::engine::general_purpose::STANDARD
+                    .decode(data.as_bytes())
+                    .map_err(|e| ActionError::InvalidParams(format!("data: {e}")))?,
+                (None, Some(text)) if !matches!(p.format, ImportFormat::Image) => text.clone().into_bytes(),
+                (None, Some(_)) => {
+                    return Err(ActionError::InvalidParams("images need `data` (base64)".into()));
+                }
+                _ => return Err(ActionError::InvalidParams("give exactly one of `data` and `text`".into())),
+            };
             let mut ids = Vec::new();
             lock(c).edit("import", |d, _| {
                 ids = import_into(d, &p, &bytes)?;
@@ -821,6 +834,18 @@ mod tests {
         );
         assert!(d("document.from_fkproj", json!({"text": "{}"})).is_err());
         assert!(d("document.import_data", json!({"format": "svg", "data": "!!"})).is_err());
+        assert!(d("document.import_data", json!({"format": "svg"})).is_err());
+        assert!(d("document.import_data", json!({"format": "image", "text": "x"})).is_err());
+        assert!(
+            d(
+                "document.import_data",
+                json!({"format": "svg", "text": "x", "data": "eA=="})
+            )
+            .is_err()
+        );
+        let text = d("document.import_data", json!({"format": "svg", "text": SVG})).unwrap();
+        assert_eq!(text["objects"].as_array().unwrap().len(), 2);
+        d("history.undo", Value::Null).unwrap();
         assert!(
             d(
                 "document.import_data",

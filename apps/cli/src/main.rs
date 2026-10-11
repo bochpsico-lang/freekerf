@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, Parser, Subcommand};
 use freekerf_service::analysis::{AnalyzeOptions, analyze};
-use freekerf_service::{Caller, Service, Stores};
+use freekerf_service::{Caller, CallerKind, Service, Stores, Tier};
 use serde_json::{Value, json};
 
 mod host;
@@ -113,13 +113,24 @@ enum Command {
         #[arg(long)]
         kinds: bool,
     },
-    /// Runs one action and prints its JSON result.
+    /// Runs one action, or a JavaScript file (`*.js`), and prints its JSON result.
     Run {
-        /// Action name (`state.get`).
+        /// Action name (`state.get`) or script file (`macro.js`).
         action: String,
-        /// Parameters as JSON.
+        /// Parameters as JSON (actions only).
         #[arg(default_value = "{}")]
         params: String,
+        /// Scripts: run against a copy of the document and simulate machine,
+        /// laser and file actions; nothing is applied.
+        #[arg(long)]
+        dry_run: bool,
+        /// Scripts: highest tier the script may use (`read`, `ui`, `edit`,
+        /// `machine`). Laser actions are always refused from the command line.
+        #[arg(long, default_value = "machine")]
+        tier: String,
+        /// Scripts: wall-clock limit in seconds.
+        #[arg(long, default_value_t = 30)]
+        timeout: u64,
     },
 }
 
@@ -238,7 +249,14 @@ fn run(cli: Cli) -> Result<ExitCode> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Command::Run { action, params } => {
+        Command::Run {
+            action,
+            dry_run,
+            tier,
+            timeout,
+            ..
+        } if action.ends_with(".js") => cmd_run_script(home.as_deref(), &action, dry_run, &tier, timeout),
+        Command::Run { action, params, .. } => {
             let service = open_service(home.as_deref())?;
             let params: Value = serde_json::from_str(&params).context("parameters must be JSON")?;
             let result = service.dispatch(&Caller::user(), &action, params)?;
@@ -250,6 +268,45 @@ fn run(cli: Cli) -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
     }
+}
+
+/// `freekerf run <script.js>`: one transaction, laser refused (no one to confirm),
+/// Ctrl-C cancels the script and stops the machine.
+fn cmd_run_script(
+    home: Option<&std::path::Path>,
+    file: &str,
+    dry_run: bool,
+    tier: &str,
+    timeout: u64,
+) -> Result<ExitCode> {
+    use freekerf_service::script::ScriptRequest;
+    let max_tier: Tier = serde_json::from_value(Value::String(tier.to_owned()))
+        .map_err(|_| anyhow!("unknown tier `{tier}` (read, ui, edit, machine)"))?;
+    if max_tier == Tier::Laser {
+        bail!(
+            "laser actions need a person to confirm each one; scripts cannot run them from the command line"
+        );
+    }
+    let code = std::fs::read_to_string(file).with_context(|| format!("reading {file}"))?;
+    let name = std::path::Path::new(file)
+        .file_name()
+        .map_or_else(|| file.to_owned(), |n| n.to_string_lossy().into_owned());
+    let service = open_service(home)?;
+    install_stop_on_ctrl_c(&service);
+    let mut request = ScriptRequest::new(name.clone(), code);
+    request.dry_run = dry_run;
+    request.limits.timeout = Duration::from_secs(timeout);
+    let report = service.run_script(&Caller::new(CallerKind::Macro, name, max_tier), &request);
+    writeln!(
+        std::io::stdout().lock(),
+        "{}",
+        serde_json::to_string_pretty(&report)?
+    )?;
+    Ok(if report.outcome.error.is_some() {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
 }
 
 fn open_service(home: Option<&std::path::Path>) -> Result<Service> {

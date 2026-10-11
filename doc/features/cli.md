@@ -14,6 +14,7 @@ The headless front end. Every command goes through the action registry of
 | `freekerf config path\|get\|set\|schema` | settings file ([settings.md](settings.md)) | 0, 2 |
 | `freekerf actions [--json\|--markdown]` | the action catalogue | 0 |
 | `freekerf run ACTION [JSON]` | runs one action, prints its JSON result | 0, 2 |
+| `freekerf run FILE.js [--dry-run] [--tier T] [--timeout S]` | runs a JavaScript script in one transaction ([scripting.md](scripting.md)), prints its report; laser actions refused; Ctrl-C cancels it and sends STOP | 0, 1 when the script failed, 2 on failure |
 | `freekerf migrate lasergrbl [DIR] [--apply] [--json]` | reads LaserGRBL's data folder (settings, laser counters; [migration.md](migration.md)); writes into FreeKerf's files only with `--apply` | 0, 1 |
 | `freekerf import-case CASE [--inputs DIR]` / `--kinds` | runs a `conformance` importer golden case (`-` reads it from stdin) and prints the harness's JSON; `--kinds` lists the case kinds this build runs (`generator`, `hershey`, `svg`, `dxf`, `svg_text`, `centerline`, `raster`, `potrace`, `image_op`, `image_processor`) | 0, 2 |
 

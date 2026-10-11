@@ -13,7 +13,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `document.from_fkproj` | edit | Replaces the document with a `.fkproj` text (the undo history starts again). |
 | `document.get` | read | The whole document (layers, objects with geometry and images), as in a `.fkproj` file. |
 | `document.import` | edit | Imports an SVG, DXF or image file into the document (format from the extension). One undo step. |
-| `document.import_data` | edit | Imports a file given as base64 bytes into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step. |
+| `document.import_data` | edit | Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step. |
 | `document.move_to_layer` | edit | Moves objects (default: the selection) to another layer. One undo step. |
 | `document.new` | edit | Starts an empty document (the undo history starts again). |
 | `document.open` | edit | Opens a `.fkproj` project file (the undo history starts again). |
@@ -49,7 +49,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `machine.select_laser` | edit | Selects the laser module in use (life counters). |
 | `machine.send` | laser | Sends one line of G-code or a `$` command (not during a job). It can turn the laser on. |
 | `machine.set_zero` | machine | Sets the current position as work zero (`G92 X0 Y0 Z0`). |
-| `machine.stop` | safety | STOP: soft reset of the board (laser off, queues flushed). Always allowed. |
+| `machine.stop` | safety | STOP: cancels running scripts, then soft resets the board (laser off, queues flushed). Always allowed. |
 | `machine.unlock` | machine | Unlocks the alarm state (`$X`). |
 | `machine.write_settings` | machine | Writes board settings (`$N=V`), one at a time; returns when the board answered all of them. |
 | `session.snapshot` | read | The session as front ends and agents read it: revision, selection, view, undo/redo labels, layers and objects without geometry. |
@@ -128,16 +128,17 @@ Imports an SVG, DXF or image file into the document (format from the extension).
 
 ### `document.import_data`
 
-Imports a file given as base64 bytes into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step.
+Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step.
 
 | Parameter | Required | Description |
 | --- | --- | --- |
-| `data` | yes | The file's bytes, base64. |
+| `data` | no | The file's bytes, base64 (or `text`). |
 | `dpi` | no | Images: resolution in dots per inch (default 96); position is the origin. |
 | `format` | yes | File format. |
 | `name` | no | Name of the file (kept as the objects' source). |
 | `power` | no | Power of new layers, `S` (default 1000). |
 | `speed_mm_min` | no | Speed of new layers, mm/min (default 1000). |
+| `text` | no | SVG or DXF: the file as text instead of `data` (for scripts that build a drawing). |
 
 ### `document.move_to_layer`
 
@@ -411,7 +412,7 @@ No parameters.
 
 ### `machine.stop`
 
-STOP: soft reset of the board (laser off, queues flushed). Always allowed.
+STOP: cancels running scripts, then soft resets the board (laser off, queues flushed). Always allowed.
 
 No parameters.
 

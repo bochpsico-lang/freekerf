@@ -7,7 +7,7 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 | Item | Why | When |
 | --- | --- | --- |
 | Telnet and WebSocket transports, network discovery | M5 scope in the plan | M5 |
-| `freekerf-ipc`, `freekerf-script`, `freekerf-mcp`, Python client | M2 scope | M2 |
+| `freekerf-ipc`, `freekerf-mcp`, Python client | M2 scope | M2 |
 | Fuzzing (`cargo-fuzz` targets for G-code) | planned with the importers' parsers | M2 |
 | Permission grants (this run / session / always) | needs callers other than the user (scripts, agents) | M2 |
 | Human fire confirmation of `laser` actions | needs the desktop UI | M4a |

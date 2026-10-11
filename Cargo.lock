@@ -915,6 +915,7 @@ dependencies = [
  "freekerf-platform",
  "freekerf-protocol",
  "freekerf-raster",
+ "freekerf-script",
  "freekerf-session",
  "freekerf-settings",
  "freekerf-testkit",

@@ -28,5 +28,6 @@ tests and divergences from LaserGRBL. The action catalogue is generated.
 | [raster.md](raster.md) | bitmaps: image operations, dithering, Line2Line | M2 |
 | [vectorize.md](vectorize.md) | Potrace vectorize (outlines, fillings) and centerline (autotrace) | M2 |
 | [session.md](session.md) | the session: document, selection, view, undo, transactions, events | M2 |
+| [scripting.md](scripting.md) | JavaScript scripts: the generated `app` API, transactions, dry run, limits, `freekerf run` | M2 |
 | [materials.md](materials.md) | the material library: packages, search, recipes on layers | M2 |
 | [migration.md](migration.md) | LaserGRBL migration: settings, laser counters, materials | M2 |

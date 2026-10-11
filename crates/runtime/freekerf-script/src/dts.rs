@@ -1,5 +1,7 @@
 //! `api.d.ts`: TypeScript declarations of the script API, generated from the
-//! registry (names, parameters from the JSON schemas, descriptions, tiers). It is
+//! registry (names, parameters from the JSON schemas, descriptions, tiers): one
+//! interface per namespace, so action names that are reserved words (`delete`,
+//! `new`) stay valid methods. It is
 //! committed (`doc/scripting/api.d.ts`) and checked in CI, published as an MCP
 //! resource and used for completion in the macro editor (M4).
 
@@ -107,11 +109,24 @@ fn object_type(s: &Value, root: &Value, depth: usize) -> String {
 fn comment(text: &str, indent: &str) -> String {
     let mut out = format!("{indent}/**\n");
     for line in text.lines() {
-        let _ = writeln!(out, "{indent} * {}", line.replace("*/", "*\\/"));
+        if line.is_empty() {
+            let _ = writeln!(out, "{indent} *");
+        } else {
+            let _ = writeln!(out, "{indent} * {}", line.replace("*/", "*\\/"));
+        }
     }
     out.push_str(indent);
     out.push_str(" */\n");
     out
+}
+
+fn pascal(name: &str) -> String {
+    let c = camel(name);
+    let mut chars = c.chars();
+    chars
+        .next()
+        .map(|f| f.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
 }
 
 /// The declarations of `specs`.
@@ -125,31 +140,42 @@ pub fn api_dts(specs: &[ActionSpec]) -> String {
     }
     let mut out = String::from(
         "// FreeKerf script API. Generated from the action registry by `cargo xtask gen-docs`. Do not edit.\n\
-         // Every function dispatches one action; the caller's tier is checked on every call.\n\n",
+         // Every method dispatches one action; the caller's tier is checked on every call.\n",
     );
-    out.push_str("declare namespace app {\n");
+    let mut members = Vec::new();
     for (ns, actions) in by_ns {
-        let _ = writeln!(out, "  namespace {ns} {{");
+        let iface = format!("App{}", pascal(ns));
+        let _ = writeln!(out, "\ninterface {iface} {{");
         for s in actions {
             let name = s.name.split_once('.').map_or("", |(_, n)| n);
             let doc = format!("{}\n\nAction `{}`, tier `{}`.", s.description, s.name, s.tier);
-            out.push_str(&comment(&doc, "    "));
+            out.push_str(&comment(&doc, "  "));
             let params = ts_type(&s.params, &s.params, 0);
             let optional = s
                 .params
                 .get("required")
                 .and_then(Value::as_array)
                 .is_none_or(Vec::is_empty);
+            // `new(...)` in an interface is a construct signature: quote it
+            let method = camel(name);
+            let method = if method == "new" { "\"new\"".into() } else { method };
             let _ = writeln!(
                 out,
-                "    function {}(params{}: {params}): unknown;",
-                camel(name),
+                "  {method}(params{}: {params}): unknown;",
                 if optional { "?" } else { "" }
             );
         }
-        out.push_str("  }\n");
+        out.push_str("}\n");
+        members.push(format!("  readonly {ns}: {iface};"));
     }
-    out.push_str("}\n\n/** Writes a line to the run's log (the app console). */\ndeclare const console: { log(...values: unknown[]): void };\n");
+    let _ = write!(
+        out,
+        "\n/** The application: one namespace per action prefix. */\ndeclare const app: {{\n{}\n}};\n",
+        members.join("\n")
+    );
+    out.push_str(
+        "\n/** Writes a line to the run's log (the app console). */\ndeclare const console: { log(...values: unknown[]): void };\n",
+    );
     out
 }
 
@@ -184,17 +210,22 @@ mod tests {
             spec("view.get", json!({"type": "object", "properties": {}})),
             spec("session.snapshot", json!({"type": "object"})),
             spec("bad", json!({})),
+            spec("document.new", json!({"type": "object"})),
         ];
         let d = api_dts(&specs);
-        assert!(d.contains("namespace document {"));
-        assert!(d.contains("function select(params: { all: { a: 1 }; any: string | number; both: string | null; free: unknown; ids: number[]; list: (\"x\" | \"y\")[]; mode: \"replace\" | \"add\" }): unknown;")
-            || d.contains("function select(params: {"), "{d}");
+        assert!(d.contains("interface AppDocument {"), "{d}");
+        assert!(d.contains("  readonly document: AppDocument;"));
+        assert!(d.contains("  select(params: {"), "{d}");
         assert!(d.contains("ids: number[]"));
         assert!(d.contains("mode?: \"replace\" | \"add\""));
-        assert!(d.contains("function get(params?: Record<string, never>): unknown;"));
-        assert!(d.contains("function snapshot(params?: Record<string, unknown>): unknown;"));
+        assert!(d.contains("  get(params?: Record<string, never>): unknown;"));
+        assert!(d.contains("  snapshot(params?: Record<string, unknown>): unknown;"));
+        assert!(!d.contains(" * \n"));
+        assert_eq!(pascal("job_queue"), "JobQueue");
+        assert_eq!(pascal(""), "");
         assert!(d.contains("*\\/ end."));
         assert!(!d.contains("bad"));
+        assert!(d.contains("  \"new\"(params?: Record<string, unknown>): unknown;"));
         // depth limit
         let mut deep = json!({"type": "string"});
         for _ in 0..10 {

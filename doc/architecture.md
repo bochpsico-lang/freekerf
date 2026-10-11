@@ -115,6 +115,10 @@ sequenceDiagram
 - **One registry** (ADR 0004): every operation is an action with a name, a JSON
   schema, a description and a tier. `host --stdio`, the CLI and the tests all go
   through `Service::dispatch`; the tier of the caller is checked on every call.
+- **Scripts** (ADR 0011): `freekerf-script` embeds QuickJS with an `app` object
+  generated from the registry; `Service::run_script` runs one in a session
+  transaction (one undo step, rollback on error) or as a dry run on a copy of the
+  session. STOP cancels running scripts first.
 
 ## Extension points
 

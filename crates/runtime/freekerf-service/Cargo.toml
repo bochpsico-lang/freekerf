@@ -22,6 +22,7 @@ freekerf-planner.workspace = true
 freekerf-platform.workspace = true
 freekerf-protocol.workspace = true
 freekerf-raster.workspace = true
+freekerf-script.workspace = true
 freekerf-session.workspace = true
 freekerf-settings.workspace = true
 freekerf-transport.workspace = true

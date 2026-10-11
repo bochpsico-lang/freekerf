@@ -61,6 +61,10 @@ All notable changes to FreeKerf are documented here. The format follows
   transactions and change events, with their actions (select, import, move, layers,
   history, view) and the service's file actions (`document.open`, `document.save`,
   `document.import`, `job.from_document`).
+- Scripts (`freekerf-script`, ADR 0011): JavaScript (QuickJS) with an `app` API
+  generated from the action registry, limits, STOP cancellation, one undo step per
+  run with rollback on error, dry runs, laser actions refused without a person to
+  confirm them, `api.d.ts`, and `freekerf run <script.js>`.
 - `freekerf import-case`: runs `conformance` importer golden cases.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.

@@ -37,7 +37,8 @@ crates/native/     operating system and hardware
   freekerf-platform    directories, atomic writes, running external programs
 crates/runtime/    orchestration
   freekerf-machine     I/O thread: host + link + clock, priority STOP
-  freekerf-service     the facade: every action of every front end
+  freekerf-script      embedded JavaScript (QuickJS): the registry as a sandboxed API, limits, api.d.ts
+  freekerf-service     the facade: every action of every front end; script runs (transactions, dry run)
 crates/testing/
   freekerf-testkit     simulated clock, host+device bench, fixtures (dev-dependency only)
 apps/cli/          the `freekerf` binary (thin shell over the service)
@@ -54,7 +55,7 @@ cargo test --workspace                       # all tests (no hardware, no networ
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 cargo xtask check-layers                     # layer rules
-cargo xtask gen-docs                         # regenerate doc/features/actions.md, doc/schema/*
+cargo xtask gen-docs                         # regenerate doc/features/actions.md, doc/schema/*, doc/scripting/api.d.ts
 cargo xtask check-docs                       # CI: generated docs are committed
 cargo llvm-cov --workspace --exclude xtask --exclude freekerf-testkit --summary-only
 cargo bench -p freekerf-gcode                # 1M-line analysis (doc/benchmarks.md)
