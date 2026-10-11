@@ -43,6 +43,15 @@ export class TauriService implements AppService {
     return () => this.listeners.delete(listener);
   }
 
+  async confirmFire(id: number): Promise<unknown> {
+    try {
+      return await invoke('confirm_fire', { id });
+    } catch (e) {
+      if (isActionError(e)) throw new ActionFailure('fire', e);
+      throw e;
+    }
+  }
+
   async toolpath(): Promise<ArrayBuffer> {
     return toArrayBuffer(await invoke<ArrayBuffer | number[]>('preview'));
   }

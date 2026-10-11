@@ -1,2 +1,5 @@
-// Vitest setup: nothing global yet (jsdom environment from vite.config.ts).
-export {};
+// Vitest setup (jsdom): unmount components after each test.
+import { cleanup } from '@testing-library/svelte';
+import { afterEach } from 'vitest';
+
+afterEach(() => cleanup());

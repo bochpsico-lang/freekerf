@@ -26,7 +26,15 @@ cargo llvm-cov -p freekerf-protocol --summary-only
 
 Measured with Vitest (`npm run coverage`, V8). The report is uploaded by the CI
 job `ui` (artifact `ui-coverage`). Generated code (`src/gen/`) and the entry
-points (`src/main.ts`, `src/dev/main.ts`) are excluded.
+points (`src/main.ts`, `src/dev/main.ts`) are excluded. The totals go to the job
+summary. There is no gate yet: the WebGL2 renderer, the overlay and the Tauri IPC
+(`src/canvas/{webgl2,view,overlay,bench}.ts`, `src/ipc/`) cannot run in jsdom and
+are exercised by Playwright (`tests/web/`) and the app end-to-end tests
+(`tests/e2e/`), which are not instrumented.
+
+| M4a (PR 9) | lines | without the browser-only files above | `src/design/` |
+| --- | --- | --- | --- |
+| Vitest | 73.4 % | 92.2 % | 98.0 % |
 
 Lines not covered on purpose:
 

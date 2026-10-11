@@ -35,10 +35,13 @@ crates/testing/
 apps/cli/          the `freekerf` binary (thin shell over the service)
 apps/desktop/      the Tauri 2 app (`src-tauri` = crate freekerf-desktop, thin shell over the service)
 ui/web/            web front end (Svelte 5 + TypeScript + Vite): src/ipc (Tauri), src/state,
-                   src/gen (generated: api.ts, icons.ts), src/dev (fake service, never shipped)
+                   src/gen (generated: api.ts, icons.ts), src/dev (fake service, never shipped),
+                   src/shell, src/produce, src/design (Design mode on src/contract, M2's UI contract)
 ui/tokens/         fk-tokens.css generated from freekerf/design (commit in design.lock)
+ui/i18n/           Fluent translations: <locale>/freekerf.ftl (en is the reference),
+                   <locale>/lasergrbl.ftl generated from LaserGRBL (lasergrbl.toml)
 tests/             cross-crate integration tests (crate freekerf-it)
-tools/xtask/       cargo xtask check-layers | gen-docs | gen-ts | check-docs | sync-tokens
+tools/xtask/       cargo xtask check-layers | gen-docs | gen-ts | check-docs | sync-tokens | resx2ftl
 doc/               documentation (below)
 ```
 
@@ -52,6 +55,7 @@ cargo xtask check-layers                     # layer rules
 cargo xtask gen-docs                         # regenerate doc/features/actions.md, doc/schema/*, ui/web/src/gen/api.ts
 cargo xtask check-docs                       # CI: generated docs and TypeScript types are committed
 cargo xtask sync-tokens                      # tokens, icons, fonts from ../design at ui/tokens/design.lock
+cargo xtask resx2ftl --lasergrbl <checkout>  # LaserGRBL translations that apply → ui/i18n/*/lasergrbl.ftl
 cargo llvm-cov --workspace --exclude xtask --exclude freekerf-testkit --exclude freekerf-desktop --summary-only
 cargo bench -p freekerf-gcode                # 1M-line analysis (doc/benchmarks.md)
 cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session
@@ -72,6 +76,8 @@ cargo run -p freekerf-desktop                # the app, loading the Vite dev ser
 npm run build && cargo run -p freekerf-desktop --features custom-protocol   # embedded front end
 npm run lint && npm run check && npm test    # ESLint (architecture rules), svelte-check, Vitest
 npm run coverage                             # Vitest + V8 coverage (report in ui/web/coverage)
+npm run test:web                             # Playwright in Chromium on dev.html (PW_CHROMIUM=<path> to reuse a browser)
+xvfb-run -a npm run test:e2e                 # the app end to end on the emulator (tauri-driver; after build + custom-protocol build)
 npm run format                               # Prettier
 npm run check:bundle                         # after build: the fake service is not in dist/
 npm run licenses                             # npm license allow-list (GPL-3.0 compatible)
@@ -132,7 +138,7 @@ tested step by step with a simulated clock (`freekerf_testkit::Bench`). Details:
 | native | core |
 | runtime | core, config, native |
 | apps | runtime (`freekerf-service`), config |
-| ui/web | only the `AppService` contract (`src/service.ts`); Tauri only in `src/ipc/`; `src/dev/` only in tests and `dev.html` (ESLint) |
+| ui/web | only the `AppService` contract (`src/service.ts`); Tauri only in `src/ipc/`; `src/dev/` only in tests and `dev.html`; app state read-only outside `src/state/`, changed only by `dispatch` (ESLint `freekerf/no-app-state-mutation`) |
 | testing | anything, but only as a dev-dependency of others |
 
 The core builds for `wasm32-unknown-unknown` (CI). `unsafe_code` is forbidden in
@@ -194,4 +200,5 @@ never delete it or loosen it for the C# host.
 - Logging with `tracing`; no `println!` in libraries.
 - No telemetry.
 - Documentation, commit messages and PR descriptions in English; UI text goes
-  through i18n (from M4).
+  through i18n: `t('message-id')` with the id in `ui/i18n/en/freekerf.ftl` and
+  every other locale (a test checks the ids match).

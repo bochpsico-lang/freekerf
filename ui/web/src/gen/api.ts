@@ -18,6 +18,12 @@ export type AutomationSettings = {
   mcp?: McpSettings;
 };
 
+/** `view.close_dialog`. */
+export type CloseDialogParams = {
+  /** The dialog; the one on top when absent. */
+  dialog?: Dialog | null;
+};
+
 /** Status of a sent command (`CommandStatus`). */
 export type CommandStatus = "Queued" | "WaitingResponse" | "ResponseGood" | "ResponseBad" | "InvalidResponse";
 
@@ -67,10 +73,39 @@ export type ConsoleRow = {
   };
 };
 
+/**
+ * A custom button of the machine panel: G-code (custom code with `[expr]`) run on
+ * a click. Running it can turn the laser on, so it goes through the fire
+ * confirmation (`machine.custom_code`, tier `laser`).
+ */
+export type CustomButton = {
+  /** Custom code (`[expr]` allowed; `!`, `~`, `?`, `ctrl-x`, `0xNN` sent at once). */
+  code?: string;
+  /** Icon name of the design system (`target`, `air`...), optional. */
+  icon?: string | null;
+  /** Label. */
+  label?: string;
+};
+
 /** `machine.custom_code`. */
 export type CustomCodeParams = {
   /** Lines of custom code (`[expr]`, `!`, `~`, `?`, `ctrl-x`, `0xNN` allowed). */
   code: string;
+};
+
+/** Size of controls. */
+export type Density = "auto" | "compact" | "comfortable";
+
+/**
+ * Dialogs. Dialogs are not modal (STOP stays reachable); several can be open,
+ * the last one is on top.
+ */
+export type Dialog = "settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "about";
+
+/** `view.dismiss_toast`. */
+export type DismissToastParams = {
+  /** Id returned by `view.toast`. */
+  id: number;
 };
 
 /** What happened, for the front ends. */
@@ -128,6 +163,50 @@ export type Event = {
   LoopCountChanged: number;
 };
 
+/** `fire.cancel`. */
+export type FireCancelParams = {
+  /** The request; the pending one when absent. */
+  id?: number | null;
+};
+
+/** A laser action waiting for the person's confirmation. */
+export type FireRequest = {
+  /** The action (`job.run`, `job.resume`, `machine.send`, `machine.custom_code`). */
+  action: string;
+  /** Countdown before it can be confirmed, ms. */
+  countdown_ms: number;
+  /** Id (increasing). */
+  id: number;
+  /** Its parameters. */
+  params: unknown;
+  /** Who asked (`desktop`, an agent's name...). */
+  requested_by: string;
+  /** What it will do. */
+  summary: FireSummary;
+};
+
+/** `fire.request`. */
+export type FireRequestParams = {
+  /** An action of tier `laser` (`job.run`, `job.resume`, `machine.send`, `machine.custom_code`). */
+  action: string;
+  /** Its parameters. */
+  params?: unknown;
+};
+
+/** What the dialog shows about the job. */
+export type FireSummary = {
+  /** `[xmin, ymin, xmax, ymax]` where the laser burns, mm. */
+  bounds?: [number, number, number, number] | null;
+  /** For single lines and custom code: the text that will be sent. */
+  code?: string | null;
+  /** Estimated time, ms. */
+  estimated_ms?: number | null;
+  /** Commands of the program. */
+  lines?: number | null;
+  /** Program name, if a program is involved. */
+  program?: string | null;
+};
+
 /** Firmware family. */
 export type Firmware = "Grbl" | "Smoothie" | "Marlin" | "VigoWork";
 
@@ -148,6 +227,18 @@ export type FirmwareVersion = {
   vendor_info?: string | null;
   /** Vendor firmware version (Ortur OLF, Longer software, Vigo build). */
   vendor_version?: string | null;
+};
+
+/** `view.focus`. */
+export type FocusParams = {
+  /** Element with the focus (`canvas`, `console`...), none when absent. */
+  target?: string | null;
+};
+
+/** `job.frame`. */
+export type FrameParams = {
+  /** Feed in mm/min (default: the jog setting). */
+  feed_mm_min?: number | null;
 };
 
 /** State of the host for front ends. */
@@ -262,6 +353,36 @@ export type JogToParams = {
   y: number;
 };
 
+/** Usage of one laser module. */
+export type LaserLifeCounter = {
+  /** Brand. */
+  brand: string;
+  /** Emission time per 10 % power class (1-10 %, ..., 91-100 %), ms. */
+  classes_ms: number[];
+  /** Date the module died (no longer selected automatically). */
+  death_date?: string | null;
+  /** Unique id. */
+  id: string;
+  /** Last day it was used. */
+  last_usage?: string | null;
+  /** Model. */
+  model: string;
+  /** Date monitoring started. */
+  monitoring_date?: string | null;
+  /** Name given by the user (`Default` for the first one). */
+  name: string;
+  /** Emission time with power above 3 %, ms. */
+  non_zero_ms: number;
+  /** Emission time weighted by power, ms. */
+  normalized_power_ms: number;
+  /** Optical power in watts. */
+  optical_power_w?: number | null;
+  /** Purchase date (`YYYY-MM-DD`). */
+  purchase_date?: string | null;
+  /** Time in `Run`, ms. */
+  run_ms: number;
+};
+
 /** `job.load`. */
 export type LoadParams = {
   /** Path of a G-code file. */
@@ -274,6 +395,26 @@ export type LoadTextParams = {
   gcode: string;
   /** Name shown for the program. */
   name: string;
+};
+
+/** Result of `machine.info`: what the board told about itself. */
+export type MachineInfo = {
+  /** Homing enabled (`$22`). */
+  homing_enabled: boolean;
+  /** Index of the module in use, if known. */
+  laser_in_use?: number | null;
+  /** Laser module life counters. */
+  laser_life: LaserLifeCounter[];
+  /** Laser mode (`$32`). */
+  laser_mode: boolean;
+  /** Highest S (`$30`). */
+  max_power: number;
+  /** The `$$` table was read. */
+  settings_known: boolean;
+  /** Work area height (`$131`), mm. */
+  table_height_mm: number;
+  /** Work area width (`$130`), mm. */
+  table_width_mm: number;
 };
 
 /** How to reach the machine and how to talk to it. */
@@ -319,8 +460,17 @@ export type McpSettings = {
 /** Kind of a received message (`GrblMessage.MessageType`). */
 export type MessageKind = "Startup" | "Config" | "Alarm" | "Feedback" | "Position" | "Other" | "Warning" | "Diagnostic";
 
+/** Workspace mode (`design/ux.md`: one workspace, two modes). */
+export type Mode = "design" | "produce";
+
 /** Parameters of actions that take none. */
 export type NoParams = Record<string, never>;
+
+/** `view.open_dialog`. */
+export type OpenDialogParams = {
+  /** The dialog. */
+  dialog: Dialog;
+};
 
 /** `machine.overrides`. */
 export type OverrideParams = {
@@ -331,6 +481,9 @@ export type OverrideParams = {
   /** Rapid override target, % (25, 50 or 100). */
   rapid: number;
 };
+
+/** Panels of the dock (wide layout) or the drawers (medium layout). */
+export type Panel = "layers" | "object" | "machine" | "console";
 
 /** A position (machine or work), in mm, as `float` like LaserGRBL (`GPoint`). */
 export type Point3 = {
@@ -396,6 +549,15 @@ export type RunParams = {
   passes?: number | null;
 };
 
+/**
+ * Safety settings: user-only, like automation (actions, scripts and agents cannot
+ * change them).
+ */
+export type SafetySettings = {
+  /** Seconds before "Fire laser" can be pressed (1-10, default 3). */
+  fire_countdown_s?: number;
+};
+
 /** `machine.select_laser`. */
 export type SelectLaserParams = {
   /** Id of the laser life counter. */
@@ -406,6 +568,24 @@ export type SelectLaserParams = {
 export type SendParams = {
   /** One line of G-code or a `$` command. */
   line: string;
+};
+
+/** `view.set_drawer`. */
+export type SetDrawerParams = {
+  /** Open or closed. */
+  open: boolean;
+};
+
+/** `view.set_mode`. */
+export type SetModeParams = {
+  /** `design` or `produce`. */
+  mode: Mode;
+};
+
+/** `view.set_tool`. */
+export type SetToolParams = {
+  /** `select`, `rect`, `ellipse` or `text`. */
+  tool: Tool;
 };
 
 /** `settings.get`. */
@@ -420,6 +600,12 @@ export type SettingsSetParams = {
   key: string;
   /** New value (JSON). */
   value: unknown;
+};
+
+/** `view.show_panel`. */
+export type ShowPanelParams = {
+  /** `layers`, `object`, `machine` or `console`. */
+  panel: Panel;
 };
 
 /** Result of `state.get`. */
@@ -439,8 +625,105 @@ export type State = {
 /** Streaming mode. */
 export type Streaming = "Buffered" | "Synchronous" | "RepeatOnError";
 
+/** `machine.system_command`. */
+export type SystemCommandParams = {
+  /**
+   * A `$` command (`$$`, `$I`, `$H`, `$X`, `$#`, `$G`, `$N=V`, `$J=...`): never turns
+   * the laser on. Other G-code goes through `machine.send` (tier `laser`).
+   */
+  line: string;
+};
+
 /** The kind of a system operation. */
 export type SystemOpKind = "ReadSettings" | "ReadInfo" | "WriteSettings" | "WriteWifi";
+
+/** Colour theme of the app. */
+export type Theme = "dark" | "light";
+
+/**
+ * A short message. `message` is an i18n key (or plain text when no key exists),
+ * `args` its placeholders.
+ */
+export type Toast = {
+  /** Placeholders. */
+  args?: Record<string, string>;
+  /** Id, increasing. */
+  id: number;
+  /** Kind. */
+  level: ToastLevel;
+  /** i18n key or text. */
+  message: string;
+};
+
+/** Kind of a toast. */
+export type ToastLevel = "info" | "ok" | "warning" | "error";
+
+/** `view.toast`. */
+export type ToastParams = {
+  /** Placeholders of the message. */
+  args?: Record<string, string>;
+  /** `info` (default), `ok`, `warning` or `error`. */
+  level?: ToastLevel;
+  /** i18n key (or plain text). */
+  message: string;
+};
+
+/** Active tool of the Design mode (`design/interaction.md` §2). */
+export type Tool = "select" | "rect" | "ellipse" | "text";
+
+/** Appearance of the desktop app. */
+export type UiSettings = {
+  /** Density of the controls. */
+  density?: Density;
+  /** High contrast (on top of the theme). */
+  high_contrast?: boolean;
+  /** Language: `auto` (the system's) or a locale of `ui/i18n` (`en`, `pt-BR`, `de`...). */
+  language?: string;
+  /** Theme. */
+  theme?: Theme;
+  /** Units shown. */
+  units?: Units;
+};
+
+/** Length units shown in the app (the machine always works in mm). */
+export type Units = "mm" | "in";
+
+/** The whole view state. */
+export type ViewState = {
+  /** Open dialogs, bottom to top. */
+  dialogs: Dialog[];
+  /** The panel drawer is open (medium layout). */
+  drawer_open: boolean;
+  /**
+   * The laser action waiting for the person's confirmation, if any (the fire
+   * confirmation dialog is open while it is set).
+   */
+  fire_request?: FireRequest | null;
+  /** Increased by `view.fit`: the UI fits the work area when it changes. */
+  fit_request: number;
+  /** Element with the keyboard focus (`canvas`, `console`... free text), if known. */
+  focus?: string | null;
+  /** Mode. */
+  mode: Mode;
+  /** Active panel of the dock. */
+  panel: Panel;
+  /** Toasts, oldest first (at most [`MAX_TOASTS`]). */
+  toasts: Toast[];
+  /** Active tool of the Design mode. */
+  tool: Tool;
+  /** Viewport, once the UI or a caller set it. */
+  viewport?: Viewport | null;
+};
+
+/** What part of the table is shown: the world point at the centre and the zoom. */
+export type Viewport = {
+  /** Centre X, mm. */
+  cx: number;
+  /** Centre Y, mm. */
+  cy: number;
+  /** Zoom, CSS pixels per mm. */
+  scale: number;
+};
 
 /** `machine.write_settings`. */
 export type WriteSettingsParams = {
@@ -511,18 +794,28 @@ export type EventMessage = {
   event: "settings_changed";
 } | {
   event: "program_loaded";
+} | {
+  event: "view";
+  /** The new view state. */
+  view: ViewState;
 };
 
 /** The whole settings file. */
 export type Settings = {
   /** Automation (user-only). */
   automation?: AutomationSettings;
+  /** Custom buttons of the machine panel (added in M4a; none by default). */
+  buttons?: CustomButton[];
   /** Job custom code. */
   job?: JobSettings;
   /** Jog. */
   jog?: JogSettings;
   /** Machine connection. */
   machine?: MachineSettings;
+  /** Safety (user-only; added in M4a). */
+  safety?: SafetySettings;
+  /** Appearance of the desktop app (added in M4a; files without it get the defaults). */
+  ui?: UiSettings;
   /** Format version. */
   version?: number;
 };
@@ -535,11 +828,29 @@ export interface Actions {
     result: ConsoleRow[];
     tier: "read";
   };
+  /** Cancels the pending laser request (the one given, or any). Always allowed. */
+  "fire.cancel": {
+    params: FireCancelParams;
+    result: null;
+    tier: "safety";
+  };
+  /** Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request. */
+  "fire.request": {
+    params: FireRequestParams;
+    result: FireRequest;
+    tier: "machine";
+  };
   /** Stops streaming the job and sends `M5` (lines already in the board still run; use machine.stop to stop at once). Always allowed. */
   "job.abort": {
     params: NoParams;
     result: null;
     tier: "safety";
+  };
+  /** Runs the head around the bounds of the loaded program with the laser off (jog moves). */
+  "job.frame": {
+    params: FrameParams;
+    result: null;
+    tier: "machine";
   };
   /** The loaded program (name, lines, estimated time, range). */
   "job.info": {
@@ -600,6 +911,12 @@ export interface Actions {
     params: NoParams;
     result: null;
     tier: "machine";
+  };
+  /** Work area, laser mode, highest power and laser module counters, from the board settings. */
+  "machine.info": {
+    params: NoParams;
+    result: MachineInfo;
+    tier: "read";
   };
   /** Jogs one step in a direction (laser off). */
   "machine.jog": {
@@ -673,6 +990,12 @@ export interface Actions {
     result: null;
     tier: "safety";
   };
+  /** Sends a `$` command (`$$`, `$I`, `$H`, `$X`, `$N=V`, `$J=...`; not during a job). It cannot turn the laser on. */
+  "machine.system_command": {
+    params: SystemCommandParams;
+    result: null;
+    tier: "machine";
+  };
   /** Unlocks the alarm state (`$X`). */
   "machine.unlock": {
     params: NoParams;
@@ -703,6 +1026,78 @@ export interface Actions {
     result: State;
     tier: "read";
   };
+  /** Closes a dialog (the one on top when none is given). */
+  "view.close_dialog": {
+    params: CloseDialogParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Removes a toast. */
+  "view.dismiss_toast": {
+    params: DismissToastParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Fits the work area in the canvas. */
+  "view.fit": {
+    params: NoParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Records which element has the keyboard focus. */
+  "view.focus": {
+    params: FocusParams;
+    result: null;
+    tier: "ui";
+  };
+  /** The view state: mode, panel, dialogs, toasts, viewport, focus. */
+  "view.get": {
+    params: NoParams;
+    result: ViewState;
+    tier: "read";
+  };
+  /** Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable). */
+  "view.open_dialog": {
+    params: OpenDialogParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Opens or closes the panel drawer (medium layout). */
+  "view.set_drawer": {
+    params: SetDrawerParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Switches between the Design and Produce modes. */
+  "view.set_mode": {
+    params: SetModeParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Chooses the Design mode tool (select, rectangle, ellipse, text). */
+  "view.set_tool": {
+    params: SetToolParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Shows the table around a point at a zoom (CSS pixels per mm). */
+  "view.set_viewport": {
+    params: Viewport;
+    result: null;
+    tier: "ui";
+  };
+  /** Shows a panel of the dock (opens the drawer in the medium layout). */
+  "view.show_panel": {
+    params: ShowPanelParams;
+    result: null;
+    tier: "ui";
+  };
+  /** Shows a short message (at most 3 at once); returns its id. */
+  "view.toast": {
+    params: ToastParams;
+    result: number;
+    tier: "ui";
+  };
 }
 
 /** Action names. */
@@ -711,7 +1106,10 @@ export type ActionName = keyof Actions;
 /** Tier of each action, for the front end (the Rust side checks it again). */
 export const ACTION_TIERS = {
   "console.get": "read",
+  "fire.cancel": "safety",
+  "fire.request": "machine",
   "job.abort": "safety",
+  "job.frame": "machine",
   "job.info": "read",
   "job.load": "edit",
   "job.load_text": "edit",
@@ -722,6 +1120,7 @@ export const ACTION_TIERS = {
   "machine.disconnect": "machine",
   "machine.feed_hold": "safety",
   "machine.home": "machine",
+  "machine.info": "read",
   "machine.jog": "machine",
   "machine.jog_stop": "safety",
   "machine.jog_to": "machine",
@@ -734,9 +1133,22 @@ export const ACTION_TIERS = {
   "machine.send": "laser",
   "machine.set_zero": "machine",
   "machine.stop": "safety",
+  "machine.system_command": "machine",
   "machine.unlock": "machine",
   "machine.write_settings": "machine",
   "settings.get": "read",
   "settings.set": "edit",
   "state.get": "read",
+  "view.close_dialog": "ui",
+  "view.dismiss_toast": "ui",
+  "view.fit": "ui",
+  "view.focus": "ui",
+  "view.get": "read",
+  "view.open_dialog": "ui",
+  "view.set_drawer": "ui",
+  "view.set_mode": "ui",
+  "view.set_tool": "ui",
+  "view.set_viewport": "ui",
+  "view.show_panel": "ui",
+  "view.toast": "ui",
 } as const satisfies Record<ActionName, Tier>;

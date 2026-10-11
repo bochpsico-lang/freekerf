@@ -7,7 +7,10 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | Action | Tier | Description |
 | --- | --- | --- |
 | `console.get` | read | Console rows (sent commands, answers, messages). |
+| `fire.cancel` | safety | Cancels the pending laser request (the one given, or any). Always allowed. |
+| `fire.request` | machine | Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request. |
 | `job.abort` | safety | Stops streaming the job and sends `M5` (lines already in the board still run; use machine.stop to stop at once). Always allowed. |
+| `job.frame` | machine | Runs the head around the bounds of the loaded program with the laser off (jog moves). |
 | `job.info` | read | The loaded program (name, lines, estimated time, range). |
 | `job.load` | edit | Loads and analyzes a G-code file. |
 | `job.load_text` | edit | Loads and analyzes G-code given as text. |
@@ -18,6 +21,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `machine.disconnect` | machine | Closes the connection. |
 | `machine.feed_hold` | safety | Feed hold (pause the motion). Always allowed. |
 | `machine.home` | machine | Runs the homing cycle (`$H`). |
+| `machine.info` | read | Work area, laser mode, highest power and laser module counters, from the board settings. |
 | `machine.jog` | machine | Jogs one step in a direction (laser off). |
 | `machine.jog_stop` | safety | Stops a continuous jog. Always allowed. |
 | `machine.jog_to` | machine | Jogs to a work position (laser off). |
@@ -30,11 +34,24 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `machine.send` | laser | Sends one line of G-code or a `$` command (not during a job). It can turn the laser on. |
 | `machine.set_zero` | machine | Sets the current position as work zero (`G92 X0 Y0 Z0`). |
 | `machine.stop` | safety | STOP: soft reset of the board (laser off, queues flushed). Always allowed. |
+| `machine.system_command` | machine | Sends a `$` command (`$$`, `$I`, `$H`, `$X`, `$N=V`, `$J=...`; not during a job). It cannot turn the laser on. |
 | `machine.unlock` | machine | Unlocks the alarm state (`$X`). |
 | `machine.write_settings` | machine | Writes board settings (`$N=V`), one at a time; returns when the board answered all of them. |
 | `settings.get` | read | Reads the settings (all, or one dotted key). |
 | `settings.set` | edit | Changes one setting and saves the file. Automation settings are user-only and refused here. |
 | `state.get` | read | Machine state, loaded program, issues and resume offer. |
+| `view.close_dialog` | ui | Closes a dialog (the one on top when none is given). |
+| `view.dismiss_toast` | ui | Removes a toast. |
+| `view.fit` | ui | Fits the work area in the canvas. |
+| `view.focus` | ui | Records which element has the keyboard focus. |
+| `view.get` | read | The view state: mode, panel, dialogs, toasts, viewport, focus. |
+| `view.open_dialog` | ui | Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable). |
+| `view.set_drawer` | ui | Opens or closes the panel drawer (medium layout). |
+| `view.set_mode` | ui | Switches between the Design and Produce modes. |
+| `view.set_tool` | ui | Chooses the Design mode tool (select, rectangle, ellipse, text). |
+| `view.set_viewport` | ui | Shows the table around a point at a zoom (CSS pixels per mm). |
+| `view.show_panel` | ui | Shows a panel of the dock (opens the drawer in the medium layout). |
+| `view.toast` | ui | Shows a short message (at most 3 at once); returns its id. |
 
 ## Parameters
 
@@ -46,11 +63,36 @@ Console rows (sent commands, answers, messages).
 | --- | --- | --- |
 | `last` | no | Only the last `last` rows. |
 
+### `fire.cancel`
+
+Cancels the pending laser request (the one given, or any). Always allowed.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `id` | no | The request; the pending one when absent. |
+
+### `fire.request`
+
+Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `action` | yes | An action of tier `laser` (`job.run`, `job.resume`, `machine.send`, `machine.custom_code`). |
+| `params` | no | Its parameters. |
+
 ### `job.abort`
 
 Stops streaming the job and sends `M5` (lines already in the board still run; use machine.stop to stop at once). Always allowed.
 
 No parameters.
+
+### `job.frame`
+
+Runs the head around the bounds of the loaded program with the laser off (jog moves).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `feed_mm_min` | no | Feed in mm/min (default: the jog setting). |
 
 ### `job.info`
 
@@ -127,6 +169,12 @@ No parameters.
 ### `machine.home`
 
 Runs the homing cycle (`$H`).
+
+No parameters.
+
+### `machine.info`
+
+Work area, laser mode, highest power and laser module counters, from the board settings.
 
 No parameters.
 
@@ -218,6 +266,14 @@ STOP: soft reset of the board (laser off, queues flushed). Always allowed.
 
 No parameters.
 
+### `machine.system_command`
+
+Sends a `$` command (`$$`, `$I`, `$H`, `$X`, `$N=V`, `$J=...`; not during a job). It cannot turn the laser on.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `line` | yes | A `$` command (`$$`, `$I`, `$H`, `$X`, `$#`, `$G`, `$N=V`, `$J=...`): never turns the laser on. Other G-code goes through `machine.send` (tier `laser`). |
+
 ### `machine.unlock`
 
 Unlocks the alarm state (`$X`).
@@ -254,3 +310,99 @@ Changes one setting and saves the file. Automation settings are user-only and re
 Machine state, loaded program, issues and resume offer.
 
 No parameters.
+
+### `view.close_dialog`
+
+Closes a dialog (the one on top when none is given).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `dialog` | no | The dialog; the one on top when absent. |
+
+### `view.dismiss_toast`
+
+Removes a toast.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `id` | yes | Id returned by `view.toast`. |
+
+### `view.fit`
+
+Fits the work area in the canvas.
+
+No parameters.
+
+### `view.focus`
+
+Records which element has the keyboard focus.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `target` | no | Element with the focus (`canvas`, `console`...), none when absent. |
+
+### `view.get`
+
+The view state: mode, panel, dialogs, toasts, viewport, focus.
+
+No parameters.
+
+### `view.open_dialog`
+
+Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `dialog` | yes | The dialog. |
+
+### `view.set_drawer`
+
+Opens or closes the panel drawer (medium layout).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `open` | yes | Open or closed. |
+
+### `view.set_mode`
+
+Switches between the Design and Produce modes.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `mode` | yes | `design` or `produce`. |
+
+### `view.set_tool`
+
+Chooses the Design mode tool (select, rectangle, ellipse, text).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `tool` | yes | `select`, `rect`, `ellipse` or `text`. |
+
+### `view.set_viewport`
+
+Shows the table around a point at a zoom (CSS pixels per mm).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `cx` | yes | Centre X, mm. |
+| `cy` | yes | Centre Y, mm. |
+| `scale` | yes | Zoom, CSS pixels per mm. |
+
+### `view.show_panel`
+
+Shows a panel of the dock (opens the drawer in the medium layout).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `panel` | yes | `layers`, `object`, `machine` or `console`. |
+
+### `view.toast`
+
+Shows a short message (at most 3 at once); returns its id.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `args` | no | Placeholders of the message. |
+| `level` | no | `info` (default), `ok`, `warning` or `error`. |
+| `message` | yes | i18n key (or plain text). |

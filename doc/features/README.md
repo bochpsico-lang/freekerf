@@ -20,5 +20,12 @@ tests and divergences from LaserGRBL. The action catalogue is generated.
 | [cli.md](cli.md) | the `freekerf` command line | M1 |
 | [host-protocol.md](host-protocol.md) | `freekerf host --stdio` (JSON Lines) | M1 |
 | [actions.md](actions.md) | the action registry (generated) | M1 |
+| [shell.md](shell.md) | app shell: view state, layouts, STOP, dialogs, keyboard, dispatch-only | M4a |
+| [fire-confirmation.md](fire-confirmation.md) | the human confirmation before any laser action | M4a |
+| [produce-mode.md](produce-mode.md) | machine panel, jog, frame, overrides, console, recovery | M4a |
+| [i18n.md](i18n.md) | Fluent translations, language setting, LaserGRBL translations (`resx2ftl`) | M4a |
+| [theming.md](theming.md) | themes, high contrast, density, units | M4a |
+| [design-mode.md](design-mode.md) | Design mode on the UI contract: layers, palette, inspector, tools, handles, import, welcome | M4a |
+| [ui-contract.md](ui-contract.md) | what the Design mode needs from M2: types, actions, events, raw payloads | M4a |
 | [canvas.md](canvas.md) | the canvas: renderer, gestures, G-code preview, head, performance | M4a |
 | [desktop-app.md](desktop-app.md) | the Tauri app, its boundary with the service, generated types, design system | M4a |

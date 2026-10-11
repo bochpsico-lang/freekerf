@@ -3,10 +3,19 @@
 // `src/dev/` and the tests imports it (lint), and `npm run check:bundle` fails if
 // the marker below is found in `dist/`.
 
-import type { ActionName, ActionSpec, EventMessage, MachineStatus, State } from '../gen/api';
+import type {
+  ActionName,
+  ActionSpec,
+  EventMessage,
+  MachineStatus,
+  Settings,
+  State,
+  ViewState,
+} from '../gen/api';
 import { ACTION_TIERS } from '../gen/api';
 import { ActionFailure, type AppService, type Params, type Result } from '../service';
 import { encodeToolpath, type SegmentRecord } from '../canvas/toolpath';
+import { FakeDocument } from './fake-document';
 
 /** Found in the bundle only if the fake service leaked into it. */
 export const FAKE_SERVICE_MARKER = 'freekerf-fake-service-do-not-ship';
@@ -59,10 +68,35 @@ type Handler = (params: unknown) => unknown;
 /** In-memory service with a tiny machine model (connect, stop, jog). */
 export class FakeService implements AppService {
   readonly marker = FAKE_SERVICE_MARKER;
+  /** The Design mode document (fake of doc/features/ui-contract.md); absent hides the Design mode. */
+  readonly document: FakeDocument | undefined;
+
+  constructor(options: { document?: boolean } = {}) {
+    this.document = options.document === false ? undefined : new FakeDocument();
+  }
   readonly calls: { action: ActionName; params: unknown }[] = [];
   state: State = initialState();
   private listeners = new Set<(event: EventMessage) => void>();
   private headListeners = new Set<(frame: ArrayBuffer) => void>();
+  /** Clock of the fake fire gate, ms (tests move it). */
+  now = 0;
+  view: ViewState = {
+    mode: 'produce',
+    tool: 'select',
+    panel: 'machine',
+    drawer_open: false,
+    dialogs: [],
+    toasts: [],
+    viewport: null,
+    fit_request: 0,
+    focus: null,
+    fire_request: null,
+  };
+  settings: Settings = {
+    version: 1,
+    ui: { language: 'en', theme: 'dark', high_contrast: false, density: 'auto', units: 'mm' },
+  };
+  private nextToast = 1;
   /** Tool path returned by `toolpath()` (set by `job.load_text`, or by tests). */
   toolpathSegments: SegmentRecord[] = [];
   private handlers: Partial<Record<ActionName, Handler>> = {
@@ -91,6 +125,122 @@ export class FakeService implements AppService {
       };
       this.emit({ event: 'program_loaded' });
       return this.state.program;
+    },
+    'view.get': () => structuredClone(this.view),
+    'view.set_mode': (p) =>
+      this.changeView((v) => {
+        v.mode = (p as Params<'view.set_mode'>).mode;
+        if (v.mode === 'produce') v.panel = 'machine';
+      }),
+    'view.set_tool': (p) =>
+      this.changeView((v) => {
+        v.tool = (p as Params<'view.set_tool'>).tool;
+      }),
+    'view.show_panel': (p) =>
+      this.changeView((v) => {
+        v.panel = (p as Params<'view.show_panel'>).panel;
+        v.drawer_open = true;
+      }),
+    'view.set_drawer': (p) =>
+      this.changeView((v) => {
+        v.drawer_open = (p as Params<'view.set_drawer'>).open;
+      }),
+    'view.open_dialog': (p) =>
+      this.changeView((v) => {
+        const d = (p as Params<'view.open_dialog'>).dialog;
+        v.dialogs = [...v.dialogs.filter((x) => x !== d), d];
+      }),
+    'view.close_dialog': (p) =>
+      this.changeView((v) => {
+        const d = (p as Params<'view.close_dialog'>).dialog;
+        if ((d ?? v.dialogs.at(-1)) === 'fire_confirmation') v.fire_request = null;
+        v.dialogs = d ? v.dialogs.filter((x) => x !== d) : v.dialogs.slice(0, -1);
+      }),
+    'view.toast': (p) => {
+      const t = p as Params<'view.toast'>;
+      const id = this.nextToast++;
+      this.changeView((v) => {
+        v.toasts = [
+          ...v.toasts,
+          { id, level: t.level ?? 'info', message: t.message, args: t.args ?? {} },
+        ].slice(-3);
+      });
+      return id;
+    },
+    'view.dismiss_toast': (p) =>
+      this.changeView((v) => {
+        v.toasts = v.toasts.filter((x) => x.id !== (p as Params<'view.dismiss_toast'>).id);
+      }),
+    'view.set_viewport': (p) =>
+      this.changeView((v) => {
+        v.viewport = p as Params<'view.set_viewport'>;
+      }),
+    'view.fit': () =>
+      this.changeView((v) => {
+        v.fit_request += 1;
+      }),
+    'view.focus': (p) =>
+      this.changeView((v) => {
+        v.focus = (p as Params<'view.focus'>).target ?? null;
+      }),
+    'settings.get': () => structuredClone(this.settings),
+    'console.get': () => [],
+    'machine.info': () => ({
+      table_width_mm: 400,
+      table_height_mm: 300,
+      laser_mode: true,
+      max_power: 1000,
+      homing_enabled: false,
+      settings_known: this.state.machine.connected,
+      laser_life: [],
+      laser_in_use: null,
+    }),
+    'machine.list_ports': () => ['/dev/ttyUSB0'],
+    // machine actions without a model: recorded in `calls`, accepted
+    'machine.jog': () => null,
+    'machine.jog_stop': () => null,
+    'machine.jog_to': () => null,
+    'machine.home': () => null,
+    'machine.unlock': () => null,
+    'machine.set_zero': () => null,
+    'machine.overrides': () => null,
+    'machine.feed_hold': () => null,
+    'machine.resume': () => null,
+    'machine.system_command': () => null,
+    'job.frame': () => null,
+    'job.abort': () => null,
+    'fire.request': (p) => {
+      const { action, params } = p as Params<'fire.request'>;
+      if (ACTION_TIERS[action as ActionName] !== 'laser') {
+        throw new ActionFailure('fire.request', {
+          kind: 'invalid_params',
+          message: `${action} is not a laser action`,
+        });
+      }
+      const request = {
+        id: this.nextToast++,
+        action,
+        params: params ?? {},
+        requested_by: 'desktop',
+        summary: { program: this.state.program?.name ?? null, lines: this.state.program?.lines ?? null },
+        countdown_ms: 3000,
+      };
+      this.fireAt = this.now;
+      this.changeView((v) => {
+        v.fire_request = request;
+        v.dialogs = [...v.dialogs.filter((d) => d !== 'fire_confirmation'), 'fire_confirmation'];
+      });
+      return request;
+    },
+    'fire.cancel': () => this.clearFire(),
+    'settings.set': (p) => {
+      const { key, value } = p as Params<'settings.set'>;
+      const parts = key.split('.');
+      let slot = this.settings as Record<string, unknown>;
+      for (const part of parts.slice(0, -1)) slot = (slot[part] ??= {}) as Record<string, unknown>;
+      slot[parts.at(-1)!] = value;
+      this.emit({ event: 'settings_changed' });
+      return null;
     },
     'machine.stop': () => {
       if (this.state.machine.connected) this.setStatus('Idle', true);
@@ -126,6 +276,29 @@ export class FakeService implements AppService {
     return () => this.listeners.delete(listener);
   }
 
+  private fireAt = 0;
+  /** Laser actions the fake ran after a confirmation (tests). */
+  readonly fired: { action: string; params: unknown }[] = [];
+
+  async confirmFire(id: number): Promise<unknown> {
+    const r = this.view.fire_request;
+    if (!r || r.id !== id)
+      throw new ActionFailure('fire', { kind: 'refused', message: 'no pending laser request with this id' });
+    if (this.now - this.fireAt < r.countdown_ms) {
+      throw new ActionFailure('fire', { kind: 'refused', message: 'wait before confirming' });
+    }
+    this.clearFire();
+    this.fired.push({ action: r.action, params: r.params });
+    return null;
+  }
+
+  private clearFire(): null {
+    return this.changeView((v) => {
+      v.fire_request = null;
+      v.dialogs = v.dialogs.filter((d) => d !== 'fire_confirmation');
+    });
+  }
+
   async toolpath(): Promise<ArrayBuffer> {
     return encodeToolpath(this.toolpathSegments, this.toolpathSegments.length);
   }
@@ -150,6 +323,13 @@ export class FakeService implements AppService {
   /** Sends an event to the subscribers. */
   emit(event: EventMessage): void {
     for (const l of this.listeners) l(event);
+  }
+
+  private changeView(f: (v: ViewState) => void): null {
+    const before = JSON.stringify(this.view);
+    f(this.view);
+    if (JSON.stringify(this.view) !== before) this.emit({ event: 'view', view: structuredClone(this.view) });
+    return null;
   }
 
   private setStatus(status: MachineStatus, connected: boolean): void {

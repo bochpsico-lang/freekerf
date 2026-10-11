@@ -116,36 +116,36 @@ export async function runCanvasBench(
   const paths = syntheticPaths(o.paths, table);
   const image = syntheticImage(o.imageWidth, o.imageHeight, { x: 20, y: 60, width: 360, height: 270 }, 9);
   const t1 = performance.now();
-  const view = new CanvasView(host);
-  view.setMode('produce');
-  view.setWorkArea(table);
-  view.setPaths(paths);
-  view.setImages([image]);
+  const canvas = new CanvasView(host);
+  canvas.setMode('produce');
+  canvas.setWorkArea(table);
+  canvas.setPaths(paths);
+  canvas.setImages([image]);
   const t2 = performance.now();
-  view.fit();
-  view.draw();
+  canvas.fit();
+  canvas.draw();
   await frame();
   const t3 = performance.now();
 
   let cpu = 0;
-  view.onFrame = (f) => {
+  canvas.onFrame = (f) => {
     cpu += f.cpuMs;
   };
   const phases: PhaseResult[] = [];
-  const { width, height } = view.camera;
+  const { width, height } = canvas.camera;
   for (const zoom of o.zooms) {
-    view.fit();
-    view.zoom(zoom);
-    view.draw();
+    canvas.fit();
+    canvas.zoom(zoom);
+    canvas.draw();
     await frame();
     cpu = 0;
     const times: number[] = [];
-    // middle-button drag back and forth over 120 % of the view width with some
+    // middle-button drag back and forth over 120 % of the canvas width with some
     // vertical wobble: long enough to leave the cached area (scene redraws included)
     const cx = width / 2;
     const cy = height / 2;
     const amp = width * 0.6;
-    pointer(view.overlay, 'pointerdown', cx, cy);
+    pointer(canvas.overlay, 'pointerdown', cx, cy);
     let last = await frame();
     const start = last;
     let redraws = 0;
@@ -154,7 +154,7 @@ export async function runCanvasBench(
     while (last - start < o.phaseMs) {
       const t = (last - start) / 1000;
       pointer(
-        view.overlay,
+        canvas.overlay,
         'pointermove',
         cx + amp * Math.sin(t * 1.5),
         cy + (height / 8) * Math.sin(t * 2.3),
@@ -162,14 +162,14 @@ export async function runCanvasBench(
       const now = await frame();
       times.push(now - last);
       last = now;
-      const st = view.stats;
+      const st = canvas.stats;
       if (st.cacheRedrawn) {
         redraws++;
         segments = st.segments;
         tiles = st.tiles;
       }
     }
-    pointer(view.overlay, 'pointerup', cx, cy);
+    pointer(canvas.overlay, 'pointerup', cx, cy);
     const sorted = [...times].sort((a, b) => b - a);
     const slow = sorted.slice(0, Math.max(1, Math.floor(sorted.length / 100)));
     const mean = times.reduce((s, t) => s + t, 0) / Math.max(1, times.length);
@@ -192,7 +192,7 @@ export async function runCanvasBench(
     image: `${o.imageWidth}x${o.imageHeight}`,
     viewport: `${Math.round(width)}x${Math.round(height)}`,
     device_pixel_ratio: window.devicePixelRatio || 1,
-    gl_renderer: glRenderer(view.gl),
+    gl_renderer: glRenderer(canvas.gl),
     user_agent: navigator.userAgent,
     build_ms: round(t1 - t0),
     upload_ms: round(t2 - t1),
@@ -202,7 +202,7 @@ export async function runCanvasBench(
     worst_frame_ms: Math.max(...phases.map((p) => p.worst_frame_ms)),
     js_heap_mib: memory ? round(memory.usedJSHeapSize / 1048576) : null,
   };
-  view.dispose();
+  canvas.dispose();
   return report;
 }
 

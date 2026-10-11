@@ -1,117 +1,17 @@
 @import '../../../tokens/fk-tokens.css';
+@import './shell.css';
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  margin: 0;
-  height: 100%;
-  background: var(--fk-color-surface-0);
-  color: var(--fk-color-text);
-  font-family: var(--fk-font-family-ui);
-  font-size: var(--fk-font-body);
-}
-
-#app {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.mono {
-  font-family: var(--fk-font-family-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: var(--fk-gap);
-  padding: var(--fk-space-2) var(--fk-space-3);
-  background: var(--fk-color-surface-1);
-  border-bottom: 1px solid var(--fk-color-border);
-  position: relative;
-  z-index: var(--fk-z-estop);
-}
-
-.brand {
-  font-family: var(--fk-font-family-brand);
-  font-size: var(--fk-font-size-xl);
-}
-
-.brand b {
-  color: var(--fk-color-accent);
-}
-
-.spacer {
-  flex: 1;
-}
-
-.btn {
-  min-height: var(--fk-control-h);
-  padding: 0 var(--fk-space-3);
-  border-radius: var(--fk-radius-md);
-  border: 1px solid var(--fk-color-border);
-  background: var(--fk-color-surface-2);
-  color: var(--fk-color-text);
-  font: inherit;
-  cursor: pointer;
-}
-
-.state-chip {
-  padding: var(--fk-space-1) var(--fk-space-3);
-  border-radius: var(--fk-radius-full);
-  border: 1px solid currentColor;
-}
-
-.state-chip[data-state='offline'] {
-  color: var(--fk-color-state-offline);
-}
-.state-chip[data-state='connecting'],
-.state-chip[data-state='idle'] {
-  color: var(--fk-color-state-idle);
-}
-.state-chip[data-state='run'] {
-  color: var(--fk-color-state-run);
-}
-.state-chip[data-state='hold'] {
-  color: var(--fk-color-state-hold);
-}
-.state-chip[data-state='alarm'] {
-  color: var(--fk-color-state-alarm);
-}
-
-.estop {
-  min-height: calc(var(--fk-control-h) + 8px);
-  padding: 0 var(--fk-space-4);
-  background: var(--fk-color-estop);
-  color: #fff;
-  border: 3px solid var(--fk-color-estop-ring);
-  border-radius: var(--fk-radius-md);
-  font-weight: var(--fk-font-weight-bold);
-  cursor: pointer;
-}
-
-.stage {
-  flex: 1;
-  position: relative;
-  min-height: 0;
-  background: var(--fk-color-surface-canvas);
-}
-
-.stage .readout,
-.stage .error {
+/* additions of the app (not in the prototype) */
+.stage .canvas-host {
   position: absolute;
-  right: var(--fk-space-3);
-  bottom: var(--fk-space-2);
-  margin: 0;
-  pointer-events: none;
+  inset: 0;
 }
 
-.error {
-  color: var(--fk-color-danger);
+.dlg-stack {
+  display: contents;
+}
+
+.placeholder {
+  padding: var(--fk-space-4);
+  color: var(--fk-color-text-subtle);
 }

@@ -144,4 +144,55 @@ describe('CanvasInteraction', () => {
     ix.pointerMove(ptr(220, 220)); // ignored
     expect(host.selectArea).not.toHaveBeenCalled();
   });
+
+  it('handles: drag a handle, drag an object to move it, a second finger cancels', () => {
+    const { host, ix } = setup('design', () => 'obj-1');
+    const drag = vi.fn();
+    const h: InteractionHost = { ...host, hitHandle: (x) => (x > 300 ? 'se' : 'move'), drag };
+    const hx = new CanvasInteraction(h);
+    hx.pointerDown(ptr(310, 100));
+    hx.pointerMove(ptr(311, 100)); // below the threshold: nothing yet
+    expect(drag).not.toHaveBeenCalled();
+    hx.pointerMove(ptr(340, 130));
+    hx.pointerUp(ptr(340, 130));
+    expect(drag.mock.calls.map((c) => [c[0], c[1]])).toEqual([
+      ['start', 'se'],
+      ['move', 'se'],
+      ['end', 'se'],
+    ]);
+    // inside the selection on an object: selected (kept if already) and moved
+    drag.mockClear();
+    hx.pointerDown(ptr(100, 100));
+    hx.pointerMove(ptr(150, 100));
+    hx.pointerUp(ptr(150, 100));
+    expect(host.select).toHaveBeenCalledWith('obj-1', false, true);
+    expect(drag.mock.calls.map((c) => c[0])).toEqual(['start', 'move', 'end']);
+    // a second finger cancels the drag
+    drag.mockClear();
+    hx.pointerDown(ptr(310, 100, { type: 'touch' }));
+    hx.pointerMove(ptr(350, 100, { type: 'touch' }));
+    hx.pointerDown(ptr(200, 200, { id: 2, type: 'touch' }));
+    expect(drag.mock.calls.map((c) => c[0])).toEqual(['start', 'move', 'cancel']);
+    void ix;
+  });
+
+  it('a drawing tool places with a click or draws a box', () => {
+    const { host } = setup('design', () => 'obj-1');
+    const place = vi.fn();
+    const ix = new CanvasInteraction({ ...host, placing: () => true, place });
+    ix.pointerDown(ptr(100, 100));
+    ix.pointerUp(ptr(100, 100));
+    expect(place).toHaveBeenCalledTimes(1);
+    expect(place.mock.calls[0]![0]).toMatchObject({ width: 0, height: 0 });
+    ix.pointerDown(ptr(100, 100));
+    ix.pointerMove(ptr(200, 150));
+    expect(host.marquee).toHaveBeenLastCalledWith({ x0: 100, y0: 100, x1: 200, y1: 150, crossing: false });
+    ix.pointerUp(ptr(200, 150));
+    const r = place.mock.calls[1]![0];
+    expect(r.width).toBeGreaterThan(0);
+    expect(r.height).toBeGreaterThan(0);
+    // never selects or marquee-selects while placing
+    expect(host.select).not.toHaveBeenCalled();
+    expect(host.selectArea).not.toHaveBeenCalled();
+  });
 });
