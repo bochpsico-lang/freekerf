@@ -9,6 +9,9 @@
 //!   state, and every other action (machine, laser, files, settings, jobs) is
 //!   simulated: it returns `{"simulated": true}` and is listed in
 //!   [`ScriptReport::simulated`]. Nothing is applied.
+//! * **Permissions.** Every call is checked by [`Service::authorize`]: the
+//!   caller's tier, its grants, and the person (who can grant this run, this
+//!   session or always). A macro is identified by its name and the hash of its code.
 //! * **Laser.** An action of tier `laser` runs only when a person confirms it
 //!   ([`ScriptRequest::confirm_laser`]); without a confirmation (headless, the CLI,
 //!   agents) it is refused.
@@ -22,10 +25,11 @@ use freekerf_script::ScriptHost;
 pub use freekerf_script::{ActionRecord, Limits, ScriptOutcome};
 use freekerf_session::actions::{SessionHost, register_session_actions};
 use freekerf_session::session::Session;
-use freekerf_session::{ActionError, ActionSpec, Caller, Registry, Tier};
+use freekerf_session::{ActionError, ActionSpec, Caller, CallerKind, Registry, Tier};
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use crate::permissions::{RunGrants, code_hash};
 use crate::{Service, lock};
 
 /// Asked before a `laser` action runs: `(action, params)` → confirmed by a person.
@@ -128,10 +132,13 @@ fn laser_refused(action: &str) -> ActionError {
     ))
 }
 
-/// A live run: every call goes to the service with the script's caller.
+/// A live run: every call goes to the service with the script's caller, its
+/// grants and the person's answers.
 struct LiveHost {
     service: Service,
     caller: Caller,
+    code_hash: Option<String>,
+    run: RunGrants,
     confirm: Option<ConfirmLaser>,
 }
 
@@ -141,21 +148,30 @@ impl ScriptHost for LiveHost {
     }
 
     fn dispatch(&self, action: &str, params: Value) -> Result<Value, ActionError> {
-        let tier = self.service.registry.spec(action).map(|s| s.tier);
-        if tier == Some(Tier::Laser) && self.caller.allows(Tier::Laser) {
-            let confirmed = self.confirm.as_ref().is_some_and(|f| f(action, &params));
-            if !confirmed {
-                return Err(laser_refused(action));
-            }
+        let tier =
+            self.service
+                .authorize(&self.caller, self.code_hash.as_deref(), action, &self.run, true)?;
+        // no grant replaces the confirmation of each laser action
+        if tier == Tier::Laser && !self.confirm.as_ref().is_some_and(|f| f(action, &params)) {
+            return Err(laser_refused(action));
         }
-        self.service.dispatch(&self.caller, action, params)
+        self.service
+            .dispatch(&elevated(&self.caller, tier), action, params)
     }
 }
 
-/// A dry run: the session copy, real reads, everything else simulated.
+fn elevated(caller: &Caller, tier: Tier) -> Caller {
+    let mut c = caller.clone();
+    c.max_tier = c.max_tier.max(tier);
+    c
+}
+
+/// A dry run: the session copy, real reads, everything else simulated. Tiers and
+/// grants are checked; nobody is asked.
 struct DryHost {
     service: Service,
     caller: Caller,
+    code_hash: Option<String>,
     copy: DryContext,
     simulated: Mutex<Vec<String>>,
 }
@@ -166,33 +182,33 @@ impl ScriptHost for DryHost {
     }
 
     fn dispatch(&self, action: &str, params: Value) -> Result<Value, ActionError> {
-        let spec = self
-            .service
-            .registry
-            .spec(action)
-            .ok_or_else(|| ActionError::Unknown(action.into()))?;
-        if !self.caller.allows(spec.tier) {
-            return Err(ActionError::PermissionDenied {
-                action: action.into(),
-                needed: spec.tier,
-            });
-        }
+        let tier = self.service.authorize(
+            &self.caller,
+            self.code_hash.as_deref(),
+            action,
+            &RunGrants::default(),
+            false,
+        )?;
+        let caller = elevated(&self.caller, tier);
         if self.service.dry.spec(action).is_some() {
-            return self
-                .service
-                .dry
-                .dispatch(&self.copy, &self.caller, action, params);
+            return self.service.dry.dispatch(&self.copy, &caller, action, params);
         }
-        if spec.tier == Tier::Read {
-            return self.service.dispatch(&self.caller, action, params);
+        if tier == Tier::Read {
+            return self.service.dispatch(&caller, action, params);
         }
         lock(&self.simulated).push(action.to_owned());
         Ok(json!({"simulated": true}))
     }
 }
 
+/// Macros are identified by their code too: editing one invalidates its grants.
+fn macro_hash(caller: &Caller, request: &ScriptRequest) -> Option<String> {
+    (caller.kind == CallerKind::Macro).then(|| code_hash(&request.code))
+}
+
 impl Service {
-    /// Runs a script as `caller` (its tier limits every call).
+    /// Runs a script as `caller`: its tier, then its grants and the person
+    /// ([`Service::authorize`]), limit every call.
     #[must_use]
     pub fn run_script(&self, caller: &Caller, request: &ScriptRequest) -> ScriptReport {
         let cancel = Arc::new(AtomicBool::new(false));
@@ -214,6 +230,8 @@ impl Service {
         let host = Arc::new(LiveHost {
             service: self.clone(),
             caller: caller.clone(),
+            code_hash: macro_hash(caller, request),
+            run: RunGrants::default(),
             confirm: request.confirm_laser.clone(),
         });
         let outcome = freekerf_script::run(&request.code, host, &request.limits, cancel);
@@ -241,6 +259,7 @@ impl Service {
         let host = Arc::new(DryHost {
             service: self.clone(),
             caller: caller.clone(),
+            code_hash: macro_hash(caller, request),
             copy: DryContext {
                 session: Mutex::new(copy),
             },

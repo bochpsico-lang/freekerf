@@ -46,10 +46,23 @@ step_mm = 1.0
 speed_mm_min = 1000.0
 
 [automation.mcp]            # user-only (PLAN §9)
-enabled = false
-allow_machine = false
-allow_laser = false
+enabled = false             # agents may attach (freekerf mcp); baseline tier `edit`
+allow_machine = false       # agents' baseline is `machine`
+allow_laser = false         # agents may request `laser` (still confirmed by a person)
+
+[automation.python]         # user-only
+allow_machine = false       # the Python client's baseline is `machine` instead of `edit`
+
+[[automation.grants]]       # permissions granted "always" (PLAN §9.5); none by default
+caller = "agent"            # macro, agent, python_client
+name = "claude-code"
+tier = "machine"
+# code_hash = "..."         # macros: editing the macro invalidates the grant
 ```
+
+Grants are added when the person chooses "always" in the permission dialog
+(desktop app, M4a) and removed with `freekerf config set automation.grants '[]'`
+(or one by one in the app). See [mcp.md](mcp.md).
 
 ## API
 

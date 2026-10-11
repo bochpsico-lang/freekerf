@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 
 use freekerf_protocol::host::{DEFAULT_FOOTER, DEFAULT_HEADER, DEFAULT_PASSES};
 use freekerf_protocol::{AutoCooling, FirmwareKind, HostOptions, StreamingMode};
+pub use freekerf_session::{CallerKind, Tier};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -241,12 +242,41 @@ pub struct McpSettings {
     pub allow_laser: bool,
 }
 
+/// The Python client (`clients/python`), which talks to the running app over the
+/// local endpoint. Changed only by the user.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct PythonSettings {
+    /// The Python client may use `machine` actions (its baseline is `edit`).
+    pub allow_machine: bool,
+}
+
+/// A permission granted by the user with the scope "always" (PLAN §9.5): `caller`
+/// named `name` may use actions up to `tier` without asking.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Grant {
+    /// Kind of caller (`macro`, `agent`, `python_client`).
+    pub caller: CallerKind,
+    /// Caller name (macro name, MCP client name, Python client name).
+    pub name: String,
+    /// Macros: hash of the code; editing the macro invalidates the grant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code_hash: Option<String>,
+    /// Highest tier granted.
+    pub tier: Tier,
+}
+
 /// Automation (scripts and agents).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct AutomationSettings {
     /// MCP.
     pub mcp: McpSettings,
+    /// Python client.
+    pub python: PythonSettings,
+    /// Permissions granted "always" (revoked by removing them).
+    pub grants: Vec<Grant>,
 }
 
 /// The whole settings file.
@@ -486,6 +516,33 @@ mod tests {
         assert_eq!(s.machine.baud, 250_000);
         assert!(s.machine.reset_on_connect);
         assert!(!s.automation.mcp.enabled);
+        assert!(!s.automation.python.allow_machine);
+        assert!(s.automation.grants.is_empty());
+    }
+
+    #[test]
+    fn grants_round_trip() {
+        let mut s = Settings::default();
+        s.automation.grants = vec![
+            Grant {
+                caller: CallerKind::Agent,
+                name: "claude".into(),
+                code_hash: None,
+                tier: Tier::Machine,
+            },
+            Grant {
+                caller: CallerKind::Macro,
+                name: "frame.js".into(),
+                code_hash: Some("abc".into()),
+                tier: Tier::Machine,
+            },
+        ];
+        let text = s.to_toml().unwrap();
+        assert!(text.contains("[[automation.grants]]"), "{text}");
+        assert_eq!(Settings::from_toml(&text).unwrap(), s);
+        let mut t = Settings::default();
+        t.set("automation.grants", serde_json::json!([]), true).unwrap();
+        assert!(t.set("automation.grants", serde_json::json!([]), false).is_err());
     }
 
     #[test]

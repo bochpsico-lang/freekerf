@@ -43,6 +43,9 @@ pub struct Dirs {
     pub config: PathBuf,
     /// Data kept between runs (laser life counters, machine cache).
     pub data: PathBuf,
+    /// Files of the running instance (the local endpoint and its token):
+    /// `$XDG_RUNTIME_DIR/freekerf` on Linux, the data directory elsewhere.
+    pub runtime: PathBuf,
 }
 
 impl Dirs {
@@ -54,16 +57,14 @@ impl Dirs {
     pub fn user() -> Result<Self, PlatformError> {
         if let Some(home) = std::env::var_os("FREEKERF_HOME") {
             let home = PathBuf::from(home);
-            return Ok(Self {
-                config: home.clone(),
-                data: home,
-            });
+            return Ok(Self::under(&home));
         }
         let p = directories::ProjectDirs::from("org", "FreeKerf", "freekerf")
             .ok_or(PlatformError::NoConfigDir)?;
         Ok(Self {
             config: p.config_dir().to_path_buf(),
             data: p.data_dir().to_path_buf(),
+            runtime: p.runtime_dir().unwrap_or_else(|| p.data_dir()).to_path_buf(),
         })
     }
 
@@ -73,6 +74,7 @@ impl Dirs {
         Self {
             config: root.to_path_buf(),
             data: root.to_path_buf(),
+            runtime: root.to_path_buf(),
         }
     }
 

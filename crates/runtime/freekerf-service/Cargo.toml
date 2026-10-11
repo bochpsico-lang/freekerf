@@ -16,6 +16,7 @@ freekerf-emulator.workspace = true
 freekerf-gcode = { workspace = true, features = ["parallel"] }
 freekerf-geometry.workspace = true
 freekerf-import.workspace = true
+freekerf-ipc.workspace = true
 freekerf-machine.workspace = true
 freekerf-migrate.workspace = true
 freekerf-planner.workspace = true
@@ -27,6 +28,7 @@ freekerf-session.workspace = true
 freekerf-settings.workspace = true
 freekerf-transport.workspace = true
 schemars.workspace = true
+sha2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

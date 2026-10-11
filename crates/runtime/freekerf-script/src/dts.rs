@@ -129,6 +129,24 @@ fn pascal(name: &str) -> String {
         .unwrap_or_default()
 }
 
+fn params_decl(spec: &ActionSpec) -> String {
+    let params = ts_type(&spec.params, &spec.params, 0);
+    let optional = spec
+        .params
+        .get("required")
+        .and_then(Value::as_array)
+        .is_none_or(Vec::is_empty);
+    format!("params{}: {params}", if optional { "?" } else { "" })
+}
+
+/// How a script calls one action: `app.document.translate(params: {...}): unknown`
+/// (`search_api` of the MCP server).
+#[must_use]
+pub fn signature(spec: &ActionSpec) -> String {
+    let (ns, name) = spec.name.split_once('.').unwrap_or(("", spec.name.as_str()));
+    format!("app.{ns}.{}({}): unknown", camel(name), params_decl(spec))
+}
+
 /// The declarations of `specs`.
 #[must_use]
 pub fn api_dts(specs: &[ActionSpec]) -> String {
@@ -150,20 +168,10 @@ pub fn api_dts(specs: &[ActionSpec]) -> String {
             let name = s.name.split_once('.').map_or("", |(_, n)| n);
             let doc = format!("{}\n\nAction `{}`, tier `{}`.", s.description, s.name, s.tier);
             out.push_str(&comment(&doc, "  "));
-            let params = ts_type(&s.params, &s.params, 0);
-            let optional = s
-                .params
-                .get("required")
-                .and_then(Value::as_array)
-                .is_none_or(Vec::is_empty);
             // `new(...)` in an interface is a construct signature: quote it
             let method = camel(name);
             let method = if method == "new" { "\"new\"".into() } else { method };
-            let _ = writeln!(
-                out,
-                "  {method}(params{}: {params}): unknown;",
-                if optional { "?" } else { "" }
-            );
+            let _ = writeln!(out, "  {method}({}): unknown;", params_decl(s));
         }
         out.push_str("}\n");
         members.push(format!("  readonly {ns}: {iface};"));
@@ -225,6 +233,11 @@ mod tests {
         assert_eq!(pascal(""), "");
         assert!(d.contains("*\\/ end."));
         assert!(!d.contains("bad"));
+        assert_eq!(
+            signature(&specs[1]),
+            "app.view.get(params?: Record<string, never>): unknown"
+        );
+        assert!(signature(&specs[0]).starts_with("app.document.select(params: {"));
         assert!(d.contains("  \"new\"(params?: Record<string, unknown>): unknown;"));
         // depth limit
         let mut deep = json!({"type": "string"});

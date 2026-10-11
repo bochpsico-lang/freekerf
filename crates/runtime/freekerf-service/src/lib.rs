@@ -32,6 +32,8 @@ pub mod analysis;
 pub mod autotrace;
 pub mod import_case;
 pub mod migrate;
+pub mod permissions;
+pub mod remote;
 pub mod script;
 
 pub use freekerf_session::{ActionError, ActionSpec, Caller, CallerKind, Tier};
@@ -210,6 +212,8 @@ pub struct Inner {
     session: Mutex<Session>,
     /// Cancel flags of the running scripts.
     scripts: Mutex<Vec<Arc<std::sync::atomic::AtomicBool>>>,
+    /// Who answers permission requests, and the session grants.
+    permissions: permissions::Permissions,
 }
 
 impl SessionHost for Inner {
@@ -288,6 +292,7 @@ impl Service {
             subscribers: Arc::new(Mutex::new(Vec::new())),
             session: Mutex::new(Session::new()),
             scripts: Mutex::new(Vec::new()),
+            permissions: permissions::Permissions::default(),
         });
         start_collector(&inner);
         Ok(Self {

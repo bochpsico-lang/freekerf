@@ -8,10 +8,14 @@
       "description": "Automation (user-only).",
       "$ref": "#/$defs/AutomationSettings",
       "default": {
+        "grants": [],
         "mcp": {
           "allow_laser": false,
           "allow_machine": false,
           "enabled": false
+        },
+        "python": {
+          "allow_machine": false
         }
       }
     },
@@ -93,6 +97,14 @@
       "description": "Automation (scripts and agents).",
       "type": "object",
       "properties": {
+        "grants": {
+          "description": "Permissions granted \"always\" (revoked by removing them).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Grant"
+          }
+        },
         "mcp": {
           "description": "MCP.",
           "$ref": "#/$defs/McpSettings",
@@ -101,9 +113,46 @@
             "allow_machine": false,
             "enabled": false
           }
+        },
+        "python": {
+          "description": "Python client.",
+          "$ref": "#/$defs/PythonSettings",
+          "default": {
+            "allow_machine": false
+          }
         }
       },
       "additionalProperties": false
+    },
+    "CallerKind": {
+      "description": "Who calls an action.",
+      "oneOf": [
+        {
+          "description": "A person, through the UI or the CLI.",
+          "type": "string",
+          "const": "user"
+        },
+        {
+          "description": "A user macro (script).",
+          "type": "string",
+          "const": "macro"
+        },
+        {
+          "description": "An AI agent through MCP.",
+          "type": "string",
+          "const": "agent"
+        },
+        {
+          "description": "The external Python client.",
+          "type": "string",
+          "const": "python_client"
+        },
+        {
+          "description": "A test harness (`host --stdio`).",
+          "type": "string",
+          "const": "test"
+        }
+      ]
     },
     "Firmware": {
       "description": "Firmware family.",
@@ -128,6 +177,37 @@
           "type": "string",
           "const": "VigoWork"
         }
+      ]
+    },
+    "Grant": {
+      "description": "A permission granted by the user with the scope \"always\" (PLAN §9.5): `caller`\nnamed `name` may use actions up to `tier` without asking.",
+      "type": "object",
+      "properties": {
+        "caller": {
+          "description": "Kind of caller (`macro`, `agent`, `python_client`).",
+          "$ref": "#/$defs/CallerKind"
+        },
+        "code_hash": {
+          "description": "Macros: hash of the code; editing the macro invalidates the grant.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Caller name (macro name, MCP client name, Python client name).",
+          "type": "string"
+        },
+        "tier": {
+          "description": "Highest tier granted.",
+          "$ref": "#/$defs/Tier"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "caller",
+        "name",
+        "tier"
       ]
     },
     "JobSettings": {
@@ -266,6 +346,18 @@
       },
       "additionalProperties": false
     },
+    "PythonSettings": {
+      "description": "The Python client (`clients/python`), which talks to the running app over the\nlocal endpoint. Changed only by the user.",
+      "type": "object",
+      "properties": {
+        "allow_machine": {
+          "description": "The Python client may use `machine` actions (its baseline is `edit`).",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
     "Streaming": {
       "description": "Streaming mode.",
       "oneOf": [
@@ -283,6 +375,41 @@
           "description": "One line at a time, failed job lines retried 3 times.",
           "type": "string",
           "const": "RepeatOnError"
+        }
+      ]
+    },
+    "Tier": {
+      "description": "Permission tier of an action, from least to most powerful (`Safety` is special:\nalways allowed, because it only makes the machine safer).",
+      "oneOf": [
+        {
+          "description": "STOP, feed hold, abort: always allowed.",
+          "type": "string",
+          "const": "safety"
+        },
+        {
+          "description": "Reading state.",
+          "type": "string",
+          "const": "read"
+        },
+        {
+          "description": "Selection, panels, view.",
+          "type": "string",
+          "const": "ui"
+        },
+        {
+          "description": "Changing the document or settings.",
+          "type": "string",
+          "const": "edit"
+        },
+        {
+          "description": "Moving the machine, changing its settings.",
+          "type": "string",
+          "const": "machine"
+        },
+        {
+          "description": "Anything that can turn the laser on.",
+          "type": "string",
+          "const": "laser"
         }
       ]
     }
