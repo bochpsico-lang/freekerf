@@ -435,3 +435,81 @@ fn attach_to_a_running_instance_or_launch_one() {
     .unwrap();
     assert!(err.contains("cannot start FreeKerf: no binary"));
 }
+
+/// The Design flows of design/ux.md driven by an agent through run_script (PLAN
+/// M4b acceptance): 3 (import, layers, job with start and anchor), 5 (text and
+/// shape, subtract, array, palette) and 6 (material test). Laser actions stay
+/// refused: the agent prepares, the person fires.
+#[test]
+fn design_flows_driven_by_an_agent() {
+    let home = tempfile::tempdir().unwrap();
+    let endpoint = app(home.path(), |s| s.automation.mcp.enabled = true);
+    let mut mcp = Mcp::start(connector(endpoint));
+    initialize(&mut mcp);
+    let run = |mcp: &mut Mcp, code: &str| -> Value {
+        let r = mcp.tool("run_script", json!({"code": code}));
+        assert_eq!(r["isError"], false, "{}", text(&r));
+        r["structuredContent"]["value"].clone()
+    };
+
+    // flow 3: import an SVG by colour layer, tune a layer, plan it centred on the origin
+    let v = run(
+        &mut mcp,
+        r##"
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="20mm" viewBox="0 0 40 20">' +
+          '<rect x="1" y="1" width="10" height="10" stroke="#FF0000" fill="none"/>' +
+          '<circle cx="25" cy="10" r="5" stroke="#0000FF" fill="none"/></svg>';
+        const imported = app.document.importData({format: 'svg', text: svg, name: 'logo.svg'});
+        const red = app.document.layerForColor({color: '#FF0000'}).layer;
+        app.document.updateLayer({id: red, mode: 'cut', speed_mm_min: 300, passes: 2});
+        const job = app.job.fromDocument({start: 'user_origin', anchor: 'center'});
+        ({layers: imported.layers.length, objects: imported.objects.length, lines: job.lines, range: job.drawing_range})
+        "##,
+    );
+    assert_eq!(
+        (v["layers"].as_u64(), v["objects"].as_u64()),
+        (Some(2), Some(2)),
+        "{v}"
+    );
+    assert!(v["lines"].as_u64().unwrap() > 10);
+    let r = &v["range"];
+    let (x0, x1) = (r[0].as_f64().unwrap(), r[2].as_f64().unwrap());
+    assert!((x0 + x1).abs() < 0.1, "centred: {r}");
+
+    // flow 5: text and a rectangle, subtract, a 3 × 2 array, the cut colour
+    let v = run(
+        &mut mcp,
+        r#"
+        app.document.new();
+        const plate = app.document.addShape({shape: 'rect', x: 0, y: 0, width: 40, height: 15}).id;
+        const word = app.document.addText({text: 'HI', x: 5, y: 3, height_mm: 8}).id;
+        const offset = app.document.offset({ids: [word], distance_mm: 0.5}).ids;
+        const holed = app.document.boolean({op: 'difference', ids: [plate, ...offset]}).id;
+        app.document.delete({ids: [word]});
+        const copies = app.document.array({ids: [holed], columns: 3, rows: 2}).ids;
+        const cut = app.document.layerForColor({color: '#E8622C'}).layer;
+        app.document.moveToLayer({layer: cut, ids: [holed, ...copies]});
+        const s = app.session.snapshot();
+        ({objects: s.document.objects.length, onCut: s.document.objects.filter(o => o.layer === cut).length})
+        "#,
+    );
+    assert_eq!(v, json!({"objects": 6, "onCut": 6}));
+
+    // flow 6: a material test of 3 powers × 2 speeds
+    let v = run(
+        &mut mcp,
+        r#"
+        app.document.new();
+        const t = app.document.materialTest({power_pct: {from: 20, to: 80, steps: 3}, speed_mm_min: {from: 500, to: 3000, steps: 2}, mode: 'fill'});
+        ({cells: t.layers.length, layers: app.session.snapshot().document.layers.length})
+        "#,
+    );
+    assert_eq!(v, json!({"cells": 6, "layers": 7}));
+
+    // the agent prepares; firing stays with the person
+    let r = mcp.tool(
+        "run_script",
+        json!({"code": "app.job.fromDocument(); app.job.run({})"}),
+    );
+    assert_eq!(r["isError"], true);
+}

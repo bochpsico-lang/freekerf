@@ -76,6 +76,7 @@ every 500 ms).
 
 `freekerf-mcp/tests/mcp.rs` (the tool set, `run_script` reaching every namespace with
 the machine on the built-in emulator, resources and notifications, tiers, laser
-refused, files, STOP during a script, disabled app, attach or launch),
+refused, files, STOP during a script, disabled app, attach or launch, the Design
+flows 3, 5 and 6 of design/ux.md driven by an agent through `run_script`),
 `freekerf-service/tests/remote.rs` and `permissions.rs`,
 `apps/cli/tests/cli.rs::mcp_is_off_by_default_then_attaches_or_launches`.

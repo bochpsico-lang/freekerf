@@ -139,12 +139,24 @@ fn params_decl(spec: &ActionSpec) -> String {
     format!("params{}: {params}", if optional { "?" } else { "" })
 }
 
-/// How a script calls one action: `app.document.translate(params: {...}): unknown`
+/// The TypeScript type of an action's result (`unknown` when not described).
+fn result_decl(spec: &ActionSpec) -> String {
+    spec.result
+        .as_ref()
+        .map_or_else(|| "unknown".into(), |r| ts_type(r, r, 0))
+}
+
+/// How a script calls one action: `app.document.translate(params: {...}): {...}`
 /// (`search_api` of the MCP server).
 #[must_use]
 pub fn signature(spec: &ActionSpec) -> String {
     let (ns, name) = spec.name.split_once('.').unwrap_or(("", spec.name.as_str()));
-    format!("app.{ns}.{}({}): unknown", camel(name), params_decl(spec))
+    format!(
+        "app.{ns}.{}({}): {}",
+        camel(name),
+        params_decl(spec),
+        result_decl(spec)
+    )
 }
 
 /// The declarations of `specs`.
@@ -171,7 +183,7 @@ pub fn api_dts(specs: &[ActionSpec]) -> String {
             // `new(...)` in an interface is a construct signature: quote it
             let method = camel(name);
             let method = if method == "new" { "\"new\"".into() } else { method };
-            let _ = writeln!(out, "  {method}({}): unknown;", params_decl(s));
+            let _ = writeln!(out, "  {method}({}): {};", params_decl(s), result_decl(s));
         }
         out.push_str("}\n");
         members.push(format!("  readonly {ns}: {iface};"));
@@ -240,6 +252,16 @@ mod tests {
         );
         assert!(signature(&specs[0]).starts_with("app.document.select(params: {"));
         assert!(d.contains("  \"new\"(params?: Record<string, unknown>): unknown;"));
+        // described results are typed
+        let mut typed = spec("document.add_shape", json!({"type": "object"}));
+        typed.result = Some(
+            json!({"type": "object", "required": ["id"], "properties": {"id": {"$ref": "#/$defs/Id"}}, "$defs": {"Id": {"type": "integer"}}}),
+        );
+        assert_eq!(
+            signature(&typed),
+            "app.document.addShape(params?: Record<string, unknown>): { id: number }"
+        );
+        assert!(api_dts(&[typed]).contains("  addShape(params?: Record<string, unknown>): { id: number };"));
         // depth limit
         let mut deep = json!({"type": "string"});
         for _ in 0..10 {

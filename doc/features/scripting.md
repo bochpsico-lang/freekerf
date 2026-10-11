@@ -27,8 +27,8 @@ app.session.snapshot().document.objects.length   // the script's value
   access. Files go through actions (`document.import`, `document.save`), which apply
   their own rules.
 - Declarations: [`doc/scripting/api.d.ts`](../scripting/api.d.ts), generated from
-  the registry by `cargo xtask gen-docs` and checked in CI. Parameters and results:
-  [actions.md](actions.md).
+  the registry by `cargo xtask gen-docs` and checked in CI, with each method's
+  parameter and result types. Parameters and results: [actions.md](actions.md).
 
 ## Runs
 
