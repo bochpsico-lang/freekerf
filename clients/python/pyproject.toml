@@ -1,0 +1,29 @@
+[project]
+name = "freekerf"
+version = "0.1.0"
+description = "Drive a running FreeKerf (laser jobs and machines) from Python over its local endpoint"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "GPL-3.0-or-later"
+authors = [{ name = "FreeKerf contributors" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/freekerf/freekerf"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/freekerf"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,7 +1,7 @@
 # Local endpoint (IPC)
 
 A running FreeKerf (`freekerf serve --headless` today, the desktop app later) listens
-on a local endpoint for `freekerf mcp`, the Python client and tests (`freekerf-ipc`,
+on a local endpoint for `freekerf mcp`, the [Python client](../../clients/python/README.md) and tests (`freekerf-ipc`,
 `freekerf_service::remote`). One instance per user.
 
 | | Linux / macOS | Windows |

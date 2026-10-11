@@ -91,6 +91,20 @@ jobs:
       # the local endpoint: Unix sockets on macOS, named pipes on Windows
       - run: cargo test -p freekerf-ipc
 
+  python-client:
+    # clients/python against a headless instance (freekerf serve --headless)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: astral-sh/setup-uv@v6
+      - run: cargo build -p freekerf-cli
+      - run: uv run --with pytest pytest -q
+        working-directory: clients/python
+
   msrv:
     runs-on: ubuntu-latest
     steps:

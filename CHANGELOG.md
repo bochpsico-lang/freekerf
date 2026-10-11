@@ -70,6 +70,8 @@ All notable changes to FreeKerf are documented here. The format follows
   (this run, this session, always), and the MCP server `freekerf mcp` (attach or
   launch, disabled by default; tools `run_script`, `get_state`, `screenshot`,
   `search_api`, `stop`; state resources with notifications; ADR 0012).
+- Python client (`clients/python`, standard library only): attaches to a running
+  instance, an API built from the registry, state, scripts, events and STOP.
 - `freekerf import-case`: runs `conformance` importer golden cases.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.
