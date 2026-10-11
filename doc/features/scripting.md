@@ -68,7 +68,8 @@ freekerf run make.js
 
 `freekerf run <file.js> [--dry-run] [--tier read|ui|edit|machine] [--timeout SECONDS]`
 prints the report and exits with 1 when the script failed. The default tier is
-`machine`; `laser` is refused. A file name ending in `.js` selects a script;
+`machine`; `laser` is accepted only with `--dry-run` (laser actions are then
+simulated, never run). A file name ending in `.js` selects a script;
 anything else is an action name (`freekerf run state.get`).
 
 ## Tests

@@ -11,6 +11,9 @@ publish.workspace = true
 
 [dependencies]
 freekerf-protocol.workspace = true
+miniz_oxide.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 freekerf-settings.workspace = true
 thiserror.workspace = true
 

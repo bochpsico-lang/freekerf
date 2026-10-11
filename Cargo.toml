@@ -71,6 +71,8 @@ interprocess = "2"
 # QuickJS (MIT), the script engine: ADR 0011
 rquickjs = { version = "0.14", default-features = false, features = ["std"] }
 tiny-skia = { version = "0.12", default-features = false, features = ["std"] }
+# raw deflate (LaserGRBL .zbn button exports)
+miniz_oxide = "0.8"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
 insta = { version = "1", features = ["json"] }
 nix = { version = "0.31", features = ["term", "fs", "poll"] }

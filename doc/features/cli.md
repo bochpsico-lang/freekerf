@@ -17,7 +17,8 @@ The headless front end. Every command goes through the action registry of
 | `freekerf serve --headless [--idle-exit S]` | serves this instance on the local endpoint ([ipc.md](ipc.md)); Ctrl-C sends STOP | 0, 2 |
 | `freekerf mcp [--launch-timeout S] [--idle-exit S]` | MCP server on stdin/stdout: attaches to the running instance or starts a headless one ([mcp.md](mcp.md)); needs `automation.mcp.enabled` | 0, 2 |
 | `freekerf run FILE.js [--dry-run] [--tier T] [--timeout S]` | runs a JavaScript script in one transaction ([scripting.md](scripting.md)), prints its report; laser actions refused; Ctrl-C cancels it and sends STOP | 0, 1 when the script failed, 2 on failure |
-| `freekerf migrate lasergrbl [DIR] [--apply] [--json]` | reads LaserGRBL's data folder (settings, laser counters; [migration.md](migration.md)); writes into FreeKerf's files only with `--apply` | 0, 1 |
+| `freekerf migrate lasergrbl [DIR] [--apply] [--json]` | reads LaserGRBL's data folder (settings, laser counters, custom buttons as scripts; [migration.md](migration.md)); writes into FreeKerf's files only with `--apply` | 0, 1 |
+| `freekerf migrate lasergrbl-buttons FILE [--apply]` | LaserGRBL buttons from a `.zbn` export, as scripts in the macro folder | 0, 2 |
 | `freekerf import-case CASE [--inputs DIR]` / `--kinds` | runs a `conformance` importer golden case (`-` reads it from stdin) and prints the harness's JSON; `--kinds` lists the case kinds this build runs (`generator`, `hershey`, `svg`, `dxf`, `svg_text`, `centerline`, `raster`, `potrace`, `image_op`, `image_processor`) | 0, 2 |
 
 Examples:

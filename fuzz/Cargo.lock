@@ -268,6 +268,9 @@ version = "0.1.0"
 dependencies = [
  "freekerf-protocol",
  "freekerf-settings",
+ "miniz_oxide 0.8.9",
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 
@@ -310,10 +313,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "freekerf-session"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "freekerf-document",
+ "freekerf-geometry",
+ "freekerf-import",
+ "freekerf-raster",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "freekerf-settings"
 version = "0.1.0"
 dependencies = [
  "freekerf-protocol",
+ "freekerf-session",
  "schemars",
  "serde",
  "serde_json",

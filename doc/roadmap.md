@@ -10,7 +10,6 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 | Fuzzing (`cargo-fuzz` targets for G-code) | planned with the importers' parsers | M2 |
 | Human fire confirmation of `laser` actions, the permission dialog (`Prompter`), "agent connected" and running-script indicators | need the desktop UI; headless refuses both today | M4a |
 | Sounds, notifications, hotkeys, safety countdown | UI concerns | M4a (hotkeys, countdown), M5 (sounds, notifications) |
-| Importing LaserGRBL settings (`Settings.bin`), buttons, counters | `freekerf-migrate` | M2 |
 
 ## Postponed from M2
 

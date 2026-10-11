@@ -354,6 +354,44 @@ fn migrate_lasergrbl() {
         .args(["migrate", "lasergrbl", "/no/such/folder"])
         .assert()
         .failure();
+    // custom buttons became scripts; a dry run shows what one would do
+    assert_eq!(report["buttons"][0], "Frame");
+    let frame = home.path().join("macros").join("frame.js");
+    assert!(frame.exists());
+    let out = freekerf(home.path())
+        .args(["run", "--dry-run", "--tier", "laser"])
+        .arg(&frame)
+        .output()
+        .unwrap();
+    let r: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(r["simulated"], json!(["machine.custom_code"]), "{r}");
+    assert!(
+        r["actions"][0]["params"]["code"]
+            .as_str()
+            .unwrap()
+            .starts_with("G0 X[left] Y[bottom]\n")
+    );
+    // a .zbn export
+    freekerf(home.path())
+        .args(["migrate", "lasergrbl-buttons"])
+        .arg(lg.join("StandardButtons.zbn"))
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("Center, Corner, Frame")
+                .and(predicate::str::contains("nothing written")),
+        );
+    freekerf(home.path())
+        .args(["migrate", "lasergrbl-buttons", "--apply"])
+        .arg(lg.join("StandardButtons.zbn"))
+        .assert()
+        .success();
+    assert!(home.path().join("macros").join("center.js").exists());
+    freekerf(home.path())
+        .args(["migrate", "lasergrbl-buttons"])
+        .arg(lg.join("LaserLifeCounter.bin"))
+        .assert()
+        .code(2);
 }
 
 #[test]

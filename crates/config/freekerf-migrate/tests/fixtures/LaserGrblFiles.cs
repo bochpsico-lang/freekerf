@@ -94,6 +94,47 @@ class LaserGrblFiles
 		string llc = Path.GetFullPath(Path.Combine(outDir, "LaserLifeCounter.bin"));
 		if (!(bool)save.Invoke(null, new object[] { list, llc }))
 			throw new Exception("ObjToFile failed");
+
+		// CustomButtons.bin (CustomButtons.SaveFile) and an exported .zbn
+		// (CustomButtons.Export: binary, compressed): every button type and style
+		var buttons = new List<LaserGRBL.CustomButton>();
+		var icon = new System.Drawing.Bitmap(4, 3);
+		icon.SetPixel(1, 1, System.Drawing.Color.Red);
+		buttons.Add(new LaserGRBL.CustomButton {
+			guid = new Guid("11111111-2222-3333-4444-555555555555"),
+			Caption = "Frame", ToolTip = "Frame the job (3%)", Image = icon,
+			GCode = "G0 X[left] Y[bottom]\r\nM3 S[$30*3/100] F1000\r\nG1 Y[top]\r\nM5",
+			GCode2 = "",
+			EnableStyle = LaserGRBL.CustomButton.EnableStyles.IdleProgram,
+			ButtonType = LaserGRBL.CustomButton.ButtonTypes.Button });
+		buttons.Add(new LaserGRBL.CustomButton {
+			Caption = "Air", ToolTip = "Air assist \"on\"/off \\ é",
+			GCode = "M8", GCode2 = "M9",
+			EnableStyle = LaserGRBL.CustomButton.EnableStyles.Connected,
+			ButtonType = LaserGRBL.CustomButton.ButtonTypes.TwoStateButton });
+		buttons.Add(new LaserGRBL.CustomButton {
+			Caption = "", ToolTip = "Hold to fire",
+			GCode = "M3 S[$30/100]\r\nG1 F100", GCode2 = "M5",
+			EnableStyle = LaserGRBL.CustomButton.EnableStyles.Idle,
+			ButtonType = LaserGRBL.CustomButton.ButtonTypes.PushButton });
+		buttons.Add(new LaserGRBL.CustomButton {
+			Caption = "Pause", ToolTip = "",
+			GCode = "!", GCode2 = null,
+			EnableStyle = LaserGRBL.CustomButton.EnableStyles.Run,
+			ButtonType = LaserGRBL.CustomButton.ButtonTypes.Button });
+		buttons.Add(new LaserGRBL.CustomButton {
+			Caption = "Home", ToolTip = "Home",
+			GCode = "$H", GCode2 = null,
+			EnableStyle = LaserGRBL.CustomButton.EnableStyles.Always,
+			ButtonType = LaserGRBL.CustomButton.ButtonTypes.Button });
+		string cbFile = Path.GetFullPath(Path.Combine(outDir, "CustomButtons.bin"));
+		if (!(bool)save.Invoke(null, new object[] { buttons, cbFile }))
+			throw new Exception("ObjToFile failed");
+		Type modeType = ser.GetNestedType("SerializationMode");
+		MethodInfo saveFull = ser.GetMethod("ObjToFile", new[] { typeof(object), typeof(string), modeType, typeof(string), typeof(bool) });
+		string zbn = Path.GetFullPath(Path.Combine(outDir, "CustomButtons.zbn"));
+		if (!(bool)saveFull.Invoke(null, new object[] { buttons, zbn, System.Enum.Parse(modeType, "Binary"), null, true }))
+			throw new Exception("ObjToFile (compressed) failed");
 		Console.WriteLine("ok");
 	}
 }

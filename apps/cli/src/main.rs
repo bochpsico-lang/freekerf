@@ -147,7 +147,8 @@ enum Command {
         #[arg(long)]
         dry_run: bool,
         /// Scripts: highest tier the script may use (`read`, `ui`, `edit`,
-        /// `machine`). Laser actions are always refused from the command line.
+        /// `machine`; `laser` with `--dry-run` only). Laser actions never run from
+        /// the command line.
         #[arg(long, default_value = "machine")]
         tier: String,
         /// Scripts: wall-clock limit in seconds.
@@ -158,8 +159,9 @@ enum Command {
 
 #[derive(Subcommand)]
 enum MigrateFrom {
-    /// LaserGRBL: settings and laser module counters from its data folder
-    /// (`%APPDATA%\LaserGRBL` by default on Windows). Without `--apply` nothing is written.
+    /// LaserGRBL: settings, laser module counters and custom buttons (as scripts)
+    /// from its data folder (`%APPDATA%\LaserGRBL` by default on Windows). Without
+    /// `--apply` nothing is written.
     Lasergrbl {
         /// LaserGRBL's data folder.
         dir: Option<PathBuf>,
@@ -169,6 +171,15 @@ enum MigrateFrom {
         /// Print the report as JSON.
         #[arg(long)]
         json: bool,
+    },
+    /// LaserGRBL custom buttons from a `.zbn` export (or `CustomButtons.bin`), as
+    /// scripts in FreeKerf's macro folder. Without `--apply` nothing is written.
+    LasergrblButtons {
+        /// The button file.
+        file: PathBuf,
+        /// Write the scripts.
+        #[arg(long)]
+        apply: bool,
     },
 }
 
@@ -309,9 +320,10 @@ fn cmd_run_script(
     use freekerf_service::script::ScriptRequest;
     let max_tier: Tier = serde_json::from_value(Value::String(tier.to_owned()))
         .map_err(|_| anyhow!("unknown tier `{tier}` (read, ui, edit, machine)"))?;
-    if max_tier == Tier::Laser {
+    if max_tier == Tier::Laser && !dry_run {
+        // a dry run only simulates them
         bail!(
-            "laser actions need a person to confirm each one; scripts cannot run them from the command line"
+            "laser actions need a person to confirm each one; scripts cannot run them from the command line (use --dry-run to preview)"
         );
     }
     let code = std::fs::read_to_string(file).with_context(|| format!("reading {file}"))?;
@@ -705,7 +717,22 @@ fn cmd_emulate(_pty: bool, _timed: bool) -> Result<ExitCode> {
 }
 
 fn cmd_migrate(home: Option<&std::path::Path>, from: MigrateFrom) -> Result<ExitCode> {
-    let MigrateFrom::Lasergrbl { dir, apply, json } = from;
+    let macros = freekerf_service::migrate::macros_dir(home).map_err(|e| anyhow!(e))?;
+    let (dir, apply, json) = match from {
+        MigrateFrom::Lasergrbl { dir, apply, json } => (dir, apply, json),
+        MigrateFrom::LasergrblButtons { file, apply } => {
+            let names = freekerf_service::migrate::lasergrbl_buttons(&file, &macros, apply)
+                .map_err(|e| anyhow!(e))?;
+            let mut out = std::io::stdout().lock();
+            writeln!(out, "buttons: {}", names.join(", "))?;
+            if apply {
+                writeln!(out, "scripts written to {}", macros.display())?;
+            } else {
+                writeln!(out, "nothing written (use --apply)")?;
+            }
+            return Ok(ExitCode::SUCCESS);
+        }
+    };
     let dir = dir
         .or_else(freekerf_service::migrate::default_lasergrbl_dir)
         .ok_or_else(|| anyhow!("give LaserGRBL's data folder (no default on this system)"))?;
@@ -713,7 +740,7 @@ fn cmd_migrate(home: Option<&std::path::Path>, from: MigrateFrom) -> Result<Exit
         bail!("{}: not a folder", dir.display());
     }
     let stores = Stores::files(home).map_err(|e| anyhow!(e))?;
-    let r = freekerf_service::migrate::lasergrbl(&dir, &stores, apply).map_err(|e| anyhow!(e))?;
+    let r = freekerf_service::migrate::lasergrbl(&dir, &stores, &macros, apply).map_err(|e| anyhow!(e))?;
     let mut out = std::io::stdout().lock();
     if json {
         writeln!(out, "{}", serde_json::to_string_pretty(&r)?)?;
@@ -726,6 +753,14 @@ fn cmd_migrate(home: Option<&std::path::Path>, from: MigrateFrom) -> Result<Exit
     }
     writeln!(out, "settings not taken: {}", r.settings_skipped.len())?;
     writeln!(out, "laser counters: {}", r.laser_counters.join(", "))?;
+    if !r.buttons.is_empty() {
+        writeln!(
+            out,
+            "custom buttons (as scripts in {}): {}",
+            macros.display(),
+            r.buttons.join(", ")
+        )?;
+    }
     if r.user_materials_found {
         writeln!(
             out,

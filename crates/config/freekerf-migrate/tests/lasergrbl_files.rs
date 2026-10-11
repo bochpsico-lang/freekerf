@@ -9,6 +9,12 @@ use freekerf_settings::{Firmware, Settings, Streaming};
 const SETTINGS: &[u8] = include_bytes!("fixtures/LaserGRBL.Settings.bin");
 const LIFE: &[u8] = include_bytes!("fixtures/LaserLifeCounter.bin");
 
+fn fixture(name: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
+}
+
 #[test]
 fn settings_are_read_and_applied() {
     let s = settings::read(SETTINGS).unwrap();
@@ -140,4 +146,81 @@ fn laser_life_counters() {
     let mut wrong = b"<!-- OBJECT DATA BEGIN HERE-->\r\n".to_vec();
     wrong.extend_from_slice(SETTINGS);
     assert!(laser_life::read(&wrong).is_err());
+}
+
+#[test]
+fn custom_buttons_and_exports() {
+    use freekerf_migrate::buttons::{ButtonKind, EnableWhen, read, to_scripts};
+    let bin = read(&std::fs::read(fixture("CustomButtons.bin")).unwrap()).unwrap();
+    let zbn = read(&std::fs::read(fixture("CustomButtons.zbn")).unwrap()).unwrap();
+    assert_eq!(bin, zbn, "the export holds the same buttons");
+    assert_eq!(bin.len(), 5);
+    let frame = &bin[0];
+    assert_eq!(frame.caption, "Frame");
+    assert_eq!(frame.kind, ButtonKind::Button);
+    assert_eq!(frame.enable, EnableWhen::IdleWithProgram);
+    assert!(frame.gcode.starts_with("G0 X[left] Y[bottom]\r\nM3 S[$30*3/100]"));
+    assert!(frame.icon_png.as_ref().unwrap().starts_with(b"\x89PNG"));
+    assert_eq!(bin[1].kind, ButtonKind::TwoState);
+    assert_eq!(bin[1].tooltip, "Air assist \"on\"/off \\ é");
+    assert_eq!((bin[1].gcode.as_str(), bin[1].gcode2.as_str()), ("M8", "M9"));
+    assert_eq!(bin[2].kind, ButtonKind::Push);
+    assert_eq!(bin[2].enable, EnableWhen::Idle);
+    assert_eq!(bin[3].enable, EnableWhen::Run);
+    assert_eq!(bin[3].gcode2, "");
+    assert_eq!(bin[4].enable, EnableWhen::Always);
+
+    let scripts = to_scripts(&bin);
+    assert_eq!(scripts[0].script_file, "frame.js");
+    assert_eq!(scripts[0].icon_file.as_deref(), Some("frame.png"));
+    assert!(scripts[0].script.contains(r#"app.machine.customCode({ code: "G0 X[left] Y[bottom]\nM3 S[$30*3/100] F1000\nG1 Y[top]\nM5" });"#), "{}", scripts[0].script);
+    assert_eq!(scripts[1].second_script_file.as_deref(), Some("air.off.js"));
+    assert!(
+        scripts[1]
+            .second_script
+            .as_ref()
+            .unwrap()
+            .contains(r#"code: "M9""#)
+    );
+    // no caption: the tooltip names it; push buttons run the second code on release
+    assert_eq!(scripts[2].name, "Hold to fire");
+    assert_eq!(
+        scripts[2].second_script_file.as_deref(),
+        Some("hold-to-fire.release.js")
+    );
+    assert_eq!(scripts[3].second_script, None);
+    let json = serde_json::to_value(&scripts).unwrap();
+    assert_eq!(json[1]["kind"], "two_state");
+    assert_eq!(json[0]["enable_when"], "idle_with_program");
+}
+
+#[test]
+fn lasergrbls_standard_buttons() {
+    use freekerf_migrate::buttons::{read, to_scripts};
+    // the file LaserGRBL ships (LaserGRBL/StandardButtons.zbn)
+    let buttons = read(&std::fs::read(fixture("StandardButtons.zbn")).unwrap()).unwrap();
+    let names: Vec<&str> = buttons.iter().map(|b| b.caption.as_str()).collect();
+    assert!(
+        names.starts_with(&["Center", "Corner", "Frame", "Focus", "Blink"]),
+        "{names:?}"
+    );
+    assert!(buttons.iter().all(|b| b.icon_png.is_some()));
+    let scripts = to_scripts(&buttons);
+    let mut files: Vec<&str> = scripts.iter().map(|s| s.script_file.as_str()).collect();
+    let n = files.len();
+    files.sort_unstable();
+    files.dedup();
+    assert_eq!(files.len(), n, "unique file names");
+    assert!(
+        scripts[0]
+            .script
+            .contains("G0 X[left+width/2] Y[bottom+height/2]")
+    );
+}
+
+#[test]
+fn not_buttons() {
+    use freekerf_migrate::buttons::read;
+    assert!(read(&std::fs::read(fixture("LaserLifeCounter.bin")).unwrap()).is_err());
+    assert!(read(b"nothing").is_err());
 }

@@ -1,7 +1,12 @@
 //! The MCP server against a headless app on the local endpoint (PLAN §9.6): the
 //! fixed tool set, run_script reaching every namespace (machine on the built-in
 //! emulator), resources and notifications, tiers per call, laser refused.
-#![allow(clippy::unwrap_used, clippy::panic, clippy::needless_pass_by_value, missing_docs)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::needless_pass_by_value,
+    missing_docs
+)]
 
 use std::io::{BufReader, Read, Write};
 use std::path::Path;

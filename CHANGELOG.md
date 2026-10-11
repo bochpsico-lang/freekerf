@@ -72,6 +72,9 @@ All notable changes to FreeKerf are documented here. The format follows
   `search_api`, `stop`; state resources with notifications; ADR 0012).
 - Python client (`clients/python`, standard library only): attaches to a running
   instance, an API built from the registry, state, scripts, events and STOP.
+- LaserGRBL custom buttons (`CustomButtons.bin`, `.zbn` exports) migrated to
+  scripts in the macro folder (`freekerf migrate lasergrbl`, `freekerf migrate
+  lasergrbl-buttons`).
 - `freekerf import-case`: runs `conformance` importer golden cases.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.

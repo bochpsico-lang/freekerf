@@ -46,6 +46,9 @@ contributors, MIT License; gdi_unpremultiply.bin is its alpha table), pixman 0.4
 (Copyright (c) Red Hat, Inc. and others, LGPL-2.1 or MPL-1.1, used here under the
 LGPL-2.1's permission to apply the GNU GPL). The MIT License text is above.
 
+crates/config/freekerf-migrate/tests/fixtures/StandardButtons.zbn: LaserGRBL's
+standard custom buttons, copied unchanged from LaserGRBL (GPLv3) as a test file.
+
 crates/core/freekerf-geometry/src/clipper: a Rust port of Clipper 6.4.2
 (polygon clipping and offsetting), Copyright (c) 2010-2017 Angus Johnson,
 http://www.angusj.com, distributed under the Boost Software License 1.0:

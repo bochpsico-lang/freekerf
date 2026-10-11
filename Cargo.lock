@@ -866,7 +866,10 @@ version = "0.1.0"
 dependencies = [
  "freekerf-protocol",
  "freekerf-settings",
+ "miniz_oxide 0.8.9",
  "proptest",
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 
