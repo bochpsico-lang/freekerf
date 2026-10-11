@@ -2,7 +2,7 @@
   // The inspector of the selection (design/design-system.md "Objeto"): position by
   // the centre, size, rotation, text, layer, align, duplicate, delete. Each edit is
   // one `document.*` action; "keep proportions" is a local preference of the panel.
-  import type { AlignHow, TransformOp } from '../contract/document';
+  import type { AlignHow, TransformOp } from '../gen/api';
   import { app } from '../context';
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
@@ -17,7 +17,7 @@
 
   const sel = $derived(doc.selected);
   const ids = $derived(sel.map((o) => o.id));
-  const box = $derived(selectionBox(sel.map((o) => o.bounds)));
+  const box = $derived(selectionBox(sel.map((o) => o.bounds ?? null)));
   const cx = $derived(box ? box.x + box.width / 2 : 0);
   const cy = $derived(box ? box.y + box.height / 2 : 0);
   const rot = $derived(sel.length === 1 ? rotationOf(sel[0]!.transform) : 0);
@@ -55,7 +55,7 @@
       ? t('obj-type-text')
       : k === 'image'
         ? t('obj-type-image')
-        : name === 'rect'
+        : name === 'rectangle'
           ? t('obj-type-rect')
           : name === 'ellipse'
             ? t('obj-type-ellipse')

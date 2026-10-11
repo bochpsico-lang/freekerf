@@ -1,11 +1,47 @@
-// The Design mode document (doc/features/ui-contract.md), as the UI reads it: the
-// summary (layers, objects, selection) and the drawable geometry (raw, "FKTP").
-// Read-only: it changes through `document.*` actions and comes back as an event.
+// The Design mode document, as the UI reads it: the session snapshot's document
+// part (layers, objects, selection, current layer, undo/redo) and the drawable
+// geometry (raw, "FKTP"). Read-only: it changes through `document.*` actions and
+// comes back as a session event.
 
 import { parseColor } from '../canvas/theme';
 import { decodeToolpath } from '../canvas/toolpath';
 import type { Rgba, PathBatch } from '../canvas/webgl2';
-import type { DocumentService, DocumentSummary, Layer, ObjectSummary } from '../contract/document';
+import type { EventMessage, LayerSummary, ObjectSummary, Snapshot } from '../gen/api';
+import type { AppService } from '../service';
+
+/** A layer as the Design mode shows it. */
+export type Layer = LayerSummary;
+export type { ObjectSummary };
+
+/** The document part of the session snapshot. */
+export interface DocumentSummary {
+  revision: number;
+  /** Revision of the last document change (the geometry changes only then). */
+  document_revision: number;
+  dirty: boolean;
+  layers: Layer[];
+  objects: ObjectSummary[];
+  selection: number[];
+  /** The layer new objects go to. */
+  current_layer: number | null;
+  can_undo: boolean;
+  can_redo: boolean;
+}
+
+/** The summary of a snapshot. */
+export function documentSummary(s: Snapshot): DocumentSummary {
+  return {
+    revision: s.revision,
+    document_revision: s.document_revision,
+    dirty: s.dirty,
+    layers: s.document.layers,
+    objects: s.document.objects,
+    selection: s.selection,
+    current_layer: s.current_layer ?? null,
+    can_undo: s.undo.length > 0,
+    can_redo: s.redo.length > 0,
+  };
+}
 
 export class DocumentProjection {
   #summary: DocumentSummary | null = $state.raw(null);
@@ -15,8 +51,10 @@ export class DocumentProjection {
   #pending: Promise<void> | null = null;
   #again = false;
 
-  constructor(readonly service: DocumentService) {
-    service.subscribe(() => void this.refresh());
+  constructor(readonly service: AppService) {
+    service.subscribe((e: EventMessage) => {
+      if (e.event === 'session' && e.change !== 'view') void this.refresh();
+    });
   }
 
   get summary(): DocumentSummary | null {
@@ -55,7 +93,7 @@ export class DocumentProjection {
     return this.#error;
   }
 
-  /** Reads the summary again, and the geometry when it changed (coalesced). */
+  /** Reads the snapshot again, and the geometry when the document changed (coalesced). */
   refresh(): Promise<void> {
     if (this.#pending) {
       this.#again = true;
@@ -65,11 +103,11 @@ export class DocumentProjection {
       do {
         this.#again = false;
         try {
-          const s = await this.service.dispatch('document.get', {});
-          if (s.geometry_revision !== this.#geometryRevision) {
-            const t = decodeToolpath(await this.service.geometry());
+          const s = documentSummary(await this.service.dispatch('session.snapshot', {}));
+          if (s.document_revision !== this.#geometryRevision) {
+            const t = decodeToolpath(await this.service.documentGeometry());
             this.#paths = { segments: t.segments, segmentCount: t.segmentCount };
-            this.#geometryRevision = s.geometry_revision;
+            this.#geometryRevision = s.document_revision;
           }
           this.#summary = s;
           this.#error = '';

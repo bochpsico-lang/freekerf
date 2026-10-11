@@ -22,7 +22,7 @@ export function projections(service: AppService) {
     settings: new SettingsProjection(service),
     env: new Environment(),
     console: new ConsoleProjection(service),
-    doc: service.document ? new DocumentProjection(service.document) : null,
+    doc: new DocumentProjection(service),
   };
 }
 
@@ -36,7 +36,7 @@ export function start(service: AppService): void {
     props.view.refresh(),
     props.settings.refresh(),
     props.preview.reload(),
-    props.doc?.refresh(),
+    props.doc.refresh(),
   ]);
   mount(App, { target, props });
 }

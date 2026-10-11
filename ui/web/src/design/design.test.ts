@@ -1,10 +1,11 @@
-// Component tests of the Design mode on the fake document (doc/features/ui-contract.md).
+// Component tests of the Design mode on the fake document (src/dev/fake-document.ts).
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 
 import App from '../App.svelte';
 import { FakeService } from '../dev/fake-service';
 import { projections } from '../start';
+import { documentSummary } from '../state/document.svelte';
 
 async function mountDesign(service = new FakeService()) {
   const props = projections(service);
@@ -12,30 +13,18 @@ async function mountDesign(service = new FakeService()) {
     props.machine.refresh(),
     props.view.refresh(),
     props.settings.refresh(),
-    props.doc?.refresh(),
+    props.doc.refresh(),
   ]);
   render(App, props);
   await service.dispatch('view.set_mode', { mode: 'design' });
   await waitFor(() => expect(document.documentElement.dataset.mode).toBe('design'));
-  const doc = service.document!;
-  const summary = () => doc.dispatch('document.get', {});
-  return { service, props, doc, summary };
+  const summary = async () => documentSummary(await service.dispatch('session.snapshot', {}));
+  return { service, props, doc: service, summary };
 }
 
 const docActions = (d: { calls: { action: string }[] }) => d.calls.map((c) => c.action);
 
 describe('Design mode', () => {
-  it('is hidden without a document (M2 not there yet)', async () => {
-    const service = new FakeService({ document: false });
-    const props = projections(service);
-    await props.view.refresh();
-    render(App, props);
-    expect(screen.queryByTestId('mode-design')).toBeNull();
-    await service.dispatch('view.set_mode', { mode: 'design' });
-    await waitFor(() => expect(service.view.mode).toBe('design'));
-    expect(document.documentElement.dataset.mode).toBe('produce');
-  });
-
   it('tools are the view state; undo and redo follow the document', async () => {
     const { service, doc } = await mountDesign();
     await fireEvent.click(document.querySelector('[data-tool="rect"]')!);
@@ -46,7 +35,7 @@ describe('Design mode', () => {
     await doc.dispatch('document.add_shape', { shape: 'rect', x: 0, y: 0, width: 10, height: 10 });
     await waitFor(() => expect(undo.disabled).toBe(false));
     await fireEvent.click(undo);
-    await waitFor(() => expect(docActions(doc)).toContain('document.undo'));
+    await waitFor(() => expect(docActions(doc)).toContain('history.undo'));
     await fireEvent.click(document.querySelector('[data-tool="import"]')!);
     await screen.findByTestId('dialog-import');
   });
@@ -113,7 +102,7 @@ describe('Design mode', () => {
       width: 10,
       height: 10,
     });
-    await waitFor(() => expect(props.doc!.selection).toEqual([id]));
+    await waitFor(() => expect(props.doc.selection).toEqual([id]));
     const palette = await screen.findByTestId('palette');
     await fireEvent.click(palette.querySelector('[data-color="#E8622C"]')!);
     await waitFor(async () => {
@@ -124,7 +113,7 @@ describe('Design mode', () => {
       expect(palette.querySelector('[data-color="#E8622C"]')!.getAttribute('aria-pressed')).toBe('true'),
     );
     await doc.dispatch('document.select', { ids: [], mode: 'replace' });
-    await waitFor(() => expect(props.doc!.selection).toEqual([]));
+    await waitFor(() => expect(props.doc.selection).toEqual([]));
     await fireEvent.click(palette.querySelector('[data-color="#10A37F"]')!);
     await waitFor(async () => {
       const s = await summary();
@@ -204,9 +193,11 @@ describe('Design mode', () => {
     await fireEvent.click(go);
     await waitFor(async () => expect((await summary()).objects).toHaveLength(1));
     await waitFor(() => expect(screen.queryByTestId('dialog-import')).toBeNull());
-    expect(service.document!.calls.find((c) => c.action === 'import')!.params).toEqual({
+    expect(service.calls.find((c) => c.action === 'document.import_data')!.params).toEqual({
+      format: 'svg',
+      data: btoa(svg),
       name: 'logo.svg',
-      options: { colors: 'unify' },
+      colors: 'unify',
     });
     await waitFor(() => expect(service.view.toasts.at(-1)!.message).toContain('Imported 1 objects'));
   });
@@ -220,12 +211,12 @@ describe('Design mode', () => {
     const items = await within(dialog).findByTestId('migrate-items');
     expect(items.textContent).toContain('14 custom buttons');
     // untick the materials
-    await fireEvent.click(within(items).getByLabelText(/236 materials/));
+    await fireEvent.click(within(items).getByLabelText(/User materials/));
     await fireEvent.click(within(dialog).getByTestId('migrate-go'));
     const report = await within(dialog).findByTestId('migrate-report');
     expect(report.textContent).not.toContain('materials');
-    expect(service.document!.calls.find((c) => c.action === 'migrate.run')!.params).toEqual({
-      items: ['connection', 'buttons', 'counters'],
+    expect(service.calls.find((c) => c.action === 'migrate.run')!.params).toEqual({
+      items: ['connection', 'preferences', 'buttons', 'counters'],
     });
     await fireEvent.click(within(dialog).getByText('Start'));
     await waitFor(() => expect(screen.queryByTestId('dialog-welcome')).toBeNull());
@@ -233,7 +224,7 @@ describe('Design mode', () => {
 
   it('welcome: nothing to migrate, and explore connects the emulator', async () => {
     const { service } = await mountDesign();
-    service.document!.migration.found = false;
+    service.document.migration.found = false;
     await service.dispatch('view.open_dialog', { name: 'welcome' });
     const dialog = await screen.findByTestId('dialog-welcome');
     await fireEvent.click(within(dialog).getByTestId('welcome-migrate'));

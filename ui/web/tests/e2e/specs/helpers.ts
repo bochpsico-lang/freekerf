@@ -3,9 +3,11 @@ import { $, browser, expect } from '@wdio/globals';
 /** An element by `data-testid`. */
 export const byTestId = (id: string) => $(`[data-testid="${id}"]`);
 
-/** Waits for the shell and connects to the built-in emulator. */
+/** Waits for the shell, goes to the Produce mode and connects to the built-in emulator. */
 export async function connectEmulator(): Promise<void> {
   await byTestId('state-chip').waitForDisplayed({ timeout: 30_000 });
+  await byTestId('mode-produce').click();
+  await expect($('html')).toHaveAttribute('data-mode', 'produce');
   await expect(byTestId('state-chip')).toHaveText(expect.stringContaining('Disconnected'));
   await byTestId('connect').click();
   await expect(byTestId('state-chip')).toHaveText(expect.stringContaining('Ready'), { wait: 15_000 });

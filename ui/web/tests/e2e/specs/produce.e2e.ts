@@ -15,10 +15,9 @@ const LONG = [
 ].join('\n');
 
 describe('Produce mode on the emulator', () => {
-  it('connects, shows STOP, and has no Design mode in a distributed build', async () => {
+  it('connects and shows STOP', async () => {
     await connectEmulator();
     await expect(byTestId('estop')).toBeDisplayed();
-    await expect(byTestId('mode-design')).not.toBeExisting();
     await expect(byTestId('firmware')).toHaveText(expect.stringContaining('Grbl'));
   });
 

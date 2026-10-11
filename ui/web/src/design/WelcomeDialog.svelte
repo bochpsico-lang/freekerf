@@ -2,36 +2,34 @@
   // Welcome (design/ux.md flow 1 and 2): set up the machine, import from LaserGRBL
   // (`migrate.detect` / `migrate.run`: the LaserGRBL files are only read), or
   // explore with the emulator.
-  import type { MigrationItemKind, MigrationReport, MigrationScan } from '../contract/document';
+  import type { MigrationItem, MigrationResult, MigrationScan } from '../gen/api';
   import { app } from '../context';
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
   import DialogFrame from '../shell/DialogFrame.svelte';
 
   let { onclose }: { onclose: () => void } = $props();
-  const { doc, service, run } = app();
+  const { service, run } = app();
 
   type Step = 'home' | 'migrate' | 'ready';
   let step: Step = $state('home');
   let scan: MigrationScan | null = $state(null);
   let chosen: Record<string, boolean> = $state({});
-  let report: MigrationReport | null = $state(null);
+  let report: MigrationResult | null = $state(null);
 
   async function migrate() {
-    if (!doc) return;
     step = 'migrate';
     await run(async () => {
-      scan = await doc.service.dispatch('migrate.detect', {});
+      scan = await service.dispatch('migrate.detect', {});
       chosen = Object.fromEntries(scan.items.map((i) => [i.kind, true]));
     });
   }
 
   async function runMigration() {
-    const d = doc;
-    if (!d || !scan) return;
-    const items = scan.items.map((i) => i.kind).filter((k) => chosen[k]) as MigrationItemKind[];
+    if (!scan) return;
+    const items: MigrationItem[] = scan.items.map((i) => i.kind).filter((k) => chosen[k]);
     await run(async () => {
-      report = await d.service.dispatch('migrate.run', { items });
+      report = await service.dispatch('migrate.run', { items });
       step = 'ready';
     });
   }
@@ -62,12 +60,9 @@
             >{t('welcome-kind-diode')} · {t('welcome-kind-co2')}</small
           ></button
         >
-        {#if doc}
-          <button class="wel-card" data-testid="welcome-migrate" onclick={migrate}
-            ><Icon name="import" /><b>{t('welcome-migrate')}</b><small>{t('welcome-migrateSub')}</small
-            ></button
-          >
-        {/if}
+        <button class="wel-card" data-testid="welcome-migrate" onclick={migrate}
+          ><Icon name="import" /><b>{t('welcome-migrate')}</b><small>{t('welcome-migrateSub')}</small></button
+        >
         <button class="wel-card" onclick={explore}
           ><Icon name="sparkle" /><b>{t('welcome-explore')}</b><small>{t('machine-emulator')}</small></button
         >

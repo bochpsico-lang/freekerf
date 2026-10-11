@@ -61,7 +61,7 @@
     disabled={!doc?.summary?.can_undo}
     title={t('tool-undo')}
     aria-label={t('tool-undo')}
-    onclick={() => doc && run(() => doc.service.dispatch('document.undo', {}))}><Icon name="undo" /></button
+    onclick={() => doc && run(() => doc.service.dispatch('history.undo', {}))}><Icon name="undo" /></button
   >
   <button
     class="tool"
@@ -69,6 +69,6 @@
     disabled={!doc?.summary?.can_redo}
     title={t('tool-redo')}
     aria-label={t('tool-redo')}
-    onclick={() => doc && run(() => doc.service.dispatch('document.redo', {}))}><Icon name="redo" /></button
+    onclick={() => doc && run(() => doc.service.dispatch('history.redo', {}))}><Icon name="redo" /></button
   >
 </nav>

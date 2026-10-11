@@ -1,27 +1,27 @@
 <script lang="ts">
-  // Import (design/ux.md flow 3): a file and what to do with its colours. The file
-  // crosses raw (`document_import`, doc/features/ui-contract.md); the report comes
-  // back as a toast. The importers are M2's (SVG, DXF, images).
-  import type { ImportOptions } from '../contract/document';
+  // Import (design/ux.md flow 3): a file and what to do with its colours
+  // (`document.import_data`, ./import.ts); the report comes back as a toast.
   import { app } from '../context';
+  import type { ImportColors } from '../gen/api';
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
   import DialogFrame from '../shell/DialogFrame.svelte';
+  import { importFile } from './import';
 
   let { onclose }: { onclose: () => void } = $props();
-  const { doc, service, run } = app();
+  const { service, run } = app();
   let file: File | null = $state(null);
-  let colors: ImportOptions['colors'] = $state('keep');
+  let colors: ImportColors = $state('keep');
 
   async function go() {
     const f = file;
-    if (!doc || !f) return;
+    if (!f) return;
     await run(async () => {
-      const r = await doc.service.import(f.name, await f.arrayBuffer(), { colors });
+      const r = await importFile(service, f.name, await f.arrayBuffer(), colors);
       onclose();
       await service.dispatch('view.toast', {
-        level: r.warnings.length ? 'warning' : 'ok',
-        message: t('import-done', { objects: r.objects, layers: r.layers }),
+        level: r.unsupported ? 'warning' : 'ok',
+        message: t('import-done', { objects: r.objects.length, layers: r.layers.length }),
       });
     });
   }
@@ -33,7 +33,7 @@
     <input
       id="import-file"
       type="file"
-      accept=".svg,image/svg+xml,.dxf,image/png,image/jpeg,image/bmp"
+      accept=".svg,image/svg+xml,.dxf,image/png,image/jpeg,image/bmp,image/gif"
       data-testid="import-file"
       onchange={(e) => (file = e.currentTarget.files?.[0] ?? null)}
     />

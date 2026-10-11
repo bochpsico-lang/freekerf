@@ -8,8 +8,9 @@ guide is how to work on what exists.
 
 FreeKerf designs jobs and drives laser machines (Grbl, grblHAL, Smoothie, Marlin,
 VigoWork). It is the GPL-3.0-or-later successor of LaserGRBL, in Rust. Done so far:
-M0 (workspace, CI, docs) and M1 (headless machine core and the `freekerf` CLI); M4a
-(desktop app shell in Tauri 2 + Svelte 5) is in progress.
+M0 (workspace, CI, docs), M1 (headless machine core and the `freekerf` CLI), M2 (document,
+importers, planner, session, scripts, MCP) and M4a (desktop app shell in Tauri 2 + Svelte 5);
+M4b (the Design mode on the real document) is in progress.
 The behaviour of LaserGRBL's core is specified by
 [`freekerf/conformance`](https://github.com/freekerf/conformance); FreeKerf passes
 its protocol and golden (G-code) layers, and its importer goldens as the importers
@@ -49,7 +50,7 @@ apps/cli/          the `freekerf` binary (thin shell over the service)
 apps/desktop/      the Tauri 2 app (`src-tauri` = crate freekerf-desktop, thin shell over the service)
 ui/web/            web front end (Svelte 5 + TypeScript + Vite): src/ipc (Tauri), src/state,
                    src/gen (generated: api.ts, icons.ts), src/dev (fake service, never shipped),
-                   src/shell, src/produce, src/design (Design mode on src/contract, M2's UI contract)
+                   src/shell, src/produce, src/design (Design mode on the session's document actions)
 ui/tokens/         fk-tokens.css generated from freekerf/design (commit in design.lock)
 ui/i18n/           Fluent translations: <locale>/freekerf.ftl (en is the reference),
                    <locale>/lasergrbl.ftl generated from LaserGRBL (lasergrbl.toml)

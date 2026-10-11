@@ -1,6 +1,6 @@
 // The Design mode gestures on the real canvas (WebGL2 in Chromium), on the fake
 // document: drawing tools, selection, moving, resizing with a handle, marquee,
-// undo. One `document.transform` per drag (doc/features/ui-contract.md).
+// undo. One `document.transform` per drag (doc/features/design-mode.md).
 import { expect, test, type Page } from '@playwright/test';
 
 import type { FakeService } from '../../src/dev/fake-service';
@@ -8,10 +8,13 @@ import type { FakeService } from '../../src/dev/fake-service';
 type Win = { fkFake: FakeService };
 
 const summary = (page: Page) =>
-  page.evaluate(() => (window as unknown as Win).fkFake.document!.dispatch('document.get', {}));
+  page.evaluate(async () => {
+    const s = await (window as unknown as Win).fkFake.dispatch('session.snapshot', {});
+    return { selection: s.selection, layers: s.document.layers, objects: s.document.objects };
+  });
 const transforms = (page: Page) =>
   page.evaluate(() =>
-    (window as unknown as Win).fkFake.document!.calls.filter((c) => c.action === 'document.transform'),
+    (window as unknown as Win).fkFake.calls.filter((c) => c.action === 'document.transform'),
   );
 
 test('draw, select, move, resize and undo on the canvas', async ({ page }) => {

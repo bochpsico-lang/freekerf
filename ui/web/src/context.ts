@@ -21,8 +21,8 @@ export interface AppContext {
   settings: SettingsProjection;
   env: Environment;
   console: ConsoleProjection;
-  /** The Design mode document; `null` until M2 provides it (the Design mode is then hidden). */
-  doc: DocumentProjection | null;
+  /** The Design mode document. */
+  doc: DocumentProjection;
   /**
    * Asks to run an action that can turn the laser on: it only runs after the human
    * confirmation on screen (checklist and countdown, PLAN §9.5).

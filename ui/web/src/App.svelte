@@ -8,7 +8,6 @@
   import LayersPanel from './design/LayersPanel.svelte';
   import ObjectPanel from './design/ObjectPanel.svelte';
   import WelcomeDialog from './design/WelcomeDialog.svelte';
-  import { flags } from './flags';
   import { setLocale, t } from './i18n/index.svelte';
   import ConsolePanel from './produce/ConsolePanel.svelte';
   import FireConfirmation from './produce/FireConfirmation.svelte';
@@ -43,7 +42,7 @@
     settings,
     env,
     console: consoleRows,
-    doc = null,
+    doc,
   }: {
     service: AppService;
     machine: MachineState;
@@ -52,7 +51,7 @@
     settings: SettingsProjection;
     env: Environment;
     console: ConsoleProjection;
-    doc?: DocumentProjection | null;
+    doc: DocumentProjection;
   } = $props();
 
   /** Laser actions only ask: the app opens the fire confirmation (PLAN §9.5). */
@@ -87,10 +86,8 @@
 
   let stage: Stage | undefined = $state();
   let zoom = $state(1);
-  // the narrow layout is machine-only (design/ux.md "Layouts"); the Design mode
-  // needs the document (M2) and the flag
-  const designAvailable = $derived(flags.designMode && !!doc);
-  const mode = $derived(env.layout === 'narrow' || !designAvailable ? 'produce' : view.mode);
+  // the narrow layout is machine-only (design/ux.md "Layouts")
+  const mode = $derived(env.layout === 'narrow' ? 'produce' : view.mode);
 
   $effect(() => setLocale(settings.ui.language));
 
@@ -123,7 +120,7 @@
         if (machine.visual === 'idle') void run(() => service.dispatch('job.frame', {}));
         return;
       case 'mode-design':
-        if (designAvailable) void run(() => service.dispatch('view.set_mode', { mode: 'design' }));
+        if (env.layout !== 'narrow') void run(() => service.dispatch('view.set_mode', { mode: 'design' }));
         return;
       case 'mode-produce':
         void run(() => service.dispatch('view.set_mode', { mode: 'produce' }));
@@ -149,7 +146,7 @@
         void run(() => service.dispatch('view.open_dialog', { name: 'shortcuts' }));
         return;
     }
-    if (doc) editCommand(c, doc, e);
+    editCommand(c, doc, e);
   }
 
   /** Design mode keys (only reached while the Design mode is shown). */
@@ -171,18 +168,17 @@
         void run(() => service.dispatch('view.open_dialog', { name: 'import' }));
         return;
       case 'undo':
-        void run(() => d.service.dispatch('document.undo', {}));
+        void run(() => d.service.dispatch('history.undo', {}));
         return;
       case 'redo':
-        void run(() => d.service.dispatch('document.redo', {}));
+        void run(() => d.service.dispatch('history.redo', {}));
         return;
       case 'select-all':
         void run(() => d.service.dispatch('document.select_all', {}));
         return;
       case 'deselect':
         if (view.tool !== 'select') tool('select');
-        else if (ids.length)
-          void run(() => d.service.dispatch('document.select', { ids: [], mode: 'replace' }));
+        else if (ids.length) void run(() => d.service.dispatch('document.clear_selection', {}));
         return;
       case 'delete':
         if (ids.length) void run(() => d.service.dispatch('document.delete', { ids }));
@@ -226,11 +222,7 @@
   {#if mode === 'design'}<ToolRail />{:else}<nav class="toolrail" aria-hidden="true"></nav>{/if}
   <Stage bind:this={stage} {mode} onzoom={(z) => (zoom = z)} />
   {#if env.layout === 'medium' && mode === 'design'}<DockRail />{/if}
-  <Dock
-    panels={doc
-      ? { machine: machinePanel, console: consolePanel, layers: layersPanel, object: objectPanel }
-      : { machine: machinePanel, console: consolePanel }}
-  />
+  <Dock panels={{ machine: machinePanel, console: consolePanel, layers: layersPanel, object: objectPanel }} />
 </div>
 <StatusBar {zoom} />
 {#if env.layout === 'narrow'}
@@ -269,10 +261,10 @@
   <RecoverDialog onclose={close} />
 {/snippet}
 {#snippet layersPanel()}
-  {#if doc}<LayersPanel {doc} />{/if}
+  <LayersPanel {doc} />
 {/snippet}
 {#snippet objectPanel()}
-  {#if doc}<ObjectPanel {doc} />{/if}
+  <ObjectPanel {doc} />
 {/snippet}
 {#snippet welcomeDialog(close: () => void)}
   <WelcomeDialog onclose={close} />

@@ -2,11 +2,11 @@
   // The layers panel (design/design-system.md "Camadas"): one row per colour layer
   // in output order; expand to edit mode, speed, power and passes; show or hide;
   // move in the output order. Every change is one `document.*` action.
-  import type { Layer, LayerMode } from '../contract/document';
+  import type { LayerMode } from '../gen/api';
   import { app } from '../context';
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
-  import type { DocumentProjection } from '../state/document.svelte';
+  import type { DocumentProjection, Layer } from '../state/document.svelte';
   import { MODES, layerCode, layerParams, modeLabel } from './layers';
   import NumField from './NumField.svelte';
 
@@ -16,14 +16,13 @@
   let open: Record<number, boolean> = $state({});
   const maxPower = $derived(machine.info?.max_power || 1000);
 
-  const count = (l: Layer) => doc.objects.filter((o) => o.layer === l.id).length;
+  const count = (l: Layer) => l.objects;
   const update = (
-    layer: number,
+    id: number,
     patch: Partial<Pick<Layer, 'mode' | 'speed_mm_min' | 'power' | 'passes' | 'visible'>>,
-  ) => run(() => doc.service.dispatch('document.layer_update', { layer, ...patch }));
-  const current = (layer: number) => run(() => doc.service.dispatch('document.set_current_layer', { layer }));
-  const move = (layer: number, to: number) =>
-    run(() => doc.service.dispatch('document.layer_move', { layer, to }));
+  ) => run(() => doc.service.dispatch('document.update_layer', { id, ...patch }));
+  const current = (id: number) => run(() => doc.service.dispatch('document.set_current_layer', { id }));
+  const move = (id: number, to: number) => run(() => doc.service.dispatch('document.move_layer', { id, to }));
 </script>
 
 <p class="panel-sub layers-order">{t('layers-order')}</p>

@@ -1,9 +1,9 @@
 // Colour layers in the UI: the palette, layer codes (C00–C11) and the palette
-// action (doc/features/ui-contract.md: `document.layer_for_color`, then
-// `document.set_layer` with a selection or `document.set_current_layer`).
+// action (`document.layer_for_color`, which makes the layer current, then
+// `document.move_to_layer` with a selection).
 
-import type { Color, Layer, LayerMode } from '../contract/document';
-import type { DocumentProjection } from '../state/document.svelte';
+import type { Color, LayerMode } from '../gen/api';
+import type { DocumentProjection, Layer } from '../state/document.svelte';
 
 /** The design palette, C00..C11 (`fk-color-layer-c00..c11`, design/tokens). */
 export const PALETTE_COLORS: Color[] = [
@@ -45,6 +45,5 @@ export function layerParams(l: Layer, maxPower = 1000): string {
 export async function assignColor(doc: DocumentProjection, color: Color): Promise<void> {
   const { layer } = await doc.service.dispatch('document.layer_for_color', { color });
   const ids = doc.selection;
-  if (ids.length) await doc.service.dispatch('document.set_layer', { ids, layer });
-  else await doc.service.dispatch('document.set_current_layer', { layer });
+  if (ids.length) await doc.service.dispatch('document.move_to_layer', { ids, layer });
 }

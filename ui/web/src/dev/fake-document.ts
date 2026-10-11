@@ -1,26 +1,28 @@
-// A fake of the Design mode contract (doc/features/ui-contract.md) for development
-// and component tests until M2 implements it in Rust (M4b). In memory: layers,
-// objects (rectangles, ellipses, text boxes, imported SVG shapes) with a 2×3
-// transform, selection, undo/redo, a tiny SVG importer and the migration scan.
-// Never part of a production build (see fake-service.ts).
+// A fake of the session's document actions (`session.snapshot`, `document.*`,
+// `history.*`, `migrate.*`) for development and component tests: the real ones are
+// in freekerf-session and freekerf-service. In memory: layers, objects (rectangles,
+// ellipses, text, imported SVG shapes) with a 2×3 transform, selection, current
+// layer, undo/redo, a tiny SVG importer and the migration scan. Never part of a
+// production build (see fake-service.ts).
 
 import type {
+  ActionName,
   AlignHow,
   Color,
-  DocumentActionName,
-  DocumentActions,
-  DocumentService,
-  DocumentSummary,
-  ImportOptions,
-  ImportReport,
-  Layer,
-  ObjectKind,
+  LayerSummary,
   ObjectSummary,
+  Snapshot,
+  TextSpec,
   TransformOp,
-} from '../contract/document';
+  ViewState,
+} from '../gen/api';
 import { encodeToolpath, type SegmentRecord } from '../canvas/toolpath';
 import { PALETTE_COLORS } from '../design/layers';
-import { ActionFailure } from '../service';
+import { ActionFailure, type Params, type Result } from '../service';
+
+type Layer = Omit<LayerSummary, 'objects'>;
+type ObjectKind = 'shape' | 'text';
+type Change = 'document' | 'selection' | 'history';
 
 type Affine = [number, number, number, number, number, number];
 const IDENTITY: Affine = [1, 0, 0, 1, 0, 0];
@@ -33,7 +35,7 @@ interface FakeObject {
   /** Polylines in object coordinates (mm, Y up). */
   paths: [number, number][][];
   transform: Affine;
-  text?: { text: string; font: string; height_mm: number };
+  text?: TextSpec;
 }
 
 interface Doc {
@@ -42,6 +44,11 @@ interface Doc {
   selection: number[];
   current_layer: number;
   next_id: number;
+}
+
+interface Step {
+  label: string;
+  doc: string;
 }
 
 function apply(m: Affine, x: number, y: number): [number, number] {
@@ -62,6 +69,7 @@ function compose(a: Affine, b: Affine): Affine {
 
 function opMatrix(op: TransformOp): Affine {
   if ('translate' in op) return [1, 0, 0, 1, op.translate[0], op.translate[1]];
+  if ('matrix' in op) return op.matrix;
   const [px, py] = op.pivot;
   const to: Affine = [1, 0, 0, 1, px, py];
   const from: Affine = [1, 0, 0, 1, -px, -py];
@@ -116,9 +124,10 @@ function newLayer(id: number, color: Color): Layer {
   return {
     id,
     color,
+    name: '',
     mode: 'line',
     speed_mm_min: 1000,
-    power: 500,
+    power: 1000,
     passes: 1,
     fill: { pattern: 'horizontal', lines_per_mm: 10 },
     visible: true,
@@ -166,7 +175,11 @@ export function parseSvg(text: string): { color: Color; path: [number, number][]
   return out;
 }
 
-export class FakeDocument implements DocumentService {
+type Handler = (params: unknown) => unknown;
+const invalid = (action: string, message: string) =>
+  new ActionFailure(action, { kind: 'invalid_params', message });
+
+export class FakeDocument {
   private doc: Doc = {
     layers: [newLayer(1, PALETTE_COLORS[0]!)],
     objects: [],
@@ -174,52 +187,68 @@ export class FakeDocument implements DocumentService {
     current_layer: 1,
     next_id: 1,
   };
-  private undoStack: string[] = [];
-  private redoStack: string[] = [];
-  private revision = 1;
-  private geometryRevision = 1;
-  private listeners = new Set<(revision: number) => void>();
+  private undoStack: Step[] = [];
+  private redoStack: Step[] = [];
+  private documentRevision = 0;
   readonly calls: { action: string; params: unknown }[] = [];
   /** What `migrate.detect` finds (tests change it). */
   migration = { found: true, path: '/home/user/.wine/drive_c/users/user/AppData/Roaming/LaserGRBL' };
 
-  subscribe(listener: (revision: number) => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+  /** `changed` records a change and returns the new revision (the fake service's). */
+  constructor(private readonly changed: (change: Change) => number) {}
+
+  private emit(...changes: Change[]): void {
+    for (const c of changes) {
+      const r = this.changed(c);
+      if (c === 'document') this.documentRevision = r;
+    }
   }
 
-  private changed(geometry: boolean): void {
-    this.revision++;
-    if (geometry) this.geometryRevision++;
-    for (const l of this.listeners) l(this.revision);
-  }
-
-  private edit(geometry: boolean, f: (d: Doc) => void): null {
-    this.undoStack.push(JSON.stringify(this.doc));
+  /** One undo step: `f` changes the document (and maybe the selection). */
+  private edit<T>(label: string, f: (d: Doc) => T): T {
+    const before = JSON.stringify(this.doc);
+    const sel = JSON.stringify(this.doc.selection);
+    let r: T;
+    try {
+      r = f(this.doc);
+    } catch (e) {
+      this.doc = JSON.parse(before) as Doc;
+      throw e;
+    }
+    if (JSON.stringify(this.doc) === before) return r;
+    this.undoStack.push({ label, doc: before });
     this.redoStack = [];
-    f(this.doc);
-    this.changed(geometry);
-    return null;
+    this.emit('history', 'document');
+    if (JSON.stringify(this.doc.selection) !== sel) this.emit('selection');
+    return r;
   }
 
-  private obj(id: number): FakeObject {
+  private obj(id: number, action = 'document'): FakeObject {
     const o = this.doc.objects.find((x) => x.id === id);
-    if (!o) throw new ActionFailure('document', { kind: 'invalid_params', message: `no object ${id}` });
+    if (!o) throw invalid(action, `no object ${id}`);
     return o;
   }
 
-  private add(
-    kind: ObjectKind,
-    name: string,
-    paths: [number, number][][],
-    text?: FakeObject['text'],
-  ): number {
+  /** Ids given, or the selection. */
+  private targets(ids: number[] | null | undefined): number[] {
+    return ids ?? this.doc.selection;
+  }
+
+  private currentLayer(): number {
+    if (this.doc.layers.some((l) => l.id === this.doc.current_layer)) return this.doc.current_layer;
+    const first = this.doc.layers[0];
+    return first ? first.id : this.layerForColor('#000000');
+  }
+
+  private add(name: string, paths: [number, number][][], layer?: number | null, text?: TextSpec): number {
+    if (layer != null && !this.doc.layers.some((l) => l.id === layer))
+      throw invalid('document', `no layer ${layer}`);
     const id = this.doc.next_id++;
     this.doc.objects.push({
       id,
-      layer: this.doc.current_layer,
+      layer: layer ?? this.currentLayer(),
       name,
-      kind,
+      kind: text ? 'text' : 'shape',
       paths,
       transform: IDENTITY,
       text,
@@ -241,7 +270,8 @@ export class FakeDocument implements DocumentService {
     return b;
   }
 
-  private summary(): DocumentSummary {
+  /** `session.snapshot` with the fake service's view and revision. */
+  snapshot(view: ViewState, revision: number): Snapshot {
     const objects: ObjectSummary[] = this.doc.objects.map((o) => ({
       id: o.id,
       layer: o.layer,
@@ -252,16 +282,22 @@ export class FakeDocument implements DocumentService {
       ...(o.text ? { text: o.text } : {}),
     }));
     return structuredClone({
-      revision: this.revision,
-      geometry_revision: this.geometryRevision,
-      name: '',
+      revision,
+      document_revision: this.documentRevision,
       dirty: this.undoStack.length > 0,
-      layers: this.doc.layers,
-      objects,
       selection: this.doc.selection,
-      current_layer: this.doc.current_layer,
-      can_undo: this.undoStack.length > 0,
-      can_redo: this.redoStack.length > 0,
+      current_layer: this.doc.layers.length ? this.currentLayer() : null,
+      view,
+      undo: this.undoStack.map((s) => s.label),
+      redo: [...this.redoStack].reverse().map((s) => s.label),
+      document: {
+        layers: this.doc.layers.map((l) => ({
+          ...l,
+          objects: this.doc.objects.filter((o) => o.layer === l.id).length,
+        })),
+        objects,
+        bounds: null,
+      },
     });
   }
 
@@ -274,183 +310,276 @@ export class FakeDocument implements DocumentService {
     return id;
   }
 
-  private handlers: {
-    [A in DocumentActionName]: (p: DocumentActions[A]['params']) => DocumentActions[A]['result'];
-  } = {
-    'document.get': () => this.summary(),
+  private select(ids: number[]): void {
+    const next = ids.filter((id) => this.doc.objects.some((o) => o.id === id));
+    if (JSON.stringify(next) === JSON.stringify(this.doc.selection)) return;
+    this.doc.selection = next;
+    this.emit('selection');
+  }
+
+  private history(from: Step[], to: Step[]): Result<'history.undo'> {
+    const step = from.pop();
+    if (!step) return { step: null };
+    to.push({ label: step.label, doc: JSON.stringify(this.doc) });
+    this.doc = JSON.parse(step.doc) as Doc;
+    this.emit('document', 'selection', 'history');
+    return { step: step.label };
+  }
+
+  private readonly table: { [A in ActionName]?: (p: Params<A>) => Result<A> } = {
     'document.select': (p) => {
-      const cur = new Set(this.doc.selection);
-      if (p.mode === 'replace') cur.clear();
+      const cur = new Set(p.mode === 'replace' || !p.mode ? [] : this.doc.selection);
       for (const id of p.ids) {
-        if (p.mode === 'toggle' && cur.has(id)) cur.delete(id);
+        if (p.mode === 'remove' || (p.mode === 'toggle' && cur.has(id))) cur.delete(id);
         else cur.add(id);
       }
-      this.doc.selection = [...cur].filter((id) => this.doc.objects.some((o) => o.id === id));
-      this.changed(false);
-      return null;
+      this.select([...cur]);
+      return this.doc.selection;
     },
     'document.select_all': () => {
-      this.doc.selection = this.doc.objects.map((o) => o.id);
-      this.changed(false);
-      return null;
+      this.select(this.doc.objects.map((o) => o.id));
+      return this.doc.selection.length;
+    },
+    'document.clear_selection': () => {
+      this.select([]);
+      return { changed: true };
     },
     'document.add_shape': (p) => {
-      let id = 0;
-      this.edit(true, () => {
+      if (!(p.width > 0 && p.height > 0))
+        throw invalid('document.add_shape', 'width and height must be positive');
+      const id = this.edit('add shape', () => {
         const path =
           p.shape === 'rect'
             ? rectPath(p.x, p.y, p.width, p.height)
             : ellipsePath(p.x + p.width / 2, p.y + p.height / 2, p.width / 2, p.height / 2);
-        id = this.add('shape', p.shape, [path]);
+        return this.add(p.shape === 'rect' ? 'rectangle' : 'ellipse', [path], p.layer);
       });
       return { id };
     },
     'document.add_text': (p) => {
-      let id = 0;
-      this.edit(true, () => {
-        id = this.add('text', p.text, textPaths(p.text, p.x, p.y, p.height_mm), {
-          text: p.text,
-          font: p.font ?? 'hershey-simplex',
-          height_mm: p.height_mm,
-        });
-      });
+      const h = p.height_mm ?? 10;
+      const id = this.edit('add text', () =>
+        this.add('text', textPaths(p.text, p.x, p.y, h), p.layer, { text: p.text, height_mm: h }),
+      );
       return { id };
     },
-    'document.set_text': (p) =>
-      this.edit(true, () => {
-        const o = this.obj(p.id);
-        if (!o.text)
-          throw new ActionFailure('document.set_text', { kind: 'invalid_params', message: 'not a text' });
+    'document.set_text': (p) => {
+      const changed = this.edit('edit text', () => {
+        const o = this.obj(p.id, 'document.set_text');
+        if (!o.text) throw invalid('document.set_text', `object ${p.id} is not text`);
         const [x, y] = o.paths[0]?.[0] ?? [0, 0];
-        o.text = {
-          ...o.text,
-          ...(p.text !== undefined ? { text: p.text } : {}),
-          ...(p.height_mm ? { height_mm: p.height_mm } : {}),
-        };
-        o.name = o.text.text;
+        o.text = { text: p.text ?? o.text.text, height_mm: p.height_mm ?? o.text.height_mm };
         o.paths = textPaths(o.text.text, x, y, o.text.height_mm);
-      }),
-    'document.transform': (p) =>
-      this.edit(true, () => {
-        const m = opMatrix(p.op);
-        for (const id of p.ids) {
-          const o = this.obj(id);
+        return true;
+      });
+      return { changed };
+    },
+    'document.transform': (p) => {
+      const m = opMatrix(p.op);
+      const ids = this.targets(p.ids);
+      this.edit('transform', () => {
+        for (const id of ids) {
+          const o = this.obj(id, 'document.transform');
           o.transform = compose(m, o.transform);
         }
-      }),
-    'document.align': (p) => this.edit(true, () => this.align(p.ids, p.how)),
-    'document.delete': (p) =>
-      this.edit(true, (d) => {
-        d.objects = d.objects.filter((o) => !p.ids.includes(o.id));
-        d.selection = d.selection.filter((id) => !p.ids.includes(id));
-      }),
+      });
+      return { changed: ids.length > 0 };
+    },
+    'document.align': (p) => {
+      this.edit('align', () => this.align(this.targets(p.ids), p.how));
+      return { changed: true };
+    },
+    'document.translate': (p) => {
+      const ids = this.targets(p.ids);
+      this.edit('move', () => {
+        for (const id of ids)
+          this.obj(id).transform = compose([1, 0, 0, 1, p.dx, p.dy], this.obj(id).transform);
+      });
+      return { changed: ids.length > 0 };
+    },
+    'document.delete': (p) => {
+      const ids = this.targets(p.ids);
+      this.edit('delete', (d) => {
+        d.objects = d.objects.filter((o) => !ids.includes(o.id));
+        d.selection = d.selection.filter((id) => !ids.includes(id));
+      });
+      return { changed: ids.length > 0 };
+    },
     'document.duplicate': (p) => {
-      const ids: number[] = [];
-      this.edit(true, (d) => {
+      const ids = this.edit('duplicate', (d) => {
         const [dx, dy] = p.offset_mm ?? [5, -5];
-        for (const id of p.ids) {
+        const out: number[] = [];
+        for (const id of this.targets(p.ids)) {
           const o = structuredClone(this.obj(id));
           o.id = d.next_id++;
           o.transform = compose([1, 0, 0, 1, dx, dy], o.transform);
           d.objects.push(o);
-          ids.push(o.id);
+          out.push(o.id);
         }
-        d.selection = ids;
+        if (out.length) d.selection = out;
+        return out;
       });
       return { ids };
     },
-    'document.set_layer': (p) =>
-      this.edit(true, () => {
-        if (!this.doc.layers.some((l) => l.id === p.layer)) {
-          throw new ActionFailure('document.set_layer', {
-            kind: 'invalid_params',
-            message: `no layer ${p.layer}`,
-          });
-        }
-        for (const id of p.ids) this.obj(id).layer = p.layer;
-      }),
-    'document.layer_for_color': (p) => {
-      let layer = 0;
-      this.edit(false, () => {
-        layer = this.layerForColor(p.color);
+    'document.move_to_layer': (p) => {
+      const ids = this.targets(p.ids);
+      this.edit('move to layer', () => {
+        if (!this.doc.layers.some((l) => l.id === p.layer))
+          throw invalid('document.move_to_layer', `no layer ${p.layer}`);
+        for (const id of ids) this.obj(id).layer = p.layer;
       });
-      return { layer };
+      return { changed: ids.length > 0 };
+    },
+    'document.layer_for_color': (p) => {
+      const created = !this.doc.layers.some((l) => l.color.toUpperCase() === p.color.toUpperCase());
+      const layer = created
+        ? this.edit('add layer', () => this.layerForColor(p.color))
+        : this.layerForColor(p.color);
+      if (this.doc.current_layer !== layer) {
+        this.doc.current_layer = layer;
+        this.emit('selection');
+      }
+      return { layer, created };
     },
     'document.set_current_layer': (p) => {
-      this.doc.current_layer = p.layer;
-      this.changed(false);
-      return null;
+      if (!this.doc.layers.some((l) => l.id === p.id))
+        throw invalid('document.set_current_layer', `no layer ${p.id}`);
+      if (this.doc.current_layer !== p.id) {
+        this.doc.current_layer = p.id;
+        this.emit('selection');
+      }
+      return { changed: true };
     },
-    'document.layer_update': (p) =>
-      this.edit(false, (d) => {
-        const l = d.layers.find((x) => x.id === p.layer);
-        if (!l)
-          throw new ActionFailure('document.layer_update', {
-            kind: 'invalid_params',
-            message: `no layer ${p.layer}`,
-          });
-        const patch: Partial<Layer> = { ...p };
-        delete patch.id;
-        delete (patch as { layer?: number }).layer;
-        Object.assign(l, patch);
-      }),
-    'document.layer_move': (p) =>
-      this.edit(false, (d) => {
-        const i = d.layers.findIndex((x) => x.id === p.layer);
-        if (i < 0) return;
+    'document.add_layer': (p) => {
+      const id = this.edit('add layer', (d) => {
+        const l = { ...newLayer(Math.max(0, ...d.layers.map((x) => x.id)) + 1, p.color.toUpperCase()) };
+        d.layers.push(l);
+        return l.id;
+      });
+      return { id };
+    },
+    'document.update_layer': (p) => {
+      const changed = this.edit('layer settings', (d) => {
+        const l = d.layers.find((x) => x.id === p.id);
+        if (!l) throw invalid('document.update_layer', `no layer ${p.id}`);
+        if (p.passes === 0) throw invalid('document.update_layer', 'passes must be at least 1');
+        const before = JSON.stringify(l);
+        if (p.name != null) l.name = p.name;
+        if (p.mode != null) l.mode = p.mode;
+        if (p.speed_mm_min != null) l.speed_mm_min = p.speed_mm_min;
+        if (p.power != null) l.power = p.power;
+        if (p.passes != null) l.passes = p.passes;
+        if (p.visible != null) l.visible = p.visible;
+        if (p.fill_pattern != null) l.fill.pattern = p.fill_pattern;
+        if (p.lines_per_mm != null) l.fill.lines_per_mm = p.lines_per_mm;
+        return JSON.stringify(l) !== before;
+      });
+      return { changed };
+    },
+    'document.remove_layer': (p) => {
+      this.edit('remove layer', (d) => {
+        if (!d.layers.some((l) => l.id === p.id)) throw invalid('document.remove_layer', `no layer ${p.id}`);
+        d.layers = d.layers.filter((l) => l.id !== p.id);
+        d.objects = d.objects.filter((o) => o.layer !== p.id);
+        d.selection = d.selection.filter((id) => d.objects.some((o) => o.id === id));
+      });
+      return { changed: true };
+    },
+    'document.move_layer': (p) => {
+      const changed = this.edit('move layer', (d) => {
+        const i = d.layers.findIndex((x) => x.id === p.id);
+        if (i < 0) throw invalid('document.move_layer', `no layer ${p.id}`);
+        const to = Math.min(p.to, d.layers.length - 1);
+        if (i === to) return false;
         const [l] = d.layers.splice(i, 1);
-        d.layers.splice(Math.max(0, Math.min(d.layers.length, p.to)), 0, l!);
-      }),
-    'document.undo': () => {
-      const prev = this.undoStack.pop();
-      if (prev) {
-        this.redoStack.push(JSON.stringify(this.doc));
-        this.doc = JSON.parse(prev) as Doc;
-        this.changed(true);
-      }
-      return null;
+        d.layers.splice(to, 0, l!);
+        return true;
+      });
+      return { changed };
     },
-    'document.redo': () => {
-      const next = this.redoStack.pop();
-      if (next) {
-        this.undoStack.push(JSON.stringify(this.doc));
-        this.doc = JSON.parse(next) as Doc;
-        this.changed(true);
-      }
-      return null;
+    'history.undo': () => this.history(this.undoStack, this.redoStack),
+    'history.redo': () => this.history(this.redoStack, this.undoStack),
+    'document.new': () => {
+      this.doc = { layers: [], objects: [], selection: [], current_layer: 0, next_id: this.doc.next_id };
+      this.undoStack = [];
+      this.redoStack = [];
+      this.emit('document', 'selection', 'history');
+      return { changed: true };
     },
-    'document.new': () =>
-      this.edit(true, (d) => {
-        d.objects = [];
-        d.selection = [];
-      }),
+    'document.import_data': (p) => {
+      if (p.format !== 'svg')
+        throw new ActionFailure('document.import_data', {
+          kind: 'failed',
+          message: 'the fake imports SVG only',
+        });
+      const text = p.text ?? (p.data ? atob(p.data) : '');
+      const shapes = parseSvg(text);
+      const before = this.doc.layers.map((l) => l.id);
+      const objects = this.edit('import', (d) => {
+        const ids: number[] = [];
+        for (const s of shapes) {
+          const layer = p.colors === 'unify' ? this.currentLayer() : this.layerForColor(s.color);
+          const id = d.next_id++;
+          d.objects.push({
+            id,
+            layer,
+            name: p.name ?? '',
+            kind: 'shape',
+            paths: [s.path],
+            transform: IDENTITY,
+          });
+          ids.push(id);
+        }
+        return ids;
+      });
+      return {
+        objects,
+        layers: this.doc.layers.map((l) => l.id).filter((id) => !before.includes(id)),
+        unsupported: 0,
+      };
+    },
     'migrate.detect': () =>
       this.migration.found
         ? {
             found: true,
             path: this.migration.path,
             items: [
-              { kind: 'connection', count: 1 },
+              { kind: 'connection', count: 4 },
+              { kind: 'preferences', count: 11 },
               { kind: 'buttons', count: 14 },
-              { kind: 'materials', count: 236 },
               { kind: 'counters', count: 2 },
+              { kind: 'materials', count: 1 },
             ],
           }
         : { found: false, path: null, items: [] },
     'migrate.run': (p) => ({
-      imported: p.items.map((kind) => ({
-        kind,
-        count: kind === 'buttons' ? 14 : kind === 'materials' ? 236 : 1,
-      })),
-      warnings: p.items.includes('buttons')
-        ? ['2 buttons use variables that changed syntax: review them']
+      imported: p.items
+        .filter((kind) => kind !== 'materials')
+        .map((kind) => ({
+          kind,
+          count: kind === 'buttons' ? 14 : kind === 'preferences' ? 11 : kind === 'connection' ? 4 : 2,
+        })),
+      warnings: p.items.includes('materials')
+        ? ['UserMaterials.psh was found; user materials are kept once the material library can store them']
         : [],
     }),
   };
 
+  /** The fake's actions, for the fake service's dispatch. */
+  get handlers(): Partial<Record<ActionName, Handler>> {
+    const out: Partial<Record<ActionName, Handler>> = {};
+    for (const [name, h] of Object.entries(this.table)) {
+      out[name as ActionName] = (params: unknown) => {
+        this.calls.push({ action: name, params });
+        return (h as Handler)(params);
+      };
+    }
+    return out;
+  }
+
   private align(ids: number[], how: AlignHow): void {
     const boxes = ids.map((id) => [id, this.bounds(this.obj(id))] as const).filter(([, b]) => b);
-    if (!boxes.length) return;
+    if (boxes.length < 2) return;
     const all = boxes.reduce<[number, number, number, number]>(
       (a, [, b]) => [
         Math.min(a[0], b![0]),
@@ -475,16 +604,8 @@ export class FakeDocument implements DocumentService {
     }
   }
 
-  async dispatch<A extends DocumentActionName>(
-    action: A,
-    params: DocumentActions[A]['params'],
-  ): Promise<DocumentActions[A]['result']> {
-    this.calls.push({ action, params });
-    const h = this.handlers[action] as (p: DocumentActions[A]['params']) => DocumentActions[A]['result'];
-    return h(params);
-  }
-
-  async geometry(): Promise<ArrayBuffer> {
+  /** The drawable geometry ("FKTP": `power` = layer index, `command` = object index). */
+  geometry(): ArrayBuffer {
     const segs: SegmentRecord[] = [];
     this.doc.objects.forEach((o, index) => {
       const layer = this.doc.layers.findIndex((l) => l.id === o.layer);
@@ -501,22 +622,5 @@ export class FakeDocument implements DocumentService {
       }
     });
     return encodeToolpath(segs, this.doc.objects.length);
-  }
-
-  async import(name: string, bytes: ArrayBuffer, options: ImportOptions): Promise<ImportReport> {
-    this.calls.push({ action: 'import', params: { name, options } });
-    const shapes = parseSvg(new TextDecoder().decode(bytes));
-    const before = this.doc.layers.length;
-    this.edit(true, (d) => {
-      const ids: number[] = [];
-      for (const s of shapes) {
-        const layer = options.colors === 'unify' ? d.current_layer : this.layerForColor(s.color);
-        const id = d.next_id++;
-        d.objects.push({ id, layer, name, kind: 'shape', paths: [s.path], transform: IDENTITY });
-        ids.push(id);
-      }
-      d.selection = ids;
-    });
-    return { objects: shapes.length, layers: this.doc.layers.length - before, unsupported: 0, warnings: [] };
   }
 }

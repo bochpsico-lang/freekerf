@@ -84,14 +84,6 @@ The UI changes app state only with `service.dispatch(action)` (PLAN §9, princip
 
 `tests/unit/architecture.test.ts` proves the rules fail on violations.
 
-## Design mode flag
-
-The Design mode screens are built against the UI contract until M2 lands (M4b).
-`flags.designMode` is on in development and tests and off in distributed builds
-(`VITE_FK_DESIGN_MODE=1` turns it on); without it, or without `AppService.document`
-(the desktop app until M4b), the mode switch shows Produce only. See
-[design-mode.md](design-mode.md).
-
 ## Tests
 
 `src/App.test.ts` (STOP with a dialog open, Shift+Esc from a text field, modes,

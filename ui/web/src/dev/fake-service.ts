@@ -68,11 +68,15 @@ type Handler = (params: unknown) => unknown;
 /** In-memory service with a tiny machine model (connect, stop, jog). */
 export class FakeService implements AppService {
   readonly marker = FAKE_SERVICE_MARKER;
-  /** The Design mode document (fake of doc/features/ui-contract.md); absent hides the Design mode. */
-  readonly document: FakeDocument | undefined;
+  /** The document (fake of the session's document actions). */
+  readonly document = new FakeDocument((change) => {
+    this.revision += 1;
+    this.emit({ event: 'session', revision: this.revision, change });
+    return this.revision;
+  });
 
-  constructor(options: { document?: boolean } = {}) {
-    this.document = options.document === false ? undefined : new FakeDocument();
+  constructor() {
+    Object.assign(this.handlers, this.document.handlers);
   }
   readonly calls: { action: ActionName; params: unknown }[] = [];
   state: State = initialState();
@@ -128,6 +132,7 @@ export class FakeService implements AppService {
       return this.state.program;
     },
     'view.get': () => structuredClone(this.view),
+    'session.snapshot': () => this.document.snapshot(structuredClone(this.view), this.revision),
     'view.set_mode': (p) =>
       this.changeView((v) => {
         v.mode = (p as Params<'view.set_mode'>).mode;
@@ -298,6 +303,10 @@ export class FakeService implements AppService {
       v.fire_request = null;
       v.dialogs = v.dialogs.filter((d) => d !== 'fire_confirmation');
     });
+  }
+
+  async documentGeometry(): Promise<ArrayBuffer> {
+    return this.document.geometry();
   }
 
   async toolpath(): Promise<ArrayBuffer> {

@@ -56,6 +56,10 @@ export class TauriService implements AppService {
     return toArrayBuffer(await invoke<ArrayBuffer | number[]>('preview'));
   }
 
+  async documentGeometry(): Promise<ArrayBuffer> {
+    return toArrayBuffer(await invoke<ArrayBuffer | number[]>('document_geometry'));
+  }
+
   subscribeHead(listener: (frame: ArrayBuffer) => void): () => void {
     this.headListeners.add(listener);
     if (!this.headChannel) {

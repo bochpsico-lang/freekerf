@@ -1,7 +1,7 @@
 // Pure maths of the selection handles: from a drag to a transform operation
 // (design/interaction.md §3), and where the handles are.
 
-import type { TransformOp } from '../contract/document';
+import type { TransformOp } from '../gen/api';
 import { Camera, type CameraState, type Rect } from '../canvas/camera';
 import type { DragMods, Handle } from '../canvas/interaction';
 
@@ -51,6 +51,10 @@ export function dragOp(handle: Handle, b: Rect, start: Point, cur: Point, m: Dra
 /** Applies an operation to a point (previews). */
 export function applyOp(op: TransformOp, [x, y]: Point): Point {
   if ('translate' in op) return [x + op.translate[0], y + op.translate[1]];
+  if ('matrix' in op) {
+    const [a, b, c, d, e, f] = op.matrix;
+    return [a * x + c * y + e, b * x + d * y + f];
+  }
   const [px, py] = op.pivot;
   if ('scale' in op) return [px + (x - px) * op.scale[0], py + (y - py) * op.scale[1]];
   const a = (op.rotate_deg * Math.PI) / 180;

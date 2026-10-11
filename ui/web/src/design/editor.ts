@@ -1,14 +1,15 @@
 // The Design mode editor: what the canvas gestures do to the document. Framework
 // free: it reads the document summary and the camera, and changes the document only
-// through `document.*` actions (doc/features/ui-contract.md). Local, visual state
+// through `document.*` actions (doc/features/design-mode.md). Local, visual state
 // (the drag in progress and its preview) stays here until the release sends one
 // `document.transform` (one undo step).
 
 import { Camera, type CameraState, type Rect } from '../canvas/camera';
 import type { DragMods, Handle } from '../canvas/interaction';
 import type { OverlayScene } from '../canvas/overlay';
-import type { DocumentService, DocumentSummary, ObjectSummary, TransformOp } from '../contract/document';
-import type { Tool } from '../gen/api';
+import type { ObjectSummary, Tool, TransformOp } from '../gen/api';
+import type { AppService } from '../service';
+import type { DocumentSummary } from '../state/document.svelte';
 import { applyOp, corners, dragOp, handleAt, handlePositions, selectionBox, type Point } from './transform';
 
 /** Sizes in CSS pixels: drawn handle, hit area, rotation handle offset. */
@@ -29,7 +30,7 @@ export interface EditorHost {
   camera(): CameraState | null;
   /** Coarse pointer (touch): bigger handles. */
   coarse(): boolean;
-  service: DocumentService;
+  service: AppService;
   /** Runs an action and reports a failure (the app's `run`). */
   run(action: () => Promise<unknown>): Promise<void>;
   /** Back to the select tool after placing a shape (`view.set_tool`). */
@@ -67,7 +68,7 @@ export class DesignEditor {
     const d = this.host.doc();
     if (!d || !d.selection.length) return null;
     const ids = new Set(d.selection);
-    return selectionBox(d.objects.filter((o) => ids.has(o.id)).map((o) => o.bounds));
+    return selectionBox(d.objects.filter((o) => ids.has(o.id)).map((o) => o.bounds ?? null));
   }
 
   /** What the overlay draws for the selection. */
@@ -205,5 +206,6 @@ export class DesignEditor {
 function isIdentity(op: TransformOp): boolean {
   if ('translate' in op) return op.translate[0] === 0 && op.translate[1] === 0;
   if ('scale' in op) return op.scale[0] === 1 && op.scale[1] === 1;
+  if ('matrix' in op) return op.matrix.every((v, i) => v === [1, 0, 0, 1, 0, 0][i]);
   return op.rotate_deg === 0;
 }

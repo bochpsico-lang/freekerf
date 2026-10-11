@@ -1,18 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Camera, type CameraState } from '../canvas/camera';
-import type { DocumentSummary } from '../contract/document';
-import { FakeDocument } from '../dev/fake-document';
+import { FakeService } from '../dev/fake-service';
 import type { Tool } from '../gen/api';
+import { documentSummary, type DocumentSummary } from '../state/document.svelte';
 import { DEFAULT_SIZE, DesignEditor } from './editor';
 
 const MOUSE = { shift: false, alt: false, touch: false };
 
 async function setup(tool: Tool = 'select') {
-  const service = new FakeDocument();
-  let summary: DocumentSummary = await service.dispatch('document.get', {});
+  const service = new FakeService();
+  const read = async () => documentSummary(await service.dispatch('session.snapshot', {}));
+  let summary: DocumentSummary = await read();
   const refresh = async () => {
-    summary = await service.dispatch('document.get', {});
+    summary = await read();
   };
   const cam: CameraState = Camera.fitted({ x: 0, y: 0, width: 200, height: 100 }, 800, 400, 0);
   const host = {
@@ -37,6 +38,7 @@ async function setup(tool: Tool = 'select') {
   };
   return {
     service,
+    read,
     editor,
     host,
     cam,
@@ -49,15 +51,15 @@ async function setup(tool: Tool = 'select') {
 
 describe('DesignEditor', () => {
   it('hit tests the topmost object on a visible layer, with a few pixels of tolerance', async () => {
-    const { editor, add, service, refresh } = await setup();
+    const { editor, add, service, refresh, read } = await setup();
     const a = await add(10, 10);
     const b = await add(20, 12);
     expect(editor.hitTest(25, 15)).toBe(String(b));
     expect(editor.hitTest(12, 11)).toBe(String(a));
     expect(editor.hitTest(9.5, 11)).toBe(String(a)); // 0.5 mm = 2 px at 4 px/mm
     expect(editor.hitTest(100, 90)).toBeNull();
-    const s = await service.dispatch('document.get', {});
-    await service.dispatch('document.layer_update', { layer: s.layers[0]!.id, visible: false });
+    const s = await read();
+    await service.dispatch('document.update_layer', { id: s.layers[0]!.id, visible: false });
     await refresh();
     expect(editor.hitTest(25, 15)).toBeNull();
   });
