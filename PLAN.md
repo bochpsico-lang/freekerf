@@ -73,7 +73,6 @@ freekerf/
 ├── apps/                      ── APPS: final binaries (thin shells)
 │   ├── cli/                     `freekerf` binary (headless), including `freekerf mcp` (attach-or-launch) and `freekerf run <script.js>` (§9)
 │   └── desktop/                 Tauri 2 app (`src-tauri` = crate `freekerf-desktop`)
-├── clients/python/           external Python client over `freekerf-ipc` (§9.1)
 ├── tests/                     cross-crate integration tests (workspace member `freekerf-it`)
 ├── tools/xtask/               automation: check-layers, resx2ftl, sync-tokens, release
 └── doc/                       documentation (§7)
@@ -91,7 +90,6 @@ Crate names are always `freekerf-<name>`; every crate inherits `license = "GPL-3
 | **runtime** | core, config, native | apps, UI |
 | **apps** | runtime (through `freekerf-service`), config, ui | `protocol`/`transport` directly |
 | **testing** | anything | being a normal (non-dev) dependency of any crate |
-| **clients/** (Python…) | only the `freekerf-ipc` protocol and the generated API | importing Rust crates or duplicating app logic |
 | **ui/web** | only the API exposed by `freekerf-service` (Tauri IPC or remote WebSocket) | its own machine or G-code logic; changing app state other than through `dispatch(action)` (purely visual state such as hover or animation stays local) |
 
 Automatic checks:
@@ -200,17 +198,16 @@ Agents do not get one MCP tool per action. They get a **small fixed set of tools
 | Action registry | `freekerf-session` (core) + `freekerf-service` (runtime) | Every action is a typed command with a name (`view.open_panel`, `document.select`, `machine.jog`…), a JSON schema (schemars), a description, a **permission tier** and undo support where it applies. The session registers document/view actions; the service registers machine actions into the same registry. **The registry is the only way to change app state**, for the UI, the CLI, scripts and agents. |
 | App state as data | `freekerf-session` | Document, selection, mode (Design/Produce), open panels, viewport, dialogs, toasts and the machine snapshot are Rust state. The web UI renders it and only changes it through `dispatch(action)`. |
 | Script engine | `freekerf-script` (runtime) | Embedded JavaScript (§9.2). Its API (`app.view.openPanel(...)`, `app.document.select(...)`, `app.machine.jog(...)`) is **generated from the registry**: every call is a `dispatch`. Shared by MCP, user macros and `freekerf run <script.js>`. |
-| Single instance + local endpoint | `freekerf-ipc` (native) | One running instance per user. A Unix domain socket (`$XDG_RUNTIME_DIR/freekerf/ipc.sock`, mode `0600`) or a Windows named pipe restricted to the current user; a per-run token in a user-only file. Used by `freekerf mcp`, by the Python client, by "open file in the running app", and by tests. |
+| Single instance + local endpoint | `freekerf-ipc` (native) | One running instance per user. A Unix domain socket (`$XDG_RUNTIME_DIR/freekerf/ipc.sock`, mode `0600`) or a Windows named pipe restricted to the current user; a per-run token in a user-only file. Used by `freekerf mcp`, by "open file in the running app", and by tests. |
 | MCP server | `freekerf-mcp` (runtime) | Exposes the fixed tool set of §9.3 and app state as MCP **resources** (`freekerf://state/view`, `…/document`, `…/machine`, `…/console`, `…/screenshot`, `…/api.d.ts`), with change notifications through resource subscriptions. No logic of its own. |
 | Entry point | `apps/cli` (`freekerf mcp`) | stdio MCP server that an agent configures as a command. **Attach or launch**, see §9.4. |
-| Python client | `clients/python` (`freekerf` package on PyPI later) | For people who prefer Python: an external library that talks to the running app over `freekerf-ipc`, with an API generated from the registry. It runs **outside** the app with the user's own permissions, so it needs no sandbox; tiers still apply on the app side. |
 | Screen capture | `apps/desktop` (+ `freekerf-platform`) | A screenshot of the app window as an MCP image resource. The **semantic snapshot** (`freekerf://state/view`) is the primary way to "see the screen"; the screenshot is a complement. |
 
-`freekerf mcp`, the Python client and the `host --stdio` test protocol are all thin adapters over `freekerf-service`; none adds behaviour.
+`freekerf mcp` and the `host --stdio` test protocol are all thin adapters over `freekerf-service`; none adds behaviour.
 
 ### 9.2 Script engine
 
-- **Language: JavaScript, embedded.** QuickJS through `rquickjs` (MIT) is the default choice; Boa (pure Rust, MIT/Unlicense) is the alternative. Decide in an ADR in M2 with a small benchmark (startup time, a 10,000-object batch edit, memory). CPython is **not** embedded: it cannot be sandboxed, and shipping it per platform (including tablets) is heavy. Python users get the external client instead.
+- **Language: JavaScript, embedded.** QuickJS through `rquickjs` (MIT) is the default choice; Boa (pure Rust, MIT/Unlicense) is the alternative. Decide in an ADR in M2 with a small benchmark (startup time, a 10,000-object batch edit, memory). CPython is **not** embedded: it cannot be sandboxed, and shipping it per platform (including tablets) is heavy.
 - **Sandbox by construction.** The script sees only the generated `app` API and a few pure helpers (math, geometry, `console.log` to the app console). No file system, network, processes, timers that outlive the script, or raw serial/G-code access. File import goes through `document.import` actions, which apply their own rules.
 - **Limits.** Wall-clock timeout, memory cap and an instruction-count interrupt, all configurable. STOP **cancels any running script** before stopping the machine.
 - **Transactions.** A script's document and view changes form **one undo step**. On an uncaught error, the changes made so far are rolled back (machine actions cannot be rolled back and are never retried automatically).
@@ -259,22 +256,22 @@ sequenceDiagram
 
 ### 9.5 Permission tiers and laser safety
 
-Each action declares one tier. **Tiers are checked on every `dispatch`, including each call made inside a script**, so a script cannot do more than its caller is allowed to. Settings choose the baseline (highest tier allowed without asking) per caller kind (agent via MCP, user macro, Python client); above it, the human can grant more (see *Permission grants* below):
+Each action declares one tier. **Tiers are checked on every `dispatch`, including each call made inside a script**, so a script cannot do more than its caller is allowed to. Settings choose the baseline (highest tier allowed without asking) per caller kind (agent via MCP, user macro); above it, the human can grant more (see *Permission grants* below):
 
 | Tier | Examples | Default for agents when MCP is enabled |
 | --- | --- | --- |
 | `read` | read state, document, console, screenshot | allowed |
 | `ui` | select, open/close panels, change mode, zoom/pan, open dialogs | allowed |
-| `edit` | change the document, import files, change layer settings, save | allowed |
+| `edit` | change the document, import files, change layer settings, save | allowed (`document.save` only to a new `.fkproj` file; never overwrites) |
 | `machine` | connect, home, jog, unlock, `$$` changes, overrides | **off** (`automation.mcp.allow_machine`) |
-| `laser` | frame with laser on, test fire, run/resume a job | **off** (`automation.mcp.allow_laser`) |
+| `laser` | frame with laser on, test fire, run/resume a job | **never** (no setting or grant) |
 
 - **STOP / feed hold are always allowed** (they only make things safer), and STOP cancels running scripts first.
-- A `laser` action from an agent or a script never skips the fire confirmation of the UI: the job goes to *awaiting confirmation* and a **human confirms on the machine's screen**. In headless mode with no human present, `laser` actions are refused. Dropping the human confirmation is out of scope.
+- Agents never run `laser` actions (decided 2026-10-10). A `laser` action from a script never skips the fire confirmation of the UI: the job goes to *awaiting confirmation* and a **human confirms on the machine's screen**. In headless mode with no human present, `laser` actions are refused. Dropping the human confirmation is out of scope.
 - The app shows a persistent **"Agent connected"** indicator with the client name, a one-click disconnect, a **running-script indicator with a cancel button**, and an **action log** (who did what, when, from which script) in the console.
 - Materials flagged `block` by `library` stay blocked for scripts and agents too.
 
-**Permission grants.** The tiers above are the baseline from settings. When a caller (a user macro, an agent through MCP, the Python client) needs a tier above its baseline, the call pauses and the app asks the human, naming the caller, the tier and the action. The human chooses the **scope** of the grant:
+**Permission grants.** The tiers above are the baseline from settings. When a caller (a user macro, an agent through MCP) needs a tier above its baseline, the call pauses and the app asks the human, naming the caller, the tier and the action. The human chooses the **scope** of the grant:
 
 | Scope | Lasts | Stored |
 | --- | --- | --- |
@@ -294,10 +291,9 @@ Each action declares one tier. **Tiers are checked on every `dispatch`, includin
 - Script engine: sandbox escape attempts (no `fs`, network, `eval` of host objects, prototype tampering), timeout, memory cap and instruction interrupt, STOP cancels a running script, one undo step per script, rollback on error, dry run applies nothing, tier denial inside a script.
 - MCP integration (§6): the fixed tool set; `run_script` reaching every registry namespace against a headless app + emulator; resources and notifications; tiers enforced per call; disabled-by-default; attach to a running instance vs. launch; stale socket and wrong-token cases.
 - Permission grants: each scope (this run / this session / always) expires when it should; editing a macro invalidates its grants; revoke works immediately; denial returns a readable error; headless refuses anything needing a prompt; no grant skips the laser fire confirmation.
-- Python client: integration tests against a headless app over `freekerf-ipc`.
 - UI end to end (from M4): a test agent runs a script that opens a panel, selects an object and changes a layer, and Playwright checks the UI reflects it; and the opposite (a UI click shows up in `get_state`).
 - **No UI-only actions:** a lint test fails if the web UI mutates app state outside `dispatch`, and the generated `doc/features/actions.md` must match the registry.
-- Docs: `doc/features/mcp.md` (setup for common agents, tools, tiers, safety, attach/launch), `doc/features/scripting.md` (engine, sandbox, limits, transactions, macros, examples), `doc/features/actions.md` (generated catalogue), `clients/python/README.md`, and ADRs for the action registry, the script engine and the MCP transport/security model.
+- Docs: `doc/features/mcp.md` (setup for common agents, tools, tiers, safety, attach/launch), `doc/features/scripting.md` (engine, sandbox, limits, transactions, macros, examples), `doc/features/actions.md` (generated catalogue), and ADRs for the action registry, the script engine and the MCP transport/security model.
 
 ## 10. Milestones
 
@@ -336,7 +332,7 @@ Crates: `geometry`, `raster`, `document`, `import`, `planner`, `materials`, `mig
 - `freekerf-materials` on top of `library`'s `freekerf-library` (`read_archive` of a release package).
 - `freekerf-migrate`: LaserGRBL Settings.bin (BinaryFormatter, read-only), `.zbn` buttons, materials and counters.
 - Versioned `.fkproj` project format with a JSON schema generated from the model (same approach as `library`).
-- **Automation, headless (§9):** `freekerf-session` (document actions), `freekerf-script` (engine ADR, sandbox, limits, transactions, dry run, `api.d.ts`), `freekerf run`, `freekerf-ipc`, `freekerf-mcp` and `freekerf mcp` with attach-or-launch of a **headless** instance; tiers `read`, `edit`, `machine`; `laser` refused headless; disabled by default; Python client.
+- **Automation, headless (§9):** `freekerf-session` (document actions), `freekerf-script` (engine ADR, sandbox, limits, transactions, dry run, `api.d.ts`), `freekerf run`, `freekerf-ipc`, `freekerf-mcp` and `freekerf mcp` with attach-or-launch of a **headless** instance; tiers `read`, `edit`, `machine`; `laser` refused headless; disabled by default. (A Python client was planned; dropped in M2, see §15.)
 
 **Acceptance:** `conformance` *golden (importers)* green with `LASERGRBL_HOST=rust`; `platform_dependent` (GDI+) cases compared with a documented tolerance. Script engine and MCP integration tests of §9.6 green for the headless scope; `doc/features/scripting.md`, `doc/features/mcp.md`, the generated `doc/features/actions.md` and `api.d.ts`. Fuzz targets for SVG/DXF/G-code running in a scheduled CI job. Integration test import → plan → stream to the emulator. Feature pages for every importer and generator.
 
@@ -444,7 +440,7 @@ Updated by every PR that delivers a milestone item.
 | M2 (B1): session actions, undo/redo, transactions, snapshots, change events | `crates/core/freekerf-session/src/{session,actions}.rs`, `freekerf-service` (`document.open/save/import`, `job.from_document`, `ServiceEvent::Session`) | unit tests, `freekerf-service/tests/service.rs` | `doc/features/session.md`, `doc/features/actions.md` |
 | M2 (B2): scripts (QuickJS via rquickjs, sandbox, limits, STOP cancel, one undo step, rollback, dry run, laser refused without confirmation, `api.d.ts`, `freekerf run <script.js>`) | `crates/runtime/freekerf-script`, `crates/runtime/freekerf-service/src/script.rs`, `apps/cli` | `freekerf-script/tests/sandbox.rs`, `freekerf-service/tests/scripts.rs`, `cli.rs::run_a_script`, `examples/script_bench.rs` | `doc/features/scripting.md`, `doc/adr/0011-script-engine.md`, `doc/scripting/api.d.ts` (generated) |
 | M2 (B3): local endpoint and MCP (single instance, token, `freekerf serve --headless`, tiers from settings, grants this run/session/always, laser refused headless, `freekerf mcp` attach or launch, tools and resources with notifications) | `crates/native/freekerf-ipc`, `crates/runtime/freekerf-service/src/{remote,permissions}.rs`, `crates/runtime/freekerf-mcp`, `apps/cli` | `freekerf-ipc/tests/endpoint.rs`, `freekerf-service/tests/{remote,permissions}.rs`, `freekerf-mcp/tests/mcp.rs`, `cli.rs::mcp_is_off_by_default_then_attaches_or_launches` | `doc/features/{mcp,ipc}.md`, `doc/adr/0012-mcp-transport-and-security.md` |
-| M2 (B4): Python client; LaserGRBL buttons → scripts | `clients/python`, `crates/config/freekerf-migrate/src/buttons.rs`, `freekerf-service/src/migrate.rs` | `clients/python/tests/test_client.py` (CI job `python-client`), `freekerf-migrate/tests/lasergrbl_files.rs`, `cli.rs::migrate_lasergrbl` | `clients/python/README.md`, `doc/features/migration.md` |
+| M2 (B4): LaserGRBL buttons → scripts (the Python client was written and then removed: no need) | `crates/config/freekerf-migrate/src/buttons.rs`, `freekerf-service/src/migrate.rs` | `freekerf-migrate/tests/lasergrbl_files.rs`, `cli.rs::migrate_lasergrbl` | `doc/features/migration.md` |
 | M3: UI toolkit decision (Tauri 2) | — | — | `doc/research/ui-toolkit.md`, `doc/adr/0006-ui-toolkit.md` |
 | M4a: plan split into M4a / M4b | `PLAN.md` §10 | — | `PLAN.md` |
 
@@ -458,4 +454,4 @@ Updated by every PR that delivers a milestone item.
 
 ## 15. Open questions
 
-- MCP: should `allow_laser` exist at all, or should agents be limited to `machine` forever? (current plan: exists, off by default, and always needs a human confirmation on screen)
+- ~~MCP: should `allow_laser` exist at all?~~ Decided 2026-10-10: no, agents never run `laser` actions.

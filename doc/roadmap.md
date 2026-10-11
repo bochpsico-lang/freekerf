@@ -27,8 +27,11 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 
 - No auto-update for now (PLAN §14).
 - No MCP prompts for now (PLAN §14).
+- Agents never run `laser` actions; there is no `allow_laser` (2026-10-10).
+- No Python client: scripts are JavaScript in the app, `freekerf run` covers the
+  command line, and the local endpoint protocol (`doc/features/ipc.md`) stays open
+  for an external client if one is ever needed (2026-10-10).
 
 ## Open
 
-
-- MCP: should `allow_laser` exist at all (PLAN §15)?
+None right now.

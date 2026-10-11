@@ -196,6 +196,8 @@ impl ScriptHost for DryHost {
         if tier == Tier::Read {
             return self.service.dispatch(&caller, action, params);
         }
+        // a preview reports what the real run would refuse
+        crate::permissions::check_agent_files(&caller, action, &params)?;
         lock(&self.simulated).push(action.to_owned());
         Ok(json!({"simulated": true}))
     }

@@ -56,12 +56,15 @@ every 500 ms).
 | --- | --- |
 | `read`, `ui`, `edit` | allowed when MCP is enabled |
 | `machine` | with `automation.mcp.allow_machine` (off), or a grant |
-| `laser` | requested only with `automation.mcp.allow_laser` (off), and **always** confirmed by a person on the machine's screen; refused headless |
+| `laser` | **never**: no setting or grant lets an agent turn the laser on |
 
 - Tiers are checked on every action, including each call inside a script.
 - Above its baseline a call asks the person in front of the app, who can grant it
   for this run, this session or always (`automation.grants`). Headless, nobody is
   asked: only the baseline and "always" grants apply.
+- Files: agents read any file the user can (`document.import`, `document.open`) but
+  save only **new** `.fkproj` projects; another extension or an existing file is
+  refused with the reason (in scripts and dry runs too).
 - `automation.*` settings and grants cannot be changed by scripts or agents.
 - STOP is always allowed and cancels scripts first.
 
@@ -69,6 +72,6 @@ every 500 ms).
 
 `freekerf-mcp/tests/mcp.rs` (the tool set, `run_script` reaching every namespace with
 the machine on the built-in emulator, resources and notifications, tiers, laser
-refused, STOP during a script, disabled app, attach or launch),
+refused, files, STOP during a script, disabled app, attach or launch),
 `freekerf-service/tests/remote.rs` and `permissions.rs`,
 `apps/cli/tests/cli.rs::mcp_is_off_by_default_then_attaches_or_launches`.

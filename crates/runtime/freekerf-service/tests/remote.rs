@@ -55,26 +55,32 @@ fn hello_token_and_disabled_mcp() {
         }
         other => panic!("{other:?}"),
     }
-    // the Python client is not an agent
-    let py = Client::connect(&endpoint, json!({"client": "python_client", "name": "nb"})).unwrap();
-    assert_eq!(py.welcome()["tier"], "edit");
-    assert_eq!(py.welcome()["headless"], true);
-    assert_eq!(py.call("ping", Value::Null).unwrap(), "pong");
+}
+
+#[test]
+fn hello_checks() {
+    let home = tempfile::tempdir().unwrap();
+    settings(home.path(), |s| s.automation.mcp.enabled = true);
+    let (endpoint, _h) = start(home.path(), ServeOptions::default());
+    let c = agent(&endpoint).unwrap();
+    assert_eq!(c.welcome()["tier"], "edit");
+    assert_eq!(c.welcome()["headless"], true);
+    assert_eq!(c.call("ping", Value::Null).unwrap(), "pong");
     // a client kind the server does not know, or claiming to be the user
-    for kind in ["user", "macro", "nobody"] {
+    for kind in ["user", "macro", "python_client", "nobody"] {
         assert!(matches!(
             Client::connect(&endpoint, json!({"client": kind})),
             Err(IpcError::Refused { .. })
         ));
     }
     assert!(matches!(
-        Client::connect(&endpoint, json!({"client": "python_client", "version": 99})),
+        Client::connect(&endpoint, json!({"client": "agent", "version": 99})),
         Err(IpcError::Refused { .. })
     ));
     // a wrong token
     let token = std::fs::read_to_string(endpoint.token_file()).unwrap();
     std::fs::write(endpoint.token_file(), "0".repeat(64)).unwrap();
-    match Client::connect(&endpoint, json!({"client": "python_client"})) {
+    match Client::connect(&endpoint, json!({"client": "agent"})) {
         Err(IpcError::Refused { kind, .. }) => assert_eq!(kind, "unauthorized"),
         other => panic!("{other:?}"),
     }
@@ -182,21 +188,20 @@ fn methods_tiers_and_events() {
 }
 
 #[test]
-fn laser_is_refused_headless_even_when_allowed() {
+fn agents_never_run_laser_actions_and_save_only_new_projects() {
     let home = tempfile::tempdir().unwrap();
     settings(home.path(), |s| {
         s.automation.mcp.enabled = true;
         s.automation.mcp.allow_machine = true;
-        s.automation.mcp.allow_laser = true;
     });
     let (endpoint, _h) = start(home.path(), ServeOptions::default());
     let c = agent(&endpoint).unwrap();
-    assert_eq!(c.welcome()["tier"], "laser");
+    assert_eq!(c.welcome()["tier"], "machine");
     let e = c
         .call("dispatch", json!({"action": "job.run", "params": {}}))
         .unwrap_err();
     assert_eq!(e.kind, "refused");
-    assert!(e.message.contains("needs a person to confirm"), "{e}");
+    assert!(e.message.contains("agents never run laser actions"), "{e}");
     let r = c
         .call(
             "run_script",
@@ -204,12 +209,45 @@ fn laser_is_refused_headless_even_when_allowed() {
         )
         .unwrap();
     assert!(
-        r["error"].as_str().unwrap().contains("needs a person to confirm"),
+        r["error"]
+            .as_str()
+            .unwrap()
+            .contains("agents never run laser actions"),
         "{r}"
     );
-    // machine actions are allowed now (nothing is connected: the action's own error)
+    // machine actions are allowed (nothing is connected: the action's own error)
     let e = c.call("dispatch", json!({"action": "machine.home"})).unwrap_err();
     assert_ne!(e.kind, "permission_denied");
+    // files: a new project only
+    let new = home.path().join("new.fkproj");
+    let save = |path: &Path| {
+        c.call(
+            "dispatch",
+            json!({"action": "document.save", "params": {"path": path}}),
+        )
+    };
+    save(&new).unwrap();
+    assert!(new.exists());
+    let e = save(&new).unwrap_err();
+    assert_eq!(e.kind, "refused");
+    assert!(e.message.contains("never overwrite"), "{e}");
+    let e = save(&home.path().join("settings.toml")).unwrap_err();
+    assert!(e.message.contains("only save projects"), "{e}");
+    // the same inside scripts, and previewed by dry runs
+    let r = c
+        .call(
+            "run_script",
+            json!({"code": format!("app.document.save({{path: {:?}}})", new.display().to_string())}),
+        )
+        .unwrap();
+    assert!(r["error"].as_str().unwrap().contains("never overwrite"), "{r}");
+    let r = c
+        .call(
+            "run_script",
+            json!({"code": "app.document.save({path: '/tmp/x.svg'})", "dry_run": true}),
+        )
+        .unwrap();
+    assert!(r["error"].as_str().unwrap().contains("only save projects"), "{r}");
 }
 
 #[test]

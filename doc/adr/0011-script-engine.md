@@ -9,7 +9,7 @@ User macros, `freekerf run <script.js>` and the MCP `run_script` tool need one
 embedded scripting language (PLAN §9.2) that can be sandboxed by construction,
 limited (time, memory, instructions), cancelled by STOP, and shipped on every
 platform, tablets included. CPython is ruled out (it cannot be sandboxed, it is
-heavy to ship); Python users get the external client. The candidates were:
+heavy to ship). The candidates were:
 
 1. **QuickJS** through `rquickjs` (MIT): a small C engine, ES2023, with memory and
    stack limits and an interrupt handler built in. Compiled from source by `cc`; the

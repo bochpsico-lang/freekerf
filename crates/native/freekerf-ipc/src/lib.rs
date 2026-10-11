@@ -1,8 +1,8 @@
 //! The local endpoint of a running FreeKerf (PLAN §9.1): one instance per user,
 //! reached through a Unix domain socket (`$XDG_RUNTIME_DIR/freekerf/ipc/ipc.sock`,
 //! directory `0700`, socket `0600` on Linux) or a Windows named pipe restricted to its owner,
-//! with a per-run **token** in a user-only file next to it. `freekerf mcp`, the
-//! Python client and tests use it.
+//! with a per-run **token** in a user-only file next to it. `freekerf mcp` and tests
+//! use it.
 //!
 //! The wire format is JSON Lines (one JSON object per line, at most
 //! [`MAX_LINE`] bytes). This crate knows nothing of the messages beyond the

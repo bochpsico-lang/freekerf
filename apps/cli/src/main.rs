@@ -82,8 +82,8 @@ enum Command {
         #[arg(long)]
         persistent: bool,
     },
-    /// Serves this instance on the local endpoint for `freekerf mcp` and the Python
-    /// client (one instance per user). Ctrl-C sends STOP and exits.
+    /// Serves this instance on the local endpoint for `freekerf mcp` (one instance
+    /// per user). Ctrl-C sends STOP and exits.
     Serve {
         /// No user interface (the only mode until the desktop app): permission
         /// requests and laser actions are refused.

@@ -1,7 +1,7 @@
 # Local endpoint (IPC)
 
 A running FreeKerf (`freekerf serve --headless` today, the desktop app later) listens
-on a local endpoint for `freekerf mcp`, the [Python client](../../clients/python/README.md) and tests (`freekerf-ipc`,
+on a local endpoint for `freekerf mcp` and tests (`freekerf-ipc`,
 `freekerf_service::remote`). One instance per user.
 
 | | Linux / macOS | Windows |
@@ -18,7 +18,7 @@ socket nobody accepts on is stale and replaced.
 JSON Lines, one object per line (at most 64 MiB).
 
 ```
-→ {"hello": {"token": "…", "client": "agent" | "python_client", "name": "my-agent", "version": 1}}
+→ {"hello": {"token": "…", "client": "agent", "name": "my-agent", "version": 1}}
 ← {"welcome": {"version": 1, "app_version": "…", "pid": 1234, "headless": true, "tier": "edit"}}
    or {"error": {"kind": "unauthorized" | "disabled" | "unsupported" | "protocol", "message": "…"}}
 → {"id": 1, "method": "dispatch", "params": {"action": "view.set_mode", "params": {"mode": "produce"}}}
@@ -44,5 +44,5 @@ JSON Lines, one object per line (at most 64 MiB).
 Requests of one client run concurrently (answers may come out of order; match them
 by `id`), so `stop` is answered while a script runs. Agents need
 `automation.mcp.enabled`; the tier is the caller's baseline from the settings
-([mcp.md](mcp.md)), never what the client says. `laser` actions need a person to
-confirm them and are refused headless.
+([mcp.md](mcp.md)), never what the client says. Agents never run `laser` actions
+and save only new `.fkproj` files.

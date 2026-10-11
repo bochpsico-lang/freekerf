@@ -294,7 +294,7 @@ fn settings_are_saved_and_automation_is_user_only() {
         call(&s, "settings.get", json!({"key": "machine.streaming_mode"})),
         "Synchronous"
     );
-    assert_eq!(call(&s, "settings.get", Value::Null)["version"], 1);
+    assert_eq!(call(&s, "settings.get", Value::Null)["version"], 2);
     let end = Instant::now() + Duration::from_secs(5);
     while !dir.path().join("cache.json").exists() && Instant::now() < end {
         std::thread::sleep(Duration::from_millis(10));

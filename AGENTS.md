@@ -48,7 +48,6 @@ apps/cli/          the `freekerf` binary (thin shell over the service)
 tests/             cross-crate integration tests (crate freekerf-it)
 fuzz/              cargo-fuzz targets (own workspace, nightly; doc/fuzzing.md)
 tools/xtask/       cargo xtask check-layers | gen-docs | check-docs
-clients/python/    the Python client (stdlib only; pytest against `freekerf serve --headless`)
 doc/               documentation (below)
 ```
 
@@ -66,7 +65,6 @@ cargo bench -p freekerf-gcode                # 1M-line analysis (doc/benchmarks.
 cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session -p freekerf-geometry -p freekerf-document -p freekerf-planner -p freekerf-import -p freekerf-raster
 cargo deny check
 cd fuzz && cargo +nightly fuzz run svg       # fuzz targets: gcode, svg, dxf, nrbf (doc/fuzzing.md)
-cd clients/python && uv run --with pytest pytest   # Python client (needs target/debug/freekerf)
 
 cargo run -p freekerf-cli -- analyze file.nc --json
 cargo run -p freekerf-cli -- send file.nc --emulator

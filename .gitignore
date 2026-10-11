@@ -5,7 +5,3 @@
 .DS_Store
 .idea/
 .vscode/
-.venv/
-__pycache__/
-*.egg-info/
-clients/python/uv.lock

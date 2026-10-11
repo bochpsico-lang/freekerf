@@ -289,7 +289,10 @@ fn tools_resources_and_notifications() {
     assert_eq!(r["isError"], true);
     let report = &r["structuredContent"];
     assert!(
-        report["error"].as_str().unwrap().contains("needs tier `laser`"),
+        report["error"]
+            .as_str()
+            .unwrap()
+            .contains("agents never run laser actions"),
         "{report}"
     );
     // a dry run applies nothing
@@ -378,12 +381,7 @@ fn attach_to_a_running_instance_or_launch_one() {
     // running: attach, never launch
     let home = tempfile::tempdir().unwrap();
     let endpoint = app(home.path(), |s| s.automation.mcp.enabled = true);
-    Client::connect_retry(
-        &endpoint,
-        &json!({"client": "python_client"}),
-        Duration::from_secs(5),
-    )
-    .unwrap();
+    Client::connect_retry(&endpoint, &json!({"client": "agent"}), Duration::from_secs(5)).unwrap();
     let attached = attach_or_launch(
         &endpoint,
         "a",
@@ -410,12 +408,8 @@ fn attach_to_a_running_instance_or_launch_one() {
     // a refusal is returned at once
     let home3 = tempfile::tempdir().unwrap();
     let endpoint3 = app(home3.path(), |_| {});
-    Client::connect_retry(
-        &endpoint3,
-        &json!({"client": "python_client"}),
-        Duration::from_secs(5),
-    )
-    .unwrap();
+    // (waits until it listens, then is refused)
+    assert!(Client::connect_retry(&endpoint3, &json!({"client": "agent"}), Duration::from_secs(5)).is_err());
     let err = attach_or_launch(
         &endpoint3,
         "c",

@@ -78,8 +78,6 @@ pub enum CallerKind {
     Macro,
     /// An AI agent through MCP.
     Agent,
-    /// The external Python client.
-    PythonClient,
     /// A test harness (`host --stdio`).
     Test,
 }

@@ -10,14 +10,14 @@ User settings in a readable file, with a versioned format.
   (`freekerf config path`), or in `$FREEKERF_HOME` / `--home DIR`.
 - Schema: [`doc/schema/settings.schema.json`](../schema/settings.schema.json),
   generated from `freekerf_settings::Settings` (CI checks it is current).
-- `version = 1`. A file without `version` (drafts) is migrated (`[machine] streaming`
-  → `streaming_mode`); a newer version is refused with a clear error. Unknown keys
+- `version = 2`. Older files are migrated: without `version` (drafts), `[machine]
+  streaming` → `streaming_mode`; version 1 loses `automation.mcp.allow_laser`; a newer version is refused with a clear error. Unknown keys
   are refused. Missing keys take their defaults.
 - What FreeKerf learns about the machine (firmware version, `$$`, laser life
   counters) is kept in `machine-cache.json` in the data directory, not here.
 
 ```toml
-version = 1
+version = 2
 
 [machine]
 firmware = "Grbl"            # Grbl | Smoothie | Marlin | VigoWork
@@ -47,14 +47,10 @@ speed_mm_min = 1000.0
 
 [automation.mcp]            # user-only (PLAN §9)
 enabled = false             # agents may attach (freekerf mcp); baseline tier `edit`
-allow_machine = false       # agents' baseline is `machine`
-allow_laser = false         # agents may request `laser` (still confirmed by a person)
-
-[automation.python]         # user-only
-allow_machine = false       # the Python client's baseline is `machine` instead of `edit`
+allow_machine = false       # agents' baseline is `machine` (agents never run `laser` actions)
 
 [[automation.grants]]       # permissions granted "always" (PLAN §9.5); none by default
-caller = "agent"            # macro, agent, python_client
+caller = "agent"            # macro, agent
 name = "claude-code"
 tier = "machine"
 # code_hash = "..."         # macros: editing the macro invalidates the grant

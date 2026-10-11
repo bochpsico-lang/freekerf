@@ -142,7 +142,7 @@ fn always_grants_are_stored_and_survive_restarts() {
         s.dispatch_authorized(&agent, None, "job.run", Value::Null, &RunGrants::default(), true)
             .unwrap_err()
             .to_string()
-            .contains("needs tier `laser`")
+            .contains("agents never run laser actions")
     );
     assert_eq!(s.revoke(CallerKind::Agent, "claude").unwrap(), 1);
     assert!(
@@ -210,21 +210,27 @@ fn baselines_come_from_the_settings() {
     let path = home.path().join("settings.toml");
     let s = Service::new(Stores::files(Some(home.path())).unwrap()).unwrap();
     assert_eq!(s.baseline(CallerKind::Agent), None);
-    assert_eq!(s.baseline(CallerKind::PythonClient), Some(Tier::Edit));
     assert_eq!(s.baseline(CallerKind::Macro), None);
     let mut st = Settings::default();
     st.automation.mcp.enabled = true;
-    st.automation.python.allow_machine = true;
     std::fs::write(&path, st.to_toml().unwrap()).unwrap();
     let s = Service::new(Stores::files(Some(home.path())).unwrap()).unwrap();
     assert_eq!(s.baseline(CallerKind::Agent), Some(Tier::Edit));
-    assert_eq!(s.baseline(CallerKind::PythonClient), Some(Tier::Machine));
     st.automation.mcp.allow_machine = true;
     std::fs::write(&path, st.to_toml().unwrap()).unwrap();
     let s = Service::new(Stores::files(Some(home.path())).unwrap()).unwrap();
     assert_eq!(s.baseline(CallerKind::Agent), Some(Tier::Machine));
-    st.automation.mcp.allow_laser = true;
-    std::fs::write(&path, st.to_toml().unwrap()).unwrap();
-    let s = Service::new(Stores::files(Some(home.path())).unwrap()).unwrap();
-    assert_eq!(s.baseline(CallerKind::Agent), Some(Tier::Laser));
+}
+
+#[test]
+fn agents_get_no_laser_grant() {
+    let (s, person) = with_person();
+    let agent = Caller::new(CallerKind::Agent, "claude", Tier::Machine);
+    person.will(Some(GrantScope::Always));
+    let e = s
+        .dispatch_authorized(&agent, None, "job.run", Value::Null, &RunGrants::default(), true)
+        .unwrap_err();
+    assert!(e.to_string().contains("agents never run laser actions"), "{e}");
+    assert_eq!(person.asked(), 0, "nobody is asked");
+    assert!(s.grants().is_empty());
 }

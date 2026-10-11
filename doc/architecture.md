@@ -120,9 +120,9 @@ sequenceDiagram
   transaction (one undo step, rollback on error) or as a dry run on a copy of the
   session. STOP cancels running scripts first.
 - **Agents and clients** (ADR 0012): `freekerf serve` listens on the local
-  endpoint (`freekerf-ipc`); `freekerf mcp` and the Python client attach to it.
+  endpoint (`freekerf-ipc`); `freekerf mcp` attaches to it.
   The caller's tier comes from the settings; grants above it need the person
-  (`permissions`); laser actions always need a person's confirmation.
+  (`permissions`); agents never run laser actions, and only save new `.fkproj` files.
 
 ## Extension points
 

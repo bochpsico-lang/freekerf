@@ -316,6 +316,7 @@ impl Service {
     /// See [`ActionError`].
     pub fn dispatch(&self, caller: &Caller, action: &str, params: Value) -> Result<Value, ActionError> {
         tracing::debug!(caller = %caller.name, action, "dispatch");
+        permissions::check_agent_files(caller, action, &params)?;
         let r = self.registry.dispatch(&self.inner, caller, action, params);
         self.inner.publish_session_events();
         r

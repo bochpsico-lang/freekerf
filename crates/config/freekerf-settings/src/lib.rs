@@ -14,7 +14,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Current version of the settings file.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 /// Errors.
 #[derive(Debug, thiserror::Error)]
@@ -236,18 +236,7 @@ impl Default for JogSettings {
 pub struct McpSettings {
     /// MCP server enabled (off by default).
     pub enabled: bool,
-    /// Agents may use `machine` actions.
-    pub allow_machine: bool,
-    /// Agents may request `laser` actions (always confirmed by a human on screen).
-    pub allow_laser: bool,
-}
-
-/// The Python client (`clients/python`), which talks to the running app over the
-/// local endpoint. Changed only by the user.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct PythonSettings {
-    /// The Python client may use `machine` actions (its baseline is `edit`).
+    /// Agents may use `machine` actions. Agents never get `laser` actions.
     pub allow_machine: bool,
 }
 
@@ -256,9 +245,9 @@ pub struct PythonSettings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Grant {
-    /// Kind of caller (`macro`, `agent`, `python_client`).
+    /// Kind of caller (`macro`, `agent`).
     pub caller: CallerKind,
-    /// Caller name (macro name, MCP client name, Python client name).
+    /// Caller name (macro name, MCP client name).
     pub name: String,
     /// Macros: hash of the code; editing the macro invalidates the grant.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -273,8 +262,6 @@ pub struct Grant {
 pub struct AutomationSettings {
     /// MCP.
     pub mcp: McpSettings,
-    /// Python client.
-    pub python: PythonSettings,
     /// Permissions granted "always" (revoked by removing them).
     pub grants: Vec<Grant>,
 }
@@ -457,6 +444,14 @@ fn migrate(table: &mut toml::Table, from: u32) {
             m.insert("streaming_mode".into(), v);
         }
     }
+    if from < 2 {
+        // version 1: agents could be allowed `laser` actions; they never are now
+        if let Some(toml::Value::Table(a)) = table.get_mut("automation")
+            && let Some(toml::Value::Table(m)) = a.get_mut("mcp")
+        {
+            m.remove("allow_laser");
+        }
+    }
     table.insert("version".into(), toml::Value::Integer(i64::from(VERSION)));
 }
 
@@ -505,7 +500,7 @@ mod tests {
     fn defaults_round_trip() {
         let s = Settings::default();
         let text = s.to_toml().unwrap();
-        assert!(text.contains("version = 1"));
+        assert!(text.contains("version = 2"));
         assert_eq!(Settings::from_toml(&text).unwrap(), s);
         assert_eq!(Settings::from_toml("").unwrap().version, VERSION);
     }
@@ -516,7 +511,6 @@ mod tests {
         assert_eq!(s.machine.baud, 250_000);
         assert!(s.machine.reset_on_connect);
         assert!(!s.automation.mcp.enabled);
-        assert!(!s.automation.python.allow_machine);
         assert!(s.automation.grants.is_empty());
     }
 
@@ -549,7 +543,20 @@ mod tests {
     fn migration_from_version_0() {
         let s = Settings::from_toml("[machine]\nstreaming = \"Synchronous\"\n").unwrap();
         assert_eq!(s.machine.streaming_mode, Streaming::Synchronous);
-        assert_eq!(s.version, 1);
+        assert_eq!(s.version, VERSION);
+    }
+
+    #[test]
+    fn migration_from_version_1() {
+        let s = Settings::from_toml(
+            "version = 1\n[automation.mcp]\nenabled = true\nallow_machine = true\nallow_laser = true\n",
+        )
+        .unwrap();
+        assert!(s.automation.mcp.enabled && s.automation.mcp.allow_machine);
+        assert_eq!(s.version, VERSION);
+        assert!(!s.to_toml().unwrap().contains("allow_laser"));
+        // without an [automation] table
+        assert_eq!(Settings::from_toml("version = 1").unwrap().version, VERSION);
     }
 
     #[test]

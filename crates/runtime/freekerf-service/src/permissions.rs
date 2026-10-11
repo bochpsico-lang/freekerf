@@ -1,6 +1,6 @@
 //! Who may do what (PLAN §9.5). Every action has a tier; a caller has a baseline
-//! (the highest tier allowed without asking: from the settings for agents and the
-//! Python client, chosen by the app for macros and the user). Above it, the
+//! (the highest tier allowed without asking: from the settings for agents, chosen
+//! by the app for macros and the user). Above it, the
 //! person in front of the app can grant more, for **this run** (a script or an
 //! MCP call), **this session** (until the app closes) or **always** (stored in
 //! `automation.grants`). A macro's grants carry a hash of its code, so editing the
@@ -113,6 +113,37 @@ fn matches(grant: &Grant, caller: &Caller, code_hash: Option<&str>, tier: Tier) 
         && grant.code_hash.as_deref().is_none_or(|h| Some(h) == code_hash)
 }
 
+/// What agents may write (PLAN §9.5): `document.save` only to a new `.fkproj`
+/// file; an existing file is never overwritten. Reading (`document.import`,
+/// `document.open`) is not limited.
+///
+/// # Errors
+/// [`ActionError::Refused`] with the reason.
+pub fn check_agent_files(caller: &Caller, action: &str, params: &Value) -> Result<(), ActionError> {
+    if caller.kind != CallerKind::Agent || action != "document.save" {
+        return Ok(());
+    }
+    let Some(path) = params.get("path").and_then(Value::as_str) else {
+        return Ok(()); // the action reports the missing parameter
+    };
+    let p = std::path::Path::new(path);
+    let is_project = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("fkproj"));
+    if !is_project {
+        return Err(ActionError::Refused(format!(
+            "agents can only save projects (`.fkproj`), not `{path}`"
+        )));
+    }
+    if p.exists() {
+        return Err(ActionError::Refused(format!(
+            "`{path}` exists; agents never overwrite files (choose a new name)"
+        )));
+    }
+    Ok(())
+}
+
 /// The state of the permission system held by the service.
 pub(crate) struct Permissions {
     prompter: Mutex<Arc<dyn Prompter>>,
@@ -148,30 +179,21 @@ impl Service {
         prompter.present() && prompter.confirm_laser(caller, action, params)
     }
 
-    /// The baseline tier of an external caller kind from the settings: agents need
-    /// `automation.mcp.enabled` (`None` when off) and get `edit`, or `machine` /
-    /// `laser` with `allow_machine` / `allow_laser`; the Python client gets `edit`,
-    /// or `machine` with `automation.python.allow_machine`. Other kinds are given
-    /// their tier by the app (`None`).
+    /// The baseline tier of an agent from the settings: `None` while
+    /// `automation.mcp.enabled` is off, else `edit`, or `machine` with
+    /// `allow_machine`. Other kinds are given their tier by the app (`None`).
     #[must_use]
     pub fn baseline(&self, kind: CallerKind) -> Option<Tier> {
         let st = lock(&self.inner.settings);
         match kind {
             CallerKind::Agent => {
                 let mcp = &st.automation.mcp;
-                mcp.enabled.then_some(if mcp.allow_laser {
-                    Tier::Laser
-                } else if mcp.allow_machine {
+                mcp.enabled.then_some(if mcp.allow_machine {
                     Tier::Machine
                 } else {
                     Tier::Edit
                 })
             }
-            CallerKind::PythonClient => Some(if st.automation.python.allow_machine {
-                Tier::Machine
-            } else {
-                Tier::Edit
-            }),
             CallerKind::User | CallerKind::Macro | CallerKind::Test => None,
         }
     }
@@ -195,6 +217,12 @@ impl Service {
             .spec(action)
             .map(|s| s.tier)
             .ok_or_else(|| ActionError::Unknown(action.into()))?;
+        if caller.kind == CallerKind::Agent && tier == Tier::Laser {
+            // no setting or grant lets an agent turn the laser on
+            return Err(ActionError::Refused(format!(
+                "`{action}` can turn the laser on; agents never run laser actions"
+            )));
+        }
         if caller.allows(tier) || run.covers(tier) {
             return Ok(tier);
         }
@@ -305,6 +333,26 @@ impl Service {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agents_save_only_new_projects() {
+        let dir = tempfile::tempdir().unwrap();
+        let agent = Caller::new(CallerKind::Agent, "a", Tier::Edit);
+        let path = |name: &str| serde_json::json!({"path": dir.path().join(name).to_string_lossy()});
+        assert!(check_agent_files(&agent, "document.save", &path("new.fkproj")).is_ok());
+        assert!(check_agent_files(&agent, "document.save", &path("new.FKPROJ")).is_ok());
+        let e = check_agent_files(&agent, "document.save", &path("x.svg")).unwrap_err();
+        assert!(e.to_string().contains("only save projects"));
+        assert!(check_agent_files(&agent, "document.save", &path("noext")).is_err());
+        std::fs::write(dir.path().join("old.fkproj"), "{}").unwrap();
+        let e = check_agent_files(&agent, "document.save", &path("old.fkproj")).unwrap_err();
+        assert!(e.to_string().contains("never overwrite"));
+        // others, other actions, a missing path: not this check's business
+        let user = Caller::user();
+        assert!(check_agent_files(&user, "document.save", &path("old.fkproj")).is_ok());
+        assert!(check_agent_files(&agent, "document.import", &path("old.fkproj")).is_ok());
+        assert!(check_agent_files(&agent, "document.save", &Value::Null).is_ok());
+    }
 
     #[test]
     fn grant_matching() {

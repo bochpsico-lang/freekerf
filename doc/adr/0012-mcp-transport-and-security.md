@@ -24,17 +24,21 @@ connects and what it may do, and which MCP implementation to use.
 - **Token.** Each run of the app writes a random 256-bit token to a user-only file
   (atomically); every client presents it in its hello. It keeps out other users and
   processes that cannot read the user's files.
-- **Identity and tiers.** A client declares a kind (`agent`, `python_client`) and a
-  name, but the tier comes from the **settings**, never from the client:
+- **Identity and tiers.** A client declares a kind (`agent`, the only one today)
+  and a name, but the tier comes from the **settings**, never from the client:
   `automation.mcp.enabled` (off by default: agents are refused at the hello and
-  `freekerf mcp` exits at once), `allow_machine`, `allow_laser`,
-  `automation.python.allow_machine`. Tiers are checked on every dispatch, including
+  `freekerf mcp` exits at once) gives `edit`, `allow_machine` gives `machine`.
+  Tiers are checked on every dispatch, including
   each call inside a script. Grants above the baseline need the person (this run,
   this session, always); agent names can be spoofed, so "always" grants name the
   risk in the dialog (M4a).
-- **Laser.** No grant or setting skips the person's confirmation of a `laser`
-  action; a headless instance refuses them. STOP is always allowed, cancels running
-  scripts first, and is answered while a script runs (requests run concurrently).
+- **Laser.** Agents never run `laser` actions: no setting or grant allows them
+  (2026-10-10; an `allow_laser` setting existed until then). STOP is always
+  allowed, cancels running scripts first, and is answered while a script runs
+  (requests run concurrently).
+- **Files.** Agents read any file the user can (`document.import`, `document.open`)
+  but write only new `.fkproj` projects: `document.save` to another extension or
+  to an existing file is refused with the reason, in scripts and dry runs too.
 - **Implementation.** MCP is written directly over `serde_json` (`freekerf-mcp`):
   newline-delimited JSON-RPC 2.0, protocol versions 2024-11-05 to 2025-11-25,
   tools and resources with subscriptions, synchronous threads like the rest of the
@@ -46,10 +50,11 @@ connects and what it may do, and which MCP implementation to use.
 
 ## Consequences
 
-- An agent can do anything a user can do in the UI, within its tier; a person stays
-  in the loop for every laser action and for anything above the baseline.
+- An agent can do anything a user can do in the UI within its tier, except turning
+  the laser on and overwriting files; a person decides anything above the baseline.
 - A process running as the same user can read the token and connect; it could also
-  read every file of the user, so the endpoint adds no new exposure. The Python
-  client relies on the same model.
+  read every file of the user, so the endpoint adds no new exposure. A future
+  external client (scripting from other languages) would use the same model; a
+  Python client was written and removed in M2 for lack of a need.
 - Following new MCP protocol versions is our job (small: the subset is stable);
   `freekerf-mcp` has no logic of its own to keep in sync with the app.

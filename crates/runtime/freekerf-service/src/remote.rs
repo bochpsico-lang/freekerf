@@ -1,15 +1,15 @@
 //! The service on the local endpoint (`freekerf serve`, PLAN §9.1, §9.4): agents
-//! (through `freekerf mcp`) and the Python client attach to the running instance
-//! and use the same session as everyone else. Protocol: `doc/features/ipc.md`.
+//! (through `freekerf mcp`) attach to the running instance and use the same
+//! session as everyone else. Protocol: `doc/features/ipc.md`.
 //!
-//! * **Hello.** The first line is `{"hello": {"token": "...", "client": "agent" |
-//!   "python_client", "name": "..."}}`. A wrong token is refused; agents are
+//! * **Hello.** The first line is `{"hello": {"token": "...", "client": "agent",
+//!   "name": "..."}}`. A wrong token is refused; agents are
 //!   refused while `automation.mcp.enabled` is off. The caller's tier is its
 //!   baseline from the settings ([`Service::baseline`]), never what it claims.
 //! * **Requests** run on their own threads, so `stop` is answered while a script
 //!   of the same client is still running.
-//! * **Laser** actions need the person's confirmation ([`Service::confirm_laser`]);
-//!   headless, they are refused.
+//! * **Agents** never run laser actions and only save new `.fkproj` files
+//!   ([`crate::permissions::check_agent_files`]).
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -167,12 +167,8 @@ fn handle(service: &Service, token: &str, conn: Connection) {
     }
     let kind = match hello.client.as_str() {
         "agent" => CallerKind::Agent,
-        "python_client" => CallerKind::PythonClient,
         other => {
-            refuse(
-                "unsupported",
-                &format!("unknown client kind `{other}` (agent, python_client)"),
-            );
+            refuse("unsupported", &format!("unknown client kind `{other}` (agent)"));
             return;
         }
     };

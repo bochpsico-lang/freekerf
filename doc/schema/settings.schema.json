@@ -10,12 +10,8 @@
       "default": {
         "grants": [],
         "mcp": {
-          "allow_laser": false,
           "allow_machine": false,
           "enabled": false
-        },
-        "python": {
-          "allow_machine": false
         }
       }
     },
@@ -61,7 +57,7 @@
       "description": "Format version.",
       "type": "integer",
       "format": "uint32",
-      "default": 1,
+      "default": 2,
       "minimum": 0
     }
   },
@@ -109,16 +105,8 @@
           "description": "MCP.",
           "$ref": "#/$defs/McpSettings",
           "default": {
-            "allow_laser": false,
             "allow_machine": false,
             "enabled": false
-          }
-        },
-        "python": {
-          "description": "Python client.",
-          "$ref": "#/$defs/PythonSettings",
-          "default": {
-            "allow_machine": false
           }
         }
       },
@@ -141,11 +129,6 @@
           "description": "An AI agent through MCP.",
           "type": "string",
           "const": "agent"
-        },
-        {
-          "description": "The external Python client.",
-          "type": "string",
-          "const": "python_client"
         },
         {
           "description": "A test harness (`host --stdio`).",
@@ -184,7 +167,7 @@
       "type": "object",
       "properties": {
         "caller": {
-          "description": "Kind of caller (`macro`, `agent`, `python_client`).",
+          "description": "Kind of caller (`macro`, `agent`).",
           "$ref": "#/$defs/CallerKind"
         },
         "code_hash": {
@@ -195,7 +178,7 @@
           ]
         },
         "name": {
-          "description": "Caller name (macro name, MCP client name, Python client name).",
+          "description": "Caller name (macro name, MCP client name).",
           "type": "string"
         },
         "tier": {
@@ -328,30 +311,13 @@
       "description": "MCP server settings (§9 of the plan). Changed only by the user, never by\nactions, scripts or agents.",
       "type": "object",
       "properties": {
-        "allow_laser": {
-          "description": "Agents may request `laser` actions (always confirmed by a human on screen).",
-          "type": "boolean",
-          "default": false
-        },
         "allow_machine": {
-          "description": "Agents may use `machine` actions.",
+          "description": "Agents may use `machine` actions. Agents never get `laser` actions.",
           "type": "boolean",
           "default": false
         },
         "enabled": {
           "description": "MCP server enabled (off by default).",
-          "type": "boolean",
-          "default": false
-        }
-      },
-      "additionalProperties": false
-    },
-    "PythonSettings": {
-      "description": "The Python client (`clients/python`), which talks to the running app over the\nlocal endpoint. Changed only by the user.",
-      "type": "object",
-      "properties": {
-        "allow_machine": {
-          "description": "The Python client may use `machine` actions (its baseline is `edit`).",
           "type": "boolean",
           "default": false
         }
