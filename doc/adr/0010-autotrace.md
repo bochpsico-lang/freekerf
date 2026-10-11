@@ -39,8 +39,12 @@ and then fails on the empty output as "Root element is missing", DIV-048).
 
 - The `centerline` and `svg_text` goldens pass exactly with a double that prints the
   recorded autotrace output; what autotrace itself returns is outside FreeKerf.
-- autotrace must be installed (Linux packages and Homebrew have it) or shipped. How
-  the desktop app ships it per platform (bundled binary, as LaserGRBL does on
-  Windows, or a detected system install) is decided with the installers (M4,
-  `doc/roadmap.md`).
+- The desktop installers bundle an `autotrace` binary on every platform (decided
+  2026-10-10; built in M4, `doc/roadmap.md`); a configured path or the `PATH` still
+  overrides it. Licensing: the program is GPL-2.0-or-later, which is compatible with
+  FreeKerf's GPL-3.0-or-later, and it runs as a separate program, so bundling is
+  aggregation. Each release ships autotrace's license and the corresponding source
+  of the exact binary and of the libraries linked into it (GLib, LGPL-2.1-or-later;
+  libpng): the release CI builds it from a pinned upstream commit, without the
+  optional ImageMagick and pstoedit, and publishes that source with the release.
 - Headless and wasm builds have centerline only when a tracer is provided.
