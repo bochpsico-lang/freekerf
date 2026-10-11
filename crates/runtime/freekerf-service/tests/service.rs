@@ -329,3 +329,219 @@ fn results_are_described_for_the_front_ends() {
     let schema = state.result.as_ref().unwrap();
     assert!(schema["properties"]["machine"].is_object(), "{schema}");
 }
+
+#[test]
+fn view_actions_change_the_view_and_publish_it() {
+    let service = Service::in_memory().unwrap();
+    let events = service.subscribe();
+    let ui = Caller::new(CallerKind::Agent, "agent", Tier::Ui);
+    let v = service.dispatch(&ui, "view.get", json!({})).unwrap();
+    assert_eq!(v["mode"], "produce");
+    service
+        .dispatch(&ui, "view.set_mode", json!({"mode": "design"}))
+        .unwrap();
+    service
+        .dispatch(&ui, "view.set_tool", json!({"tool": "rect"}))
+        .unwrap();
+    assert_eq!(
+        service.dispatch(&ui, "view.get", json!({})).unwrap()["tool"],
+        "rect"
+    );
+    service
+        .dispatch(&ui, "view.show_panel", json!({"panel": "layers"}))
+        .unwrap();
+    service
+        .dispatch(&ui, "view.open_dialog", json!({"dialog": "settings"}))
+        .unwrap();
+    let id = service
+        .dispatch(
+            &ui,
+            "view.toast",
+            json!({"message": "toast.saved", "level": "ok"}),
+        )
+        .unwrap();
+    service
+        .dispatch(
+            &ui,
+            "view.set_viewport",
+            json!({"cx": 10.0, "cy": 5.0, "scale": 3.0}),
+        )
+        .unwrap();
+    service.dispatch(&ui, "view.fit", json!({})).unwrap();
+    let v = service.dispatch(&ui, "view.get", json!({})).unwrap();
+    assert_eq!(v["mode"], "design");
+    assert_eq!(v["panel"], "layers");
+    assert_eq!(v["drawer_open"], true);
+    assert_eq!(v["dialogs"], json!(["settings"]));
+    assert_eq!(v["toasts"][0]["id"], id);
+    assert_eq!(v["viewport"]["scale"], 3.0);
+    assert_eq!(v["fit_request"], 1);
+    service
+        .dispatch(&ui, "view.dismiss_toast", json!({"id": id}))
+        .unwrap();
+    service.dispatch(&ui, "view.close_dialog", json!({})).unwrap();
+    // each change was published
+    let mut views = 0;
+    while let Ok(e) = events.recv_timeout(Duration::from_millis(100)) {
+        if let ServiceEvent::ViewChanged(_) = e {
+            views += 1;
+            assert_eq!(e.to_json()["event"], "view");
+        }
+    }
+    assert_eq!(views, 9);
+    // invalid values are refused, and a read-only caller cannot change the view
+    let bad = service.dispatch(
+        &ui,
+        "view.set_viewport",
+        json!({"cx": 0.0, "cy": 0.0, "scale": 0.0}),
+    );
+    assert!(matches!(bad, Err(ActionError::InvalidParams(_))));
+    let reader = Caller::new(CallerKind::Agent, "reader", Tier::Read);
+    let denied = service.dispatch(&reader, "view.set_mode", json!({"mode": "produce"}));
+    assert!(matches!(denied, Err(ActionError::PermissionDenied { .. })));
+}
+
+#[test]
+fn produce_mode_helpers_frame_info_and_system_commands() {
+    let s = connected();
+    // machine.info: the emulator's $$ table was read on connect
+    let info = call(&s, "machine.info", json!({}));
+    assert_eq!(info["settings_known"], true, "{info}");
+    assert!(info["table_width_mm"].as_f64().unwrap() > 0.0);
+    // system commands only; they need the machine tier, not laser
+    let machine = Caller::new(CallerKind::Agent, "agent", Tier::Machine);
+    s.dispatch(&machine, "machine.system_command", json!({"line": "$I"}))
+        .unwrap();
+    for bad in ["G1 X10 S1000", "M3 S500", "$$\nM3"] {
+        let e = s
+            .dispatch(&machine, "machine.system_command", json!({"line": bad}))
+            .unwrap_err();
+        assert!(matches!(e, ActionError::InvalidParams(_)), "{bad}: {e:?}");
+    }
+    // frame: refused without a drawing, then runs around the drawing range
+    let e = s.dispatch(&machine, "job.frame", json!({})).unwrap_err();
+    assert!(matches!(e, ActionError::Refused(_)), "{e:?}");
+    call(
+        &s,
+        "job.load_text",
+        json!({"name": "sq.nc", "gcode": "G0 X10 Y5\nM3 S800\nG1 X30 F3000\nG1 Y25\nM5\n"}),
+    );
+    s.dispatch(&machine, "job.frame", json!({"feed_mm_min": 6000.0}))
+        .unwrap();
+    // the head visits the corners and ends back at the first one
+    wait_state(
+        &s,
+        |st| {
+            let p = &st["machine"]["work_position"];
+            st["machine"]["status"] == "Idle"
+                && (p["x"].as_f64().unwrap() - 10.0).abs() < 0.01
+                && (p["y"].as_f64().unwrap() - 5.0).abs() < 0.01
+        },
+        20,
+    );
+}
+
+#[test]
+fn laser_actions_run_only_after_a_confirmed_countdown() {
+    let s = connected();
+    let clock = freekerf_testkit::SimClock::new(10_000);
+    s.set_fire_clock(Arc::new(clock.clone()));
+    call(
+        &s,
+        "job.load_text",
+        json!({"name": "sq.nc", "gcode": "G0 X1 Y1\nM3 S500\nG1 X5 F3000\nM5\n"}),
+    );
+    // the window's caller cannot dispatch any laser action itself
+    let window = Caller::new(CallerKind::User, "desktop", Tier::Machine);
+    let laser: Vec<String> = s
+        .specs()
+        .into_iter()
+        .filter(|a| a.tier == Tier::Laser)
+        .map(|a| a.name)
+        .collect();
+    assert_eq!(
+        laser,
+        ["job.resume", "job.run", "machine.custom_code", "machine.send"]
+    );
+    for a in &laser {
+        let e = s.dispatch(&window, a, json!({})).unwrap_err();
+        assert!(matches!(e, ActionError::PermissionDenied { .. }), "{a}: {e:?}");
+    }
+    // it can ask; only laser actions can be asked for
+    let bad = s
+        .dispatch(&window, "fire.request", json!({"action": "machine.home"}))
+        .unwrap_err();
+    assert!(matches!(bad, ActionError::InvalidParams(_)), "{bad:?}");
+    let req = s
+        .dispatch(
+            &window,
+            "fire.request",
+            json!({"action": "job.run", "params": {}}),
+        )
+        .unwrap();
+    let id = req["id"].as_u64().unwrap();
+    assert_eq!(req["countdown_ms"], 3000);
+    assert_eq!(req["summary"]["program"], "sq.nc");
+    let view = call(&s, "view.get", json!({}));
+    assert_eq!(view["fire_request"]["id"], id);
+    assert_eq!(view["dialogs"], json!(["fire_confirmation"]));
+    // too early, wrong id: refused, nothing runs
+    assert!(matches!(s.confirm_fire(id), Err(ActionError::Refused(_))));
+    clock.advance(2999);
+    assert!(matches!(s.confirm_fire(id), Err(ActionError::Refused(_))));
+    assert!(matches!(s.confirm_fire(id + 1), Err(ActionError::Refused(_))));
+    assert_eq!(call(&s, "state.get", json!({}))["machine"]["in_program"], false);
+    // after the countdown the person's confirmation runs it, once
+    clock.advance(1);
+    let events = s.subscribe();
+    s.confirm_fire(id).unwrap();
+    let end = Instant::now() + Duration::from_secs(10);
+    loop {
+        assert!(Instant::now() < end, "the job did not start");
+        if let Ok(ServiceEvent::Machine(MachineEvent::Host(Event::JobStarted { .. }))) =
+            events.recv_timeout(Duration::from_millis(100))
+        {
+            break;
+        }
+    }
+    assert!(matches!(s.confirm_fire(id), Err(ActionError::Refused(_))));
+    let view = call(&s, "view.get", json!({}));
+    assert!(view["fire_request"].is_null());
+    assert_eq!(view["dialogs"], json!([]));
+    wait_state(
+        &s,
+        |st| st["machine"]["in_program"] == false && st["machine"]["status"] == "Idle",
+        20,
+    );
+    // a request can be cancelled (always allowed)
+    let req = s
+        .dispatch(
+            &window,
+            "fire.request",
+            json!({"action": "machine.send", "params": {"line": "M3 S10"}}),
+        )
+        .unwrap();
+    assert_eq!(req["summary"]["code"], "M3 S10");
+    let reader = Caller::new(CallerKind::Agent, "reader", Tier::Read);
+    s.dispatch(&reader, "fire.cancel", json!({})).unwrap();
+    clock.advance(10_000);
+    assert!(matches!(
+        s.confirm_fire(req["id"].as_u64().unwrap()),
+        Err(ActionError::Refused(_))
+    ));
+    // closing its dialog cancels it too
+    let req = s
+        .dispatch(
+            &window,
+            "fire.request",
+            json!({"action": "job.run", "params": {}}),
+        )
+        .unwrap();
+    call(&s, "view.close_dialog", json!({}));
+    clock.advance(10_000);
+    assert!(matches!(
+        s.confirm_fire(req["id"].as_u64().unwrap()),
+        Err(ActionError::Refused(_))
+    ));
+    assert!(call(&s, "view.get", json!({}))["fire_request"].is_null());
+}

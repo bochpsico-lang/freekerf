@@ -9,7 +9,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p tests/e2e",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -17,17 +17,25 @@
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "licenses": "node scripts/check-licenses.mjs",
-    "check:bundle": "node scripts/check-bundle.mjs"
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "test:web": "playwright test",
+    "test:e2e": "wdio run tests/e2e/wdio.conf.ts"
   },
   "dependencies": {
+    "@fluent/bundle": "^0.19.1",
     "@tauri-apps/api": "^2.12.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@testing-library/svelte": "^5.4.2",
     "@types/node": "^24.19.1",
     "@vitest/coverage-v8": "^5.0.3",
+    "@wdio/cli": "^10.0.2",
+    "@wdio/local-runner": "^10.0.2",
+    "@wdio/mocha-framework": "^10.0.1",
+    "@wdio/spec-reporter": "^10.0.1",
     "eslint": "^10.12.0",
     "eslint-plugin-svelte": "^3.23.0",
     "globals": "^17.13.0",

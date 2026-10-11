@@ -32,3 +32,37 @@ and `freekerf analyze --json`, and checks that every field of the analysis is eq
 `analyze --json` also simulates the whole job run for its `stream` field, which is most
 of its time. Mono on Linux is not .NET Framework on Windows: take the C# column as an
 order of magnitude. Both give identical results on 100,003 lines.
+
+## Canvas (desktop app, M4a)
+
+PLAN M4a acceptance: **20,000 paths + an 8000×6000 image, ≥ 50 fps while panning
+with the mouse, on Linux** (WebKitGTK). The check runs inside the real app window:
+
+```bash
+cd ui/web && npm ci && npm run build && cd ../..
+cargo build --release -p freekerf-desktop --features custom-protocol
+target/release/freekerf-desktop --bench-canvas=canvas.json   # exit code 0 when ≥ 50 fps
+# diagnostics: --bench-query="paths=0&image=16x16" (empty scene), "zooms=1,4,16", "ms=10000"
+```
+
+It builds 20,000 closed paths of 12–48 segments (598,722 segments) and an
+8000×6000 ordered-dither image (12 tiles of ≤ 2048²), then drags with the middle
+button through the canvas' own pointer handlers (synthetic `PointerEvent`s),
+back and forth over 120 % of the view width, for 6 s at the "fit" zoom and at 4×.
+The drag leaves the cached area, so whole-scene redraws are part of the numbers
+(`scene_redraws`). Frame times are `requestAnimationFrame` intervals. Renderer:
+[ADR 0012](adr/0012-canvas-renderer.md).
+
+| Date | Machine | Case | Mean fps (1× / 4×) | 1 % low | Worst frame | CPU/frame | Peak RSS (app) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-08 | 4 vCPU Xeon @ 2.8 GHz cloud container, **no GPU**: Xvfb + Mesa llvmpipe (software), WebKitGTK 2.52, 1280×800 | full scene, long drags (5 scene redraws per phase) | 18.3 / 20.7 | 2.2 / 3.0 | 452 ms | 17 / 12 ms | 157 MiB |
+| 2026-10-08 | same | full scene, drags inside the cached area (no redraw) | 26.4 / 24.6 | 19.6 / 17.9 | 56 ms | 1.2 ms | 156 MiB |
+| 2026-10-08 | same | **empty scene** (`paths=0&image=16x16`): ceiling of the software compositor | 24.0 / 24.7 | — | — | — | — |
+| — | **real Linux hardware with a GPU** | full scene (acceptance) | *pending: run the command above* | | | | |
+
+Reading the software numbers: an empty scene pans at about the same 24–25 fps as the
+full one inside the cache, so on llvmpipe the limit is WebKitGTK's software compositing of a 1280×800
+canvas, not the renderer (≈1 ms of CPU per cached frame). A whole-scene redraw of
+600k segments + 12 tiles costs ~300–450 ms in software and happens once every half
+view of panning; on a GPU it is a single instanced draw per batch. The acceptance
+number has to come from a machine with a GPU (CI runners have none).

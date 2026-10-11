@@ -6,6 +6,7 @@ import svelte from 'eslint-plugin-svelte';
 import globals from 'globals';
 import ts from 'typescript-eslint';
 
+import freekerf from './eslint-rules/index.js';
 import svelteConfig from './svelte.config.js';
 
 const tauriOutsideIpc = {
@@ -40,6 +41,21 @@ export default ts.config(
     files: ['src/**/*.{ts,svelte}'],
     ignores: ['src/ipc/**', 'src/dev/**', 'src/**/*.test.ts'],
     rules: { 'no-restricted-imports': ['error', { patterns: [tauriOutsideIpc, devOutsideDev] }] },
+  },
+  {
+    // dispatch-only: app state is read-only outside src/state (and the fake service)
+    files: ['src/**/*.{ts,svelte}'],
+    ignores: ['src/state/**', 'src/dev/**', 'src/**/*.test.ts'],
+    plugins: { freekerf },
+    rules: {
+      'freekerf/no-app-state-mutation': 'error',
+      'no-restricted-globals': [
+        'error',
+        { name: 'localStorage', message: 'App state lives in Rust: use settings or view actions.' },
+        { name: 'sessionStorage', message: 'App state lives in Rust: use settings or view actions.' },
+        { name: 'indexedDB', message: 'App state lives in Rust: use settings or view actions.' },
+      ],
+    },
   },
   {
     files: ['src/ipc/**/*.ts'],

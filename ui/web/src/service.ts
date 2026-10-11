@@ -3,6 +3,7 @@
 // implementations exist: `ipc/tauri.ts` (the desktop app) and `dev/fake-service.ts`
 // (browser development and component tests; never in production builds).
 
+import type { DocumentService } from './contract/document';
 import type { ActionError, ActionName, ActionSpec, Actions, EventMessage } from './gen/api';
 
 /** Parameters of an action. */
@@ -39,4 +40,22 @@ export interface AppService {
   catalog(): Promise<ActionSpec[]>;
   /** Service events from now on; returns the unsubscribe function. */
   subscribe(listener: (event: EventMessage) => void): () => void;
+  /**
+   * Tool path of the loaded program, raw (`canvas/toolpath.ts`, format "FKTP");
+   * empty when no program is loaded.
+   */
+  toolpath(): Promise<ArrayBuffer>;
+  /** Head frames (raw, 24 bytes, up to 60 Hz while they change); returns the unsubscribe function. */
+  subscribeHead(listener: (frame: ArrayBuffer) => void): () => void;
+  /**
+   * The person pressed "Fire laser": runs the pending laser request `id` if its
+   * countdown is over. The only way the window runs a `laser` action (PLAN §9.5);
+   * not an action of the registry, so scripts and agents cannot confirm.
+   */
+  confirmFire(id: number): Promise<unknown>;
+  /**
+   * The Design mode document (doc/features/ui-contract.md). Absent until M2
+   * implements it (M4b): the Design mode is then hidden.
+   */
+  readonly document?: DocumentService;
 }

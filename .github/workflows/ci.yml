@@ -50,6 +50,10 @@ jobs:
           path: design
       - name: tokens, icons and fonts match freekerf/design
         run: cargo xtask sync-tokens --design design --check
+      - name: LaserGRBL translations (ui/i18n/*/lasergrbl.ftl) match the pinned commit
+        run: |
+          git clone --quiet --filter=blob:none --no-checkout https://github.com/arkypita/LaserGRBL lasergrbl
+          cargo xtask resx2ftl --lasergrbl lasergrbl --check
       - name: rustdoc
         run: cargo doc --workspace --no-deps
         env:
@@ -147,6 +151,13 @@ jobs:
       - run: npm run check
       - name: unit and component tests with coverage
         run: npm run coverage
+      - name: coverage in the job summary
+        run: |
+          node -e "const t=require('./coverage/coverage-summary.json').total;console.log('| ui/web (Vitest) | lines | statements | functions | branches |\n|---|---|---|---|---|\n| total | '+['lines','statements','functions','branches'].map(k=>t[k].pct+' %').join(' | ')+' |')" >> "$GITHUB_STEP_SUMMARY"
+      - name: web tests in Chromium (long strings in German, three layouts)
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:web
       - run: npm run build
       - name: the fake service is not in the production bundle
         run: npm run check:bundle
@@ -158,8 +169,8 @@ jobs:
           path: ui/web/coverage/
 
   desktop:
-    # the Tauri app: clippy, tests, release build with the embedded front end and a
-    # smoke run on a virtual display
+    # the Tauri app: clippy, tests, build with the embedded front end, a smoke run
+    # on a virtual display and the end-to-end tests (emulator, never a serial port)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -186,6 +197,18 @@ jobs:
           xvfb-run -a sh -c 'timeout 15 target/debug/freekerf-desktop; echo $? > "$FREEKERF_HOME/exit-code"' || true
           code="$(cat "$FREEKERF_HOME/exit-code")"
           test "$code" -eq 124 || { echo "the app exited with $code (124 = still running after 15 s)"; exit 1; }
+      - name: the canvas benchmark runs (small scene; CI has no GPU, so the fps is not checked)
+        run: |
+          export FREEKERF_HOME="$(mktemp -d)"
+          xvfb-run -a timeout 120 target/debug/freekerf-desktop --bench-canvas=bench.json \
+            --bench-query="paths=500&image=512x384&ms=1000" || true
+          jq -e '.phases | length == 2' bench.json
+          cat bench.json
+      - name: end-to-end tests of the app on the emulator (WebdriverIO + tauri-driver)
+        run: |
+          cargo install tauri-driver --version 2.1.0 --locked
+          cd ui/web
+          xvfb-run -a npm run test:e2e
 
   conformance:
     # conformance's protocol and golden (G-code) layers against the Rust build
