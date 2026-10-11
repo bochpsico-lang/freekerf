@@ -28,6 +28,10 @@ pub fn run() {
             commands::confirm_fire,
             commands::preview,
             commands::document_geometry,
+            commands::answer_permission,
+            commands::set_user_setting,
+            commands::revoke_grants,
+            commands::cancel_scripts,
             commands::subscribe_head,
             commands::bench_report
         ])
@@ -51,7 +55,8 @@ pub fn run() {
 pub mod commands {
     use std::time::Duration;
 
-    use freekerf_service::{ActionError, ActionSpec};
+    use freekerf_service::permissions::GrantScope;
+    use freekerf_service::{ActionError, ActionSpec, CallerKind};
     use serde_json::Value;
     use tauri::ipc::{Channel, InvokeResponseBody, Response};
 
@@ -105,6 +110,44 @@ pub mod commands {
     #[allow(clippy::needless_pass_by_value)]
     pub fn preview(bridge: tauri::State<'_, Bridge>) -> Response {
         Response::new(bridge.preview().map(|p| p.as_ref().clone()).unwrap_or_default())
+    }
+
+    /// The person's answer to a permission request of a script or an agent
+    /// (`scope`: `run`, `session`, `always`; none: denied). Not an action of the
+    /// registry: scripts and agents cannot answer for the person.
+    #[tauri::command]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn answer_permission(bridge: tauri::State<'_, Bridge>, id: u64, scope: Option<GrantScope>) -> bool {
+        bridge.answer_permission(id, scope)
+    }
+
+    /// Changes a setting as the person, user-only ones included (Automation, Safety).
+    #[tauri::command]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn set_user_setting(
+        bridge: tauri::State<'_, Bridge>,
+        key: String,
+        value: Value,
+    ) -> Result<(), ActionError> {
+        bridge.set_user_setting(&key, value)
+    }
+
+    /// Revokes the grants of a macro or an agent.
+    #[tauri::command]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn revoke_grants(
+        bridge: tauri::State<'_, Bridge>,
+        kind: CallerKind,
+        name: String,
+    ) -> Result<usize, ActionError> {
+        bridge.revoke(kind, &name)
+    }
+
+    /// Stops every running script (the person's Cancel).
+    #[tauri::command]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn cancel_scripts(bridge: tauri::State<'_, Bridge>) {
+        bridge.cancel_scripts();
     }
 
     /// The document's drawable geometry as raw bytes (the Design mode canvas).

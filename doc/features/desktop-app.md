@@ -27,6 +27,11 @@ for the Design mode screens until M2 lands.
 | `confirm_fire(id)` | the Fire laser button: runs the pending laser request after its countdown ([fire-confirmation.md](fire-confirmation.md)) |
 | `preview()` | the tool path of the loaded program, raw bytes ([canvas.md](canvas.md)) |
 | `subscribe_head(frames)` | head frames, raw 24 bytes, up to 60 Hz ([canvas.md](canvas.md)) |
+| `document_geometry()` | the document's drawable geometry, raw bytes ([canvas.md](canvas.md)) |
+| `answer_permission(id, scope)` | the person's answer to a permission request of a script or an agent (`run`, `session`, `always`, or none: denied) |
+| `set_user_setting(key, value)` | changes a setting as the person, `automation.*` and `safety.*` included |
+| `revoke_grants(kind, name)` | revokes a macro's or an agent's session and "always" grants |
+| `cancel_scripts()` | stops every running script |
 | `bench_report(report)` | only with `--bench-canvas`: prints the canvas benchmark and exits |
 
 - The window calls as `{kind: user, name: "desktop", max_tier: machine}`. Actions
@@ -34,6 +39,16 @@ for the Design mode screens until M2 lands.
   are refused; they run only through the fire confirmation (`fire.request`, then
   `confirm_fire` after the countdown).
 - STOP (`machine.stop`) and the other `safety` actions are always allowed.
+- **Automation.** The app has a person in front of it: it installs the window
+  prompter (`Service::install_window_prompter`), so a script or an agent asking
+  for more than its tier waits for the person's answer in the permission dialog
+  (denied after two minutes); and it serves the local endpoint, so `freekerf mcp`
+  attaches to it (agents are refused while MCP is off). The top bar shows the
+  agents attached and the running script (with Cancel); Settings → Automation
+  turns MCP on and off, lists the grants (revoke) and the recent actions of
+  scripts and agents (`automation.status`, `automation.grants`, `automation.log`,
+  `automation` events). The person-only commands above are not actions: no script
+  or agent can answer for the person or change these settings.
 - No Tauri plugin is enabled and the capability file grants nothing: the web view
   has no file system, shell or network access of its own. The content security
   policy only allows the app's own resources and the IPC.

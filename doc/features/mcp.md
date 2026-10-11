@@ -23,7 +23,8 @@ actions never add tools (PLAN §9, [ADR 0012](../adr/0012-mcp-transport-and-secu
 
    Other agents take the same command (`"command": "freekerf", "args": ["mcp"]`).
 
-`freekerf mcp` **attaches** to the running FreeKerf, or **starts** a headless one
+`freekerf mcp` **attaches** to the running FreeKerf (the desktop app serves the
+endpoint while it runs, and asks the person there), or **starts** a headless one
 (`freekerf serve --headless`, which exits after 60 s without clients; `--idle-exit`)
 and attaches to it. While MCP is disabled it exits at once with a message saying how
 to enable it, and a running instance refuses agents.
@@ -67,6 +68,9 @@ every 500 ms).
   refused with the reason (in scripts and dry runs too).
 - `automation.*` settings and grants cannot be changed by scripts or agents.
 - STOP is always allowed and cancels scripts first.
+- What agents and scripts do is visible: `automation.status` (agents attached,
+  scripts running, requests waiting), `automation.log` (their last 500 actions,
+  refusals included) and `automation` events; the desktop app shows them.
 
 ## Tests
 

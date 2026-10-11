@@ -6,6 +6,11 @@
 import type {
   ActionName,
   ActionSpec,
+  AutomationStatus,
+  CallerKind,
+  GrantEntry,
+  GrantScope,
+  LogEntry,
   EventMessage,
   MachineStatus,
   Settings,
@@ -155,6 +160,10 @@ export class FakeService implements AppService {
       return this.state.program;
     },
     'view.get': () => structuredClone(this.view),
+    'automation.status': () => structuredClone(this.automation),
+    'automation.log': (p) =>
+      this.automationLog.filter((e) => e.seq > ((p as Params<'automation.log'>)?.after ?? 0)),
+    'automation.grants': () => structuredClone(this.grants),
     'session.snapshot': () => this.document.snapshot(structuredClone(this.view), this.revision),
     'view.set_mode': (p) =>
       this.changeView((v) => {
@@ -326,6 +335,43 @@ export class FakeService implements AppService {
       v.fire_request = null;
       v.dialogs = v.dialogs.filter((d) => d !== 'fire_confirmation');
     });
+  }
+
+  /** Automation as the fake has it (tests change it and call `emitAutomation`). */
+  automation: AutomationStatus = { agents: [], scripts: [], requests: [] };
+  automationLog: LogEntry[] = [];
+  grants: GrantEntry[] = [];
+  /** Answers given to permission requests (tests). */
+  readonly answers: { id: number; scope: GrantScope | null }[] = [];
+  scriptsCancelled = 0;
+
+  /** Tells the subscribers that automation changed. */
+  emitAutomation(): void {
+    this.emit({ event: 'automation', data: { kind: 'status' } });
+  }
+
+  async answerPermission(id: number, scope: GrantScope | null): Promise<boolean> {
+    const had = this.automation.requests.some((r) => r.id === id);
+    this.answers.push({ id, scope });
+    this.automation.requests = this.automation.requests.filter((r) => r.id !== id);
+    this.emitAutomation();
+    return had;
+  }
+
+  async setUserSetting(key: string, value: unknown): Promise<void> {
+    this.handlers['settings.set']!({ key, value });
+  }
+
+  async revokeGrants(kind: CallerKind, name: string): Promise<number> {
+    const before = this.grants.length;
+    this.grants = this.grants.filter((g) => !(g.caller === kind && g.name === name));
+    return before - this.grants.length;
+  }
+
+  async cancelScripts(): Promise<void> {
+    this.scriptsCancelled++;
+    this.automation.scripts = [];
+    this.emitAutomation();
   }
 
   async documentGeometry(): Promise<ArrayBuffer> {

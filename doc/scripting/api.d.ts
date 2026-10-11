@@ -1,6 +1,27 @@
 // FreeKerf script API. Generated from the action registry by `cargo xtask gen-docs`. Do not edit.
 // Every method dispatches one action; the caller's tier is checked on every call.
 
+interface AppAutomation {
+  /**
+   * The permissions the person gave scripts and agents for this session or always (revoked only by the person, in the app).
+   *
+   * Action `automation.grants`, tier `read`.
+   */
+  grants(params?: Record<string, unknown>): unknown;
+  /**
+   * The actions scripts and agents ran or were refused, oldest first (the last 500; `after` skips the entries up to that number).
+   *
+   * Action `automation.log`, tier `read`.
+   */
+  log(params?: { after?: number | null }): unknown;
+  /**
+   * Agents attached to the local endpoint, scripts running, permission requests waiting for the person.
+   *
+   * Action `automation.status`, tier `read`.
+   */
+  status(params?: Record<string, unknown>): unknown;
+}
+
 interface AppConsole {
   /**
    * Console rows (sent commands, answers, messages).
@@ -546,6 +567,7 @@ interface AppView {
 
 /** The application: one namespace per action prefix. */
 declare const app: {
+  readonly automation: AppAutomation;
   readonly console: AppConsole;
   readonly document: AppDocument;
   readonly fire: AppFire;

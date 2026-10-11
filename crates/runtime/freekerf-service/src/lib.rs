@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub mod analysis;
+pub mod automation;
 pub mod autotrace;
 pub mod import_case;
 pub mod migrate;
@@ -57,6 +58,8 @@ pub enum ServiceEvent {
     ProgramLoaded,
     /// The session (document, selection, view, history) changed.
     Session(SessionEvent),
+    /// Agents, scripts, their actions and permission requests.
+    Automation(automation::AutomationEvent),
 }
 
 /// A [`ServiceEvent`] as front ends receive it (JSON, tagged by `event`).
@@ -90,6 +93,11 @@ pub enum EventMessage {
         /// What changed.
         change: Change,
     },
+    /// Agents, scripts, their actions and permission requests.
+    Automation {
+        /// What happened.
+        data: automation::AutomationEvent,
+    },
 }
 
 impl ServiceEvent {
@@ -114,6 +122,7 @@ impl ServiceEvent {
                 revision: e.revision,
                 change: e.change,
             },
+            Self::Automation(e) => EventMessage::Automation { data: e.clone() },
         }
     }
 
@@ -268,6 +277,8 @@ pub struct Inner {
     scripts: Mutex<Vec<Arc<std::sync::atomic::AtomicBool>>>,
     /// Who answers permission requests, and the session grants.
     permissions: permissions::Permissions,
+    /// Agents, scripts, the action log, permission requests.
+    automation: Mutex<automation::State>,
 }
 
 impl SessionHost for Inner {
@@ -349,6 +360,7 @@ impl Service {
             session: Mutex::new(Session::new()),
             scripts: Mutex::new(Vec::new()),
             permissions: permissions::Permissions::default(),
+            automation: Mutex::new(automation::State::default()),
         });
         start_collector(&inner);
         Ok(Self {
@@ -376,6 +388,8 @@ impl Service {
         permissions::check_agent_laser(caller, action)?;
         let r = self.registry.dispatch(&self.inner, caller, action, params);
         self.inner.publish_session_events();
+        self.inner
+            .log_action(caller, action, r.as_ref().err().map(ToString::to_string));
         r
     }
 
@@ -424,6 +438,38 @@ impl Service {
     pub fn document_geometry(&self) -> Vec<u8> {
         let doc = lock(&self.inner.session).document().clone();
         preview::encode_document(&doc)
+    }
+
+    /// Marks this app as having a person in front of it: permission requests of
+    /// scripts and agents wait for their answer ([`Service::answer_permission`],
+    /// [`automation::AutomationEvent::PermissionRequested`]) up to `timeout`, then
+    /// count as denied.
+    pub fn install_window_prompter(&self, timeout: Duration) {
+        self.set_prompter(Arc::new(automation::WindowPrompter::new(
+            Arc::downgrade(&self.inner),
+            timeout,
+        )));
+    }
+
+    /// The person's answer to a permission request (`None`: denied). Not an action:
+    /// only a front end with a person calls it. Returns `false` when the request is
+    /// no longer waiting.
+    pub fn answer_permission(&self, id: u64, scope: Option<permissions::GrantScope>) -> bool {
+        self.inner.answer_permission(id, scope)
+    }
+
+    /// Changes a user-only setting (`automation.*`, `safety.*`) or any other, as the
+    /// person: not an action, so scripts and agents cannot reach it.
+    ///
+    /// # Errors
+    /// Unknown key, invalid value, or the file cannot be saved.
+    pub fn set_user_setting(&self, key: &str, value: Value) -> Result<(), ActionError> {
+        lock(&self.inner.settings)
+            .set(key, value, true)
+            .map_err(|e| ActionError::InvalidParams(e.to_string()))?;
+        self.inner.save_settings()?;
+        self.inner.publish(&ServiceEvent::SettingsChanged);
+        Ok(())
     }
 
     /// Runs the pending laser request `id` after the person confirmed it on screen
@@ -836,6 +882,15 @@ struct ImportedFile {
     objects: Vec<u64>,
 }
 
+/// `automation.log`.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct LogParams {
+    /// Only the entries after this `seq`.
+    #[serde(default)]
+    after: Option<u64>,
+}
+
 /// `migrate.detect`.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -1046,6 +1101,26 @@ fn build_registry() -> Registry<Inner> {
             s.publish(&ServiceEvent::SettingsChanged);
             Ok(())
         },
+    ));
+
+    // ---- automation (what scripts and agents do)
+    add(r.register(
+        "automation.status",
+        "Agents attached to the local endpoint, scripts running, permission requests waiting for the person.",
+        Tier::Read,
+        |s: &Inner, _: NoParams| Ok(s.automation_status()),
+    ));
+    add(r.register(
+        "automation.grants",
+        "The permissions the person gave scripts and agents for this session or always (revoked only by the person, in the app).",
+        Tier::Read,
+        |s: &Inner, _: NoParams| Ok(s.grant_entries()),
+    ));
+    add(r.register(
+        "automation.log",
+        "The actions scripts and agents ran or were refused, oldest first (the last 500; `after` skips the entries up to that number).",
+        Tier::Read,
+        |s: &Inner, p: LogParams| Ok(s.automation_log(p.after.unwrap_or(0))),
     ));
 
     // ---- LaserGRBL migration (the welcome flow)

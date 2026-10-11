@@ -1,9 +1,10 @@
 <script lang="ts">
   // Settings (PLAN §14: the UI never reads settings.toml; it reads `settings.get`
-  // and writes with `settings.set`). Safety and automation are user-only: shown
-  // here read-only (`freekerf config set` changes them; editable in the app in M4b).
+  // and writes with `settings.set`). Safety and automation are user-only: the
+  // window changes them as the person (`setUserSetting`, not an action), and shows
+  // the permissions given and the recent actions of scripts and agents.
   import { app } from '../context';
-  import type { Settings } from '../gen/api';
+  import type { GrantEntry, LogEntry, Settings } from '../gen/api';
   import { completeness, LOCALES, localeName, t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
   import DialogFrame from './DialogFrame.svelte';
@@ -19,6 +20,22 @@
   const s = $derived<Settings>(settings.settings ?? {});
   const m = $derived(s.machine ?? {});
   const num = (e: Event) => Number((e.currentTarget as HTMLInputElement).value);
+  const setUser = (key: string, value: unknown) => run(() => service.setUserSetting(key, value));
+  let grants: GrantEntry[] = $state([]);
+  let log: LogEntry[] = $state([]);
+  async function loadAutomation() {
+    grants = await service.dispatch('automation.grants', {});
+    log = (await service.dispatch('automation.log', {})).slice(-50).reverse();
+  }
+  $effect(() => {
+    if (tab === 'automation') void run(loadAutomation);
+  });
+  async function revoke(g: GrantEntry) {
+    await run(async () => {
+      await service.revokeGrants(g.caller, g.name);
+      await loadAutomation();
+    });
+  }
 </script>
 
 <DialogFrame title={t('settings-title')} testid="dialog-settings" {onclose}>
@@ -182,19 +199,61 @@
     <p class="hint">{t('settings-jobHint')}</p>
   {:else if tab === 'safety'}
     <div class="form-grid" data-testid="settings-safety">
-      <span>{t('settings-countdown')}</span>
-      <b class="mono">{s.safety?.fire_countdown_s ?? 3} s</b>
+      <label for="countdown">{t('settings-countdown')}</label>
+      <input
+        id="countdown"
+        type="number"
+        min="1"
+        max="10"
+        data-testid="settings-countdown"
+        value={s.safety?.fire_countdown_s ?? 3}
+        onchange={(e) => setUser('safety.fire_countdown_s', Math.round(num(e)))}
+      />
     </div>
     <p class="hint">{t('settings-userOnly')}</p>
   {:else}
     <div class="form-grid" data-testid="settings-automation">
-      <span>{t('settings-mcp')}</span>
-      <b>{t(s.automation?.mcp?.enabled ? 'settings-on' : 'settings-off')}</b>
-      <span>{t('settings-mcpMachine')}</span>
-      <b>{t(s.automation?.mcp?.allow_machine ? 'settings-on' : 'settings-off')}</b>
+      <label for="mcp-on">{t('settings-mcp')}</label>
+      <input
+        id="mcp-on"
+        type="checkbox"
+        data-testid="settings-mcp"
+        checked={s.automation?.mcp?.enabled ?? false}
+        onchange={(e) => setUser('automation.mcp.enabled', e.currentTarget.checked)}
+      />
+      <label for="mcp-machine">{t('settings-mcpMachine')}</label>
+      <input
+        id="mcp-machine"
+        type="checkbox"
+        data-testid="settings-mcp-machine"
+        disabled={!s.automation?.mcp?.enabled}
+        checked={s.automation?.mcp?.allow_machine ?? false}
+        onchange={(e) => setUser('automation.mcp.allow_machine', e.currentTarget.checked)}
+      />
     </div>
     <p class="hint">{t('settings-automationNote')}</p>
     <p class="hint">{t('settings-userOnly')}</p>
+    <h3 class="mini">{t('settings-grants')}</h3>
+    <ul class="auto-list" data-testid="settings-grants">
+      {#each grants as g (`${g.scope}-${g.caller}-${g.name}-${g.tier}`)}
+        <li>
+          <span>{g.name} · {g.tier} · {t(`perm-${g.scope}`)}</span>
+          <button class="btn" onclick={() => revoke(g)}>{t('settings-revoke')}</button>
+        </li>
+      {:else}
+        <li class="hint">{t('settings-grantsNone')}</li>
+      {/each}
+    </ul>
+    <h3 class="mini">{t('settings-log')}</h3>
+    <ul class="auto-list mono" data-testid="settings-log">
+      {#each log as e (e.seq)}
+        <li class:err={!!e.error} title={e.error ?? ''}>
+          {e.actor.name}: {e.action}{e.error ? ` (${t('settings-refused')})` : ''}
+        </li>
+      {:else}
+        <li class="hint">{t('settings-logNone')}</li>
+      {/each}
+    </ul>
   {/if}
 
   {#snippet footer()}
@@ -211,6 +270,23 @@
 </DialogFrame>
 
 <style>
+  .auto-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--fk-space-1);
+    max-height: 180px;
+    overflow: auto;
+  }
+  .auto-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--fk-space-2);
+  }
+  .auto-list li.err {
+    color: var(--fk-color-danger, #e5484d);
+  }
   .settings-tabs {
     align-self: flex-start;
   }

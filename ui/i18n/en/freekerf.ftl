@@ -267,7 +267,7 @@ settings-passes = Between passes
 settings-footer = Footer
 settings-jobHint = G-code sent before the job, between passes and after it. [expr] is evaluated; !, ~, ?, ctrl-x and 0xNN are sent at once.
 settings-countdown = Countdown before "Fire laser"
-settings-userOnly = Only you can change this, with `freekerf config set` (scripts and agents cannot).
+settings-userOnly = Only you can change this, here or with `freekerf config set`: scripts and agents cannot.
 settings-mcp = AI agents (MCP server)
 settings-mcpMachine = Agents may move the machine
 settings-on = On
@@ -461,3 +461,25 @@ mtest-cell = Cell size
 mtest-cells = { $n } cells, each on a layer of its own. Labels are engraved at low power.
 mtest-go = Draw the test
 mtest-done = Material test drawn: { $n } cells.
+
+## automation
+perm-title = Permission
+perm-agent = The agent “{ $name }” wants to run { $action }.
+perm-macro = The macro “{ $name }” wants to run { $action }.
+perm-tier = It needs the “{ $tier }” permission. Laser actions are never granted here.
+perm-deny = Deny
+perm-run = This time
+perm-session = Until I close the app
+perm-always = Always
+auto-agents = { $n ->
+    [one] Agent connected
+   *[other] { $n } agents connected
+}
+auto-script = Running: { $name }
+auto-cancel = Cancel the script
+settings-grants = Permissions given
+settings-grantsNone = None.
+settings-revoke = Revoke
+settings-log = Recent actions of scripts and agents
+settings-logNone = Nothing yet.
+settings-refused = refused

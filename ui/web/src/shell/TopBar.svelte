@@ -5,7 +5,9 @@
   import EStop from './EStop.svelte';
   import StateChip from './StateChip.svelte';
 
-  const { machine, view, run, service, env } = app();
+  const { machine, view, run, service, env, automation } = app();
+  const agents = $derived(automation.status.agents.length);
+  const script = $derived(automation.status.scripts[0] ?? null);
   const connected = $derived(machine.visual !== 'offline');
 </script>
 
@@ -51,6 +53,22 @@
     </button>
   </div>
   <div class="top-spacer"></div>
+  {#if agents}
+    <span class="auto-chip" data-testid="agents-chip" title={automation.status.agents.join(', ')}
+      ><Icon name="sparkle" /><span>{t('auto-agents', { n: agents })}</span></span
+    >
+  {/if}
+  {#if script}
+    <span class="auto-chip" data-testid="script-chip"
+      ><Icon name="clock" /><span>{t('auto-script', { name: script.name })}</span><button
+        class="icon-btn"
+        title={t('auto-cancel')}
+        aria-label={t('auto-cancel')}
+        data-testid="script-cancel"
+        onclick={() => run(() => service.cancelScripts())}><Icon name="close" /></button
+      ></span
+    >
+  {/if}
   <StateChip />
   <button
     class="btn"
@@ -78,3 +96,16 @@
   </button>
   <EStop />
 </header>
+
+<style>
+  .auto-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--fk-space-1);
+    padding: 0 var(--fk-space-2);
+    border-radius: var(--fk-radius-md);
+    background: color-mix(in srgb, var(--fk-color-accent) 18%, transparent);
+    font-size: var(--fk-font-size-sm);
+    white-space: nowrap;
+  }
+</style>

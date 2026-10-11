@@ -21,7 +21,7 @@ use sha2::{Digest, Sha256};
 use crate::{Service, lock};
 
 /// How long a grant lasts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GrantScope {
     /// Until the current script or MCP call finishes.
@@ -87,8 +87,8 @@ impl RunGrants {
     }
 }
 
-/// A grant and its scope (`Service::grants`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// A grant and its scope (`Service::grants`, `automation.grants`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct GrantEntry {
     /// Scope.
     pub scope: GrantScope,
@@ -226,6 +226,21 @@ impl Service {
         run: &RunGrants,
         prompt: bool,
     ) -> Result<Tier, ActionError> {
+        let r = self.authorize_inner(caller, code_hash, action, run, prompt);
+        if let Err(e) = &r {
+            self.inner.log_action(caller, action, Some(e.to_string()));
+        }
+        r
+    }
+
+    fn authorize_inner(
+        &self,
+        caller: &Caller,
+        code_hash: Option<&str>,
+        action: &str,
+        run: &RunGrants,
+        prompt: bool,
+    ) -> Result<Tier, ActionError> {
         let tier = self
             .registry
             .spec(action)
@@ -303,19 +318,7 @@ impl Service {
     /// The session and "always" grants (user-only: not an action).
     #[must_use]
     pub fn grants(&self) -> Vec<GrantEntry> {
-        let session = lock(&self.inner.permissions.session).clone();
-        let always = lock(&self.inner.settings).automation.grants.clone();
-        session
-            .into_iter()
-            .map(|grant| GrantEntry {
-                scope: GrantScope::Session,
-                grant,
-            })
-            .chain(always.into_iter().map(|grant| GrantEntry {
-                scope: GrantScope::Always,
-                grant,
-            }))
-            .collect()
+        self.inner.grant_entries()
     }
 
     /// Revokes every session and "always" grant of a caller at once (user-only:
@@ -342,6 +345,24 @@ impl Service {
             self.inner.save_settings()?;
         }
         Ok(removed + always)
+    }
+}
+
+impl crate::Inner {
+    pub(crate) fn grant_entries(&self) -> Vec<GrantEntry> {
+        let session = lock(&self.permissions.session).clone();
+        let always = lock(&self.settings).automation.grants.clone();
+        session
+            .into_iter()
+            .map(|grant| GrantEntry {
+                scope: GrantScope::Session,
+                grant,
+            })
+            .chain(always.into_iter().map(|grant| GrantEntry {
+                scope: GrantScope::Always,
+                grant,
+            }))
+            .collect()
     }
 }
 

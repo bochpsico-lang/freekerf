@@ -3,7 +3,15 @@
 // implementations exist: `ipc/tauri.ts` (the desktop app) and `dev/fake-service.ts`
 // (browser development and component tests; never in production builds).
 
-import type { ActionError, ActionName, ActionSpec, Actions, EventMessage } from './gen/api';
+import type {
+  ActionError,
+  ActionName,
+  ActionSpec,
+  Actions,
+  CallerKind,
+  EventMessage,
+  GrantScope,
+} from './gen/api';
 
 /** Parameters of an action. */
 export type Params<A extends ActionName> = Actions[A]['params'];
@@ -57,4 +65,15 @@ export interface AppService {
    * index and `command` = object index; doc/features/canvas.md).
    */
   documentGeometry(): Promise<ArrayBuffer>;
+  /**
+   * The person's answer to a permission request of a script or an agent (`null`:
+   * denied). Like `confirmFire`, not an action: scripts and agents cannot answer.
+   */
+  answerPermission(id: number, scope: GrantScope | null): Promise<boolean>;
+  /** Changes a setting as the person, user-only ones (`automation.*`, `safety.*`) included. */
+  setUserSetting(key: string, value: unknown): Promise<void>;
+  /** Revokes the session and "always" grants of a macro or an agent. */
+  revokeGrants(kind: CallerKind, name: string): Promise<number>;
+  /** Stops every running script (the person's Cancel). */
+  cancelScripts(): Promise<void>;
 }

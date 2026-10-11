@@ -2,6 +2,14 @@
 // Changing a Rust type? Run `cargo xtask gen-ts` (CI checks committed == generated).
 /* eslint-disable */
 
+/** Who did something. */
+export type Actor = {
+  /** Macro or agent. */
+  kind: CallerKind;
+  /** Its name. */
+  name: string;
+};
+
 export type AddLayerParams = {
   /** Colour, `#RRGGBB`. */
   color: Color;
@@ -105,12 +113,35 @@ export type AutoCoolingSettings = {
   on_s?: number;
 };
 
+/** What changed in automation. */
+export type AutomationEvent = {
+  kind: "status";
+} | {
+  kind: "permission_requested";
+  /** The request. */
+  request: PendingPermission;
+} | {
+  /** The log entry. */
+  entry: LogEntry;
+  kind: "logged";
+};
+
 /** Automation (scripts and agents). */
 export type AutomationSettings = {
   /** Permissions granted "always" (revoked by removing them). */
   grants?: Grant[];
   /** MCP. */
   mcp?: McpSettings;
+};
+
+/** Agents, scripts and pending requests (`automation.status`). */
+export type AutomationStatus = {
+  /** Agents attached to the local endpoint, by name. */
+  agents: string[];
+  /** Permission requests waiting for the person. */
+  requests: PendingPermission[];
+  /** Scripts running. */
+  scripts: RunningScript[];
 };
 
 /** Operations of `document.boolean`. */
@@ -451,6 +482,23 @@ export type Grant = {
   /** Highest tier granted. */
   tier: Tier;
 };
+
+/** A grant and its scope (`Service::grants`, `automation.grants`). */
+export type GrantEntry = {
+  /** Kind of caller (`macro`, `agent`). */
+  caller: CallerKind;
+  /** Macros: hash of the code; editing the macro invalidates the grant. */
+  code_hash?: string | null;
+  /** Caller name (macro name, MCP client name). */
+  name: string;
+  /** Scope. */
+  scope: GrantScope;
+  /** Highest tier granted. */
+  tier: Tier;
+};
+
+/** How long a grant lasts. */
+export type GrantScope = "run" | "session" | "always";
 
 /** Grey conversion formula (`ImageTransform.Formula`). */
 export type GrayFormula = "simple_average" | "weight_average" | "optical_correct" | "custom";
@@ -835,6 +883,24 @@ export type LoadTextParams = {
   name: string;
 };
 
+/** An action of a script or an agent. */
+export type LogEntry = {
+  /** The action. */
+  action: string;
+  /** Who. */
+  actor: Actor;
+  /** Why it failed or was refused; none when it ran. */
+  error?: string | null;
+  /** Grows with every entry. */
+  seq: number;
+};
+
+/** `automation.log`. */
+export type LogParams = {
+  /** Only the entries after this `seq`. */
+  after?: number | null;
+};
+
 /** Result of `machine.info`: what the board told about itself. */
 export type MachineInfo = {
   /** Homing enabled (`$22`). */
@@ -1097,6 +1163,18 @@ export type Path = {
   start: Point;
 };
 
+/** A permission request waiting for the person. */
+export type PendingPermission = {
+  /** The action it wants to run. */
+  action: string;
+  /** Who asks. */
+  actor: Actor;
+  /** Id of the request (answer with it). */
+  id: number;
+  /** The tier the action needs. */
+  tier: Tier;
+};
+
 /** A point (or a vector) with `f64` coordinates. */
 export type Point = {
   /** X. */
@@ -1218,6 +1296,16 @@ export type RunParams = {
   homing?: boolean;
   /** Number of passes (default 1). */
   passes?: number | null;
+};
+
+/** A script running now. */
+export type RunningScript = {
+  /** Who runs it. */
+  actor: Actor;
+  /** Id of the run. */
+  id: number;
+  /** The script's name. */
+  name: string;
 };
 
 /**
@@ -1659,6 +1747,10 @@ export type EventMessage = {
   event: "session";
   /** Revision after the change. */
   revision: number;
+} | {
+  /** What happened. */
+  data: AutomationEvent;
+  event: "automation";
 };
 
 /** The whole settings file. */
@@ -1683,6 +1775,24 @@ export type Settings = {
 
 /** Every action: parameters, result and tier. */
 export interface Actions {
+  /** The permissions the person gave scripts and agents for this session or always (revoked only by the person, in the app). */
+  "automation.grants": {
+    params: NoParams;
+    result: GrantEntry[];
+    tier: "read";
+  };
+  /** The actions scripts and agents ran or were refused, oldest first (the last 500; `after` skips the entries up to that number). */
+  "automation.log": {
+    params: LogParams;
+    result: LogEntry[];
+    tier: "read";
+  };
+  /** Agents attached to the local endpoint, scripts running, permission requests waiting for the person. */
+  "automation.status": {
+    params: NoParams;
+    result: AutomationStatus;
+    tier: "read";
+  };
   /** Console rows (sent commands, answers, messages). */
   "console.get": {
     params: ConsoleParams;
@@ -2200,6 +2310,9 @@ export type ActionName = keyof Actions;
 
 /** Tier of each action, for the front end (the Rust side checks it again). */
 export const ACTION_TIERS = {
+  "automation.grants": "read",
+  "automation.log": "read",
+  "automation.status": "read",
   "console.get": "read",
   "document.add_layer": "edit",
   "document.add_shape": "edit",

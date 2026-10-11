@@ -6,6 +6,9 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 
 | Action | Tier | Description |
 | --- | --- | --- |
+| `automation.grants` | read | The permissions the person gave scripts and agents for this session or always (revoked only by the person, in the app). |
+| `automation.log` | read | The actions scripts and agents ran or were refused, oldest first (the last 500; `after` skips the entries up to that number). |
+| `automation.status` | read | Agents attached to the local endpoint, scripts running, permission requests waiting for the person. |
 | `console.get` | read | Console rows (sent commands, answers, messages). |
 | `document.add_layer` | edit | Adds a layer of a colour (line, 1000 mm/min, power 1000, 1 pass unless given). One undo step. |
 | `document.add_shape` | edit | Draws a rectangle or an ellipse on a layer (default: the current layer) and selects it. One undo step. |
@@ -93,6 +96,26 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `view.toast` | ui | Shows a short message (at most 3 at once); returns its id. |
 
 ## Parameters
+
+### `automation.grants`
+
+The permissions the person gave scripts and agents for this session or always (revoked only by the person, in the app).
+
+No parameters.
+
+### `automation.log`
+
+The actions scripts and agents ran or were refused, oldest first (the last 500; `after` skips the entries up to that number).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `after` | no | Only the entries after this `seq`. |
+
+### `automation.status`
+
+Agents attached to the local endpoint, scripts running, permission requests waiting for the person.
+
+No parameters.
 
 ### `console.get`
 

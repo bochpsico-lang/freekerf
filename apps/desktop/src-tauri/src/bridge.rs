@@ -4,7 +4,10 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use freekerf_service::automation::PERMISSION_TIMEOUT;
+use freekerf_service::permissions::GrantScope;
 use freekerf_service::preview::{HEAD_FRAME_BYTES, head_frame};
+use freekerf_service::remote::{ServeOptions, endpoint, serve};
 use freekerf_service::{ActionError, ActionSpec, Caller, CallerKind, Service, Stores, Tier};
 use serde_json::Value;
 
@@ -33,7 +36,62 @@ impl Bridge {
     pub fn from_env() -> Result<Self, String> {
         let home = std::env::var_os("FREEKERF_HOME").map(std::path::PathBuf::from);
         let stores = Stores::files(home.as_deref())?;
-        Service::new(stores).map(Self::new).map_err(|e| e.to_string())
+        let bridge = Service::new(stores).map(Self::new).map_err(|e| e.to_string())?;
+        // a person is here: scripts and agents ask them in the window
+        bridge.service.install_window_prompter(PERMISSION_TIMEOUT);
+        bridge.serve_endpoint(home.as_deref());
+        Ok(bridge)
+    }
+
+    /// Serves the local endpoint (agents through `freekerf mcp`, PLAN §9.6) on a
+    /// thread; agents are refused while MCP is off in the settings. Another running
+    /// instance keeps the endpoint (logged).
+    fn serve_endpoint(&self, home: Option<&std::path::Path>) {
+        let endpoint = match endpoint(home) {
+            Ok(e) => e,
+            Err(e) => {
+                tracing::warn!("no local endpoint: {e}");
+                return;
+            }
+        };
+        let service = self.service.clone();
+        let spawned = thread::Builder::new()
+            .name("freekerf-endpoint".into())
+            .spawn(move || {
+                if let Err(e) = serve(&service, &endpoint, ServeOptions::default()) {
+                    tracing::warn!("local endpoint not served: {e}");
+                }
+            });
+        if let Err(e) = spawned {
+            tracing::warn!("no local endpoint: {e}");
+        }
+    }
+
+    /// The person's answer to a permission request (`None`: denied).
+    #[must_use]
+    pub fn answer_permission(&self, id: u64, scope: Option<GrantScope>) -> bool {
+        self.service.answer_permission(id, scope)
+    }
+
+    /// Changes a setting as the person (also `automation.*` and `safety.*`).
+    ///
+    /// # Errors
+    /// Unknown key, invalid value, or the file cannot be saved.
+    pub fn set_user_setting(&self, key: &str, value: Value) -> Result<(), ActionError> {
+        self.service.set_user_setting(key, value)
+    }
+
+    /// Revokes the session and "always" grants of a macro or an agent.
+    ///
+    /// # Errors
+    /// The settings file cannot be saved.
+    pub fn revoke(&self, kind: CallerKind, name: &str) -> Result<usize, ActionError> {
+        self.service.revoke(kind, name)
+    }
+
+    /// Stops every running script at once (the person's Cancel).
+    pub fn cancel_scripts(&self) {
+        self.service.cancel_scripts();
     }
 
     /// Runs an action.

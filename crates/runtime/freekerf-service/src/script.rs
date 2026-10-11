@@ -216,11 +216,13 @@ impl Service {
     pub fn run_script(&self, caller: &Caller, request: &ScriptRequest) -> ScriptReport {
         let cancel = Arc::new(AtomicBool::new(false));
         lock(&self.inner.scripts).push(Arc::clone(&cancel));
+        let run = self.inner.script_started(caller, &request.name);
         let report = if request.dry_run {
             self.dry_run(caller, request, &cancel)
         } else {
             self.live_run(caller, request, &cancel)
         };
+        self.inner.script_ended(run);
         lock(&self.inner.scripts).retain(|c| !Arc::ptr_eq(c, &cancel));
         report
     }

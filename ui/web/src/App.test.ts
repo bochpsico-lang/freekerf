@@ -114,7 +114,7 @@ describe('layouts', () => {
 });
 
 describe('settings dialog', () => {
-  it('changes the language through settings.set and shows user-only settings read-only', async () => {
+  it('changes the language through settings.set; user-only settings only as the person', async () => {
     const { service } = await mountApp();
     await service.dispatch('view.open_dialog', { name: 'settings' });
     await screen.findByTestId('dialog-settings');
@@ -122,10 +122,19 @@ describe('settings dialog', () => {
     await waitFor(() => expect(document.documentElement.lang).toBe('pt-BR'));
     expect(service.settings.ui?.language).toBe('pt-BR');
     expect(screen.getByTestId('state-chip').textContent).toContain('Desconectada');
+    // safety and automation: never through settings.set (an action scripts could use)
     await fireEvent.click(screen.getByTestId('settings-tab-safety'));
-    expect(screen.getByTestId('settings-safety').querySelector('input')).toBeNull();
+    await fireEvent.change(screen.getByTestId('settings-countdown'), { target: { value: '5' } });
     await fireEvent.click(screen.getByTestId('settings-tab-automation'));
-    expect(screen.getByTestId('settings-automation').querySelector('input')).toBeNull();
+    await fireEvent.click(screen.getByTestId('settings-mcp'));
+    await waitFor(() => expect(service.settings.automation?.mcp?.enabled).toBe(true));
+    expect(service.settings.safety?.fire_countdown_s).toBe(5);
+    expect(
+      service.calls.some(
+        (c) =>
+          c.action === 'settings.set' && /^(safety|automation)\./.test((c.params as { key: string }).key),
+      ),
+    ).toBe(false);
     await fireEvent.click(screen.getByTestId('settings-tab-machine'));
     await fireEvent.change(screen.getByLabelText('Velocidade (baud)'), { target: { value: '250000' } });
     expect(

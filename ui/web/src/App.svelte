@@ -29,7 +29,9 @@
   import ToolRail from './shell/ToolRail.svelte';
   import TopBar from './shell/TopBar.svelte';
   import { resolveDensity, type Environment } from './state/environment.svelte';
+  import type { AutomationProjection } from './state/automation.svelte';
   import type { ConsoleProjection } from './state/console.svelte';
+  import PermissionDialog from './shell/PermissionDialog.svelte';
   import type { DocumentProjection } from './state/document.svelte';
   import type { MachineState } from './state/machine.svelte';
   import type { PreviewState } from './state/preview.svelte';
@@ -45,6 +47,7 @@
     env,
     console: consoleRows,
     doc,
+    automation,
   }: {
     service: AppService;
     machine: MachineState;
@@ -54,6 +57,7 @@
     env: Environment;
     console: ConsoleProjection;
     doc: DocumentProjection;
+    automation: AutomationProjection;
   } = $props();
 
   /** Laser actions only ask: the app opens the fire confirmation (PLAN §9.5). */
@@ -81,6 +85,7 @@
     env,
     console: consoleRows,
     doc,
+    automation,
     run,
     laser,
   };
@@ -267,6 +272,7 @@
   }}
 />
 <Toasts />
+{#if automation.request}<PermissionDialog request={automation.request} />{/if}
 
 {#snippet machinePanel()}
   <MachinePanel />

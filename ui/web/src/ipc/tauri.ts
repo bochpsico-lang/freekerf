@@ -3,7 +3,7 @@
 
 import { Channel, invoke } from '@tauri-apps/api/core';
 
-import type { ActionError, ActionName, ActionSpec, EventMessage } from '../gen/api';
+import type { ActionError, ActionName, ActionSpec, CallerKind, EventMessage, GrantScope } from '../gen/api';
 import { ActionFailure, type AppService, type Params, type Result } from '../service';
 
 function isActionError(e: unknown): e is ActionError {
@@ -54,6 +54,27 @@ export class TauriService implements AppService {
 
   async toolpath(): Promise<ArrayBuffer> {
     return toArrayBuffer(await invoke<ArrayBuffer | number[]>('preview'));
+  }
+
+  answerPermission(id: number, scope: GrantScope | null): Promise<boolean> {
+    return invoke<boolean>('answer_permission', { id, scope });
+  }
+
+  async setUserSetting(key: string, value: unknown): Promise<void> {
+    try {
+      await invoke('set_user_setting', { key, value });
+    } catch (e) {
+      if (isActionError(e)) throw new ActionFailure('settings', e);
+      throw e;
+    }
+  }
+
+  revokeGrants(kind: CallerKind, name: string): Promise<number> {
+    return invoke<number>('revoke_grants', { kind, name });
+  }
+
+  cancelScripts(): Promise<void> {
+    return invoke('cancel_scripts');
   }
 
   async documentGeometry(): Promise<ArrayBuffer> {

@@ -193,6 +193,7 @@ fn handle(service: &Service, token: &str, conn: Connection) {
     if writer.send(&welcome).is_err() {
         return;
     }
+    service.inner.agent_attached(&caller.name);
     let closed = Arc::new(AtomicBool::new(false));
     while let Ok(Some(msg)) = reader.read() {
         if msg.get("bye").is_some() {
@@ -219,6 +220,7 @@ fn handle(service: &Service, token: &str, conn: Connection) {
         }
     }
     closed.store(true, Ordering::SeqCst);
+    service.inner.agent_detached(&caller.name);
     tracing::info!(client = %caller.name, "client detached");
 }
 

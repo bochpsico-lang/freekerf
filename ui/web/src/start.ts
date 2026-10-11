@@ -3,6 +3,7 @@ import { mount } from 'svelte';
 import App from './App.svelte';
 import type { BenchReport } from './canvas/bench';
 import type { AppService } from './service';
+import { AutomationProjection } from './state/automation.svelte';
 import { ConsoleProjection } from './state/console.svelte';
 import { DocumentProjection } from './state/document.svelte';
 import { Environment } from './state/environment.svelte';
@@ -22,6 +23,7 @@ export function projections(service: AppService) {
     settings: new SettingsProjection(service),
     env: new Environment(),
     console: new ConsoleProjection(service),
+    automation: new AutomationProjection(service),
     doc: new DocumentProjection(service),
   };
 }
@@ -37,6 +39,7 @@ export function start(service: AppService): void {
     props.settings.refresh(),
     props.preview.reload(),
     props.doc.refresh(),
+    props.automation.refresh(),
   ]);
   mount(App, { target, props });
 }

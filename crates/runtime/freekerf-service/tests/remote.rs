@@ -264,13 +264,38 @@ fn stop_cancels_a_script_of_the_same_client() {
             json!({"code": "app.view.setMode({mode: 'produce'}); while (true) {}"}),
         )
     });
-    // the script has started when its view change arrives
-    let ev = c.events().recv_timeout(Duration::from_secs(5)).unwrap();
-    assert_eq!(ev["event"]["change"], "view");
+    // the script has started when its view change arrives (automation events,
+    // its start and the log, come too)
+    let mut kinds = Vec::new();
+    loop {
+        let ev = c.events().recv_timeout(Duration::from_secs(5)).unwrap();
+        if ev["event"]["change"] == "view" {
+            break;
+        }
+        kinds.push(ev["event"]["event"].as_str().unwrap_or("").to_owned());
+    }
+    assert!(
+        kinds.iter().all(|k| k == "automation" || k == "session"),
+        "{kinds:?}"
+    );
     c.call("stop", Value::Null).unwrap();
     let r = script.join().unwrap().unwrap();
     assert_eq!(r["error"], "script stopped: cancelled");
     assert_eq!(r["rolled_back"], true);
+    // the agent is listed while attached, and its script's actions are logged
+    let status = c
+        .call("dispatch", json!({"action": "automation.status"}))
+        .unwrap();
+    assert_eq!(status["agents"].as_array().unwrap().len(), 1, "{status}");
+    assert_eq!(status["scripts"], json!([]));
+    let log = c.call("dispatch", json!({"action": "automation.log"})).unwrap();
+    assert!(
+        log.as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["action"] == "view.set_mode"),
+        "{log}"
+    );
 }
 
 #[test]

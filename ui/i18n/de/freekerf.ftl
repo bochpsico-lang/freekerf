@@ -267,7 +267,7 @@ settings-passes = Zwischen den Durchgängen
 settings-footer = Fußzeilen-Code
 settings-jobHint = G-Code, der vor dem Auftrag, zwischen den Durchgängen und danach gesendet wird. [expr] wird ausgewertet; !, ~, ?, ctrl-x und 0xNN werden sofort gesendet.
 settings-countdown = Countdown vor „Laser auslösen“
-settings-userOnly = Nur Sie können das ändern, mit `freekerf config set` (Skripte und Agenten nicht).
+settings-userOnly = Nur Sie können das ändern, hier oder mit `freekerf config set`: Skripte und Agenten nicht.
 settings-mcp = KI-Agenten (MCP-Server)
 settings-mcpMachine = Agenten dürfen die Maschine bewegen
 settings-on = Ein
@@ -461,3 +461,25 @@ mtest-cell = Zellengröße
 mtest-cells = { $n } Zellen, jede auf einer eigenen Ebene. Die Beschriftung wird mit geringer Leistung graviert.
 mtest-go = Test zeichnen
 mtest-done = Materialtest gezeichnet: { $n } Zellen.
+
+## automation
+perm-title = Berechtigung
+perm-agent = Der Agent „{ $name }“ möchte { $action } ausführen.
+perm-macro = Das Makro „{ $name }“ möchte { $action } ausführen.
+perm-tier = Dafür ist die Berechtigung „{ $tier }“ nötig. Laseraktionen werden hier nie erlaubt.
+perm-deny = Ablehnen
+perm-run = Dieses Mal
+perm-session = Bis ich die App schließe
+perm-always = Immer
+auto-agents = { $n ->
+    [one] Agent verbunden
+   *[other] { $n } Agenten verbunden
+}
+auto-script = Läuft: { $name }
+auto-cancel = Skript abbrechen
+settings-grants = Erteilte Berechtigungen
+settings-grantsNone = Keine.
+settings-revoke = Widerrufen
+settings-log = Letzte Aktionen von Skripten und Agenten
+settings-logNone = Noch nichts.
+settings-refused = abgelehnt

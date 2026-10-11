@@ -5,6 +5,7 @@ import { getContext, setContext } from 'svelte';
 
 import type { Actions } from './gen/api';
 import type { AppService } from './service';
+import type { AutomationProjection } from './state/automation.svelte';
 import type { ConsoleProjection } from './state/console.svelte';
 import type { DocumentProjection } from './state/document.svelte';
 import type { Environment } from './state/environment.svelte';
@@ -21,6 +22,8 @@ export interface AppContext {
   settings: SettingsProjection;
   env: Environment;
   console: ConsoleProjection;
+  /** Agents, scripts and permission requests. */
+  automation: AutomationProjection;
   /** The Design mode document. */
   doc: DocumentProjection;
   /**
