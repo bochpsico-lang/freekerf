@@ -231,11 +231,11 @@ interface AppJob {
    */
   frame(params?: { feed_mm_min?: number | null }): unknown;
   /**
-   * Plans the document (vectors, then images; centerline uses the `autotrace` program) and loads it as the job.
+   * Plans the document (vectors, then images; centerline uses the `autotrace` program) and loads it as the job, placed by `start` (absolute coordinates, the head's current position, or the user origin 0,0) and `anchor` (which point of the job's box goes there).
    *
    * Action `job.from_document`, tier `edit`.
    */
-  fromDocument(params?: Record<string, unknown>): unknown;
+  fromDocument(params?: { anchor?: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; start?: "absolute" | "current_position" | "user_origin" }): unknown;
   /**
    * The loaded program (name, lines, estimated time, range).
    *

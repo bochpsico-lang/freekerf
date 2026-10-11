@@ -797,6 +797,31 @@ pub struct SettingsGetParams {
     pub key: Option<String>,
 }
 
+/// Where a job made from the document starts (design/ux.md flow 3).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum JobStart {
+    /// The document's own coordinates (default).
+    #[default]
+    Absolute,
+    /// The anchor at the head's current position.
+    CurrentPosition,
+    /// The anchor at the user origin (work 0,0, `machine.set_zero`).
+    UserOrigin,
+}
+
+/// `job.from_document`.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct FromDocumentParams {
+    /// Where the job starts (default: absolute).
+    #[serde(default)]
+    start: JobStart,
+    /// Which point of the job's box goes to the start point (not used when absolute).
+    #[serde(default)]
+    anchor: freekerf_planner::origin::Anchor,
+}
+
 /// The file of `document.open` and `document.save`.
 #[derive(Debug, Serialize, JsonSchema)]
 struct FilePath {
@@ -1320,10 +1345,26 @@ fn build_registry() -> Registry<Inner> {
     ));
     add(r.register(
         "job.from_document",
-        "Plans the document (vectors, then images; centerline uses the `autotrace` program) and loads it as the job.",
+        "Plans the document (vectors, then images; centerline uses the `autotrace` program) and loads it as the job, placed by `start` (absolute coordinates, the head's current position, or the user origin 0,0) and `anchor` (which point of the job's box goes there).",
         Tier::Edit,
-        |s: &Inner, _: NoParams| {
-            let doc = lock(&s.session).document().clone();
+        |s: &Inner, p: FromDocumentParams| {
+            let mut doc = lock(&s.session).document().clone();
+            let at = match p.start {
+                JobStart::Absolute => None,
+                JobStart::UserOrigin => Some((0.0, 0.0)),
+                JobStart::CurrentPosition => {
+                    let m = s.machine.snapshot();
+                    if !m.connected {
+                        return Err(ActionError::Refused(
+                            "starting at the current position needs a connected machine".into(),
+                        ));
+                    }
+                    Some((f64::from(m.work_position.x), f64::from(m.work_position.y)))
+                }
+            };
+            if let Some(at) = at {
+                freekerf_planner::origin::place(&mut doc, p.anchor, at);
+            }
             let tracer = autotrace::ExternalAutotrace::default();
             let job = freekerf_planner::plan_with(&doc, &s.planner_options(), Some(&tracer))
                 .map_err(|e| ActionError::Failed(e.to_string()))?;

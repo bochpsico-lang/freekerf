@@ -34,6 +34,25 @@ describe('Produce mode', () => {
     await waitFor(() => expect(screen.getByTestId('program-name').textContent).toContain('part.nc'));
   });
 
+  it('makes the job from the design, placed by the job start and the anchor', async () => {
+    const { service, props } = await mountConnected();
+    await service.dispatch('view.set_mode', { mode: 'produce' });
+    expect(screen.queryByTestId('design-job')).toBeNull();
+    await service.dispatch('document.add_shape', { shape: 'rect', x: 0, y: 0, width: 20, height: 10 });
+    await props.doc.refresh();
+    const box = await screen.findByTestId('design-job');
+    const center = box.querySelector<HTMLButtonElement>('[data-anchor="center"]')!;
+    expect(center.disabled).toBe(true); // absolute: no anchor
+    await fireEvent.click(box.querySelector('[data-start="user_origin"]')!);
+    await waitFor(() => expect(center.disabled).toBe(false));
+    await fireEvent.click(center);
+    await fireEvent.click(screen.getByTestId('design-job-go'));
+    await waitFor(() => expect(service.lastJobPlacement).toEqual({ start: 'user_origin', anchor: 'center' }));
+    await props.machine.refresh();
+    await waitFor(() => expect(screen.getByTestId('program-name').textContent).toContain('document'));
+    expect(screen.getByTestId('job-estimate').textContent).not.toBe('—');
+  });
+
   it('jogs one step per press with the selected step', async () => {
     const { service } = await mountConnected();
     const n = screen.getByTestId('jogpad').querySelector('[data-jog="N"]')!;

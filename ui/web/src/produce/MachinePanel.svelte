@@ -4,6 +4,7 @@
   // Machine-tier actions are dispatched directly; anything that can fire the laser
   // goes through `laser()` (fire confirmation).
   import { app } from '../context';
+  import type { Anchor, JobStart } from '../gen/api';
   import type { IconName } from '../gen/icons';
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
@@ -11,12 +12,28 @@
   import { JOG_STEPS, progress } from './job';
   import JogPad from './JogPad.svelte';
 
-  const { machine, preview, settings, service, run, laser } = app();
+  const { machine, preview, settings, service, run, laser, doc } = app();
   const EMULATOR = '__emulator__';
 
   let ports: string[] = $state([]);
   let port = $state(EMULATOR);
   let fileInput: HTMLInputElement;
+  /** How the job made from the design is placed: local choices of the panel. */
+  let start: JobStart = $state('absolute');
+  let anchor: Anchor = $state('bottom_left');
+  const STARTS: JobStart[] = ['absolute', 'current_position', 'user_origin'];
+  /** The 3×3 grid, top row first. */
+  const ANCHORS: Anchor[] = [
+    'top_left',
+    'top',
+    'top_right',
+    'left',
+    'center',
+    'right',
+    'bottom_left',
+    'bottom',
+    'bottom_right',
+  ];
 
   const m = $derived(machine.state?.machine);
   const connected = $derived(!!m?.connected);
@@ -130,6 +147,41 @@
         onchange={openFile}
       />
     </div>
+    {#if doc.objects.length}
+      <!-- the job from the design: where it starts and which point goes there -->
+      <div class="design-job" data-testid="design-job">
+        <span class="mini">{t('job-start')}</span>
+        <div class="seg" role="radiogroup" aria-label={t('job-start')}>
+          {#each STARTS as s (s)}
+            <button role="radio" aria-checked={start === s} data-start={s} onclick={() => (start = s)}
+              >{t(`job-start-${s}`)}</button
+            >
+          {/each}
+        </div>
+        <div class="anchor-row">
+          <div class="anchor-grid" role="radiogroup" aria-label={t('job-anchor')}>
+            {#each ANCHORS as a (a)}
+              <button
+                class="anchor"
+                role="radio"
+                aria-checked={anchor === a}
+                aria-label={t(`job-anchor-${a}`)}
+                title={t(`job-anchor-${a}`)}
+                data-anchor={a}
+                disabled={start === 'absolute'}
+                onclick={() => (anchor = a)}
+              ></button>
+            {/each}
+          </div>
+          <button
+            class="btn"
+            data-testid="design-job-go"
+            onclick={() => run(() => service.dispatch('job.from_document', { start, anchor }))}
+            ><Icon name="output" /><span>{t('job-design-go')}</span></button
+          >
+        </div>
+      </div>
+    {/if}
     <div
       class="progress"
       role="progressbar"
@@ -338,6 +390,35 @@
 </div>
 
 <style>
+  .design-job {
+    display: grid;
+    gap: var(--fk-space-2);
+  }
+  .anchor-row {
+    display: flex;
+    align-items: center;
+    gap: var(--fk-space-3);
+  }
+  .anchor-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 14px);
+    gap: 3px;
+  }
+  .anchor {
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: 1px solid var(--fk-color-border-strong);
+    border-radius: 2px;
+    background: transparent;
+  }
+  .anchor[aria-checked='true'] {
+    background: var(--fk-color-accent);
+    border-color: var(--fk-color-accent);
+  }
+  .anchor:disabled {
+    opacity: 0.4;
+  }
   .file-row {
     display: flex;
     align-items: center;

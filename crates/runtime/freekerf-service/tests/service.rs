@@ -369,6 +369,26 @@ fn document_session_actions_and_events() {
         s.dispatch(&user, "job.info", Value::Null).unwrap()["name"],
         "document"
     );
+    // placed with its centre on the user origin
+    let centred = s
+        .dispatch(
+            &user,
+            "job.from_document",
+            json!({"start": "user_origin", "anchor": "center"}),
+        )
+        .unwrap();
+    let r: [f64; 4] = serde_json::from_value(centred["drawing_range"].clone()).unwrap();
+    assert!((r[0] + r[2]).abs() < 0.01 && (r[1] + r[3]).abs() < 0.01, "{r:?}");
+    let absolute: [f64; 4] = serde_json::from_value(info["drawing_range"].clone()).unwrap();
+    assert!(
+        (absolute[0] - r[0]).abs() > 0.5,
+        "absolute keeps the document's place"
+    );
+    // the current position needs a machine
+    assert!(
+        s.dispatch(&user, "job.from_document", json!({"start": "current_position"}))
+            .is_err()
+    );
     // errors
     assert!(
         s.dispatch(&user, "document.open", json!({"path": "/no/such.fkproj"}))

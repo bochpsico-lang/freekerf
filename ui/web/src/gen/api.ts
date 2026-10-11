@@ -81,6 +81,9 @@ export type AlignParams = {
   ids?: number[] | null;
 };
 
+/** A point of the job's bounding box (the 3×3 anchor). */
+export type Anchor = "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right";
+
 export type ArrayParams = {
   /** Columns (at least 1). */
   columns: number;
@@ -426,6 +429,14 @@ export type FrameParams = {
   feed_mm_min?: number | null;
 };
 
+/** `job.from_document`. */
+export type FromDocumentParams = {
+  /** Which point of the job's box goes to the start point (not used when absolute). */
+  anchor?: Anchor;
+  /** Where the job starts (default: absolute). */
+  start?: JobStart;
+};
+
 /**
  * A permission granted by the user with the scope "always" (PLAN §9.5): `caller`
  * named `name` may use actions up to `tier` without asking.
@@ -666,6 +677,9 @@ export type JobSettings = {
   /** Between passes. */
   passes?: string;
 };
+
+/** Where a job made from the document starts (design/ux.md flow 3). */
+export type JobStart = "absolute" | "current_position" | "user_origin";
 
 /** `machine.jog`. */
 export type JogParams = {
@@ -1806,9 +1820,9 @@ export interface Actions {
     result: null;
     tier: "machine";
   };
-  /** Plans the document (vectors, then images; centerline uses the `autotrace` program) and loads it as the job. */
+  /** Plans the document (vectors, then images; centerline uses the `autotrace` program) and loads it as the job, placed by `start` (absolute coordinates, the head's current position, or the user origin 0,0) and `anchor` (which point of the job's box goes there). */
   "job.from_document": {
-    params: NoParams;
+    params: FromDocumentParams;
     result: ProgramInfo;
     tier: "edit";
   };

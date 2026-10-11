@@ -102,6 +102,8 @@ export class FakeService implements AppService {
   };
   private nextToast = 1;
   private revision = 0;
+  /** How the last `job.from_document` was placed (tests). */
+  lastJobPlacement: { start: string; anchor: string } | null = null;
   /** Tool path returned by `toolpath()` (set by `job.load_text`, or by tests). */
   toolpathSegments: SegmentRecord[] = [];
   private handlers: Partial<Record<ActionName, Handler>> = {
@@ -125,6 +127,27 @@ export class FakeService implements AppService {
         name,
         lines,
         estimated_ms: lines * 100,
+        drawing_range: [0, 0, 50, 50],
+        quadrant: 'Q1',
+      };
+      this.emit({ event: 'program_loaded' });
+      return this.state.program;
+    },
+    'job.from_document': (p) => {
+      // a stand-in for the planner: the document's outlines as the tool path
+      const { start, anchor } = (p ?? {}) as Params<'job.from_document'>;
+      const t = new DataView(this.document.geometry());
+      const n = t.getUint32(8, true);
+      this.toolpathSegments = Array.from({ length: n }, (_, i) => {
+        const at = 40 + i * 24;
+        const f = (k: number) => t.getFloat32(at + k * 4, true);
+        return { from: [f(0), f(1)], to: [f(2), f(3)], power: 1000, command: i } as SegmentRecord;
+      });
+      this.lastJobPlacement = { start: start ?? 'absolute', anchor: anchor ?? 'bottom_left' };
+      this.state.program = {
+        name: 'document',
+        lines: n + 4,
+        estimated_ms: n * 250,
         drawing_range: [0, 0, 50, 50],
         quadrant: 'Q1',
       };

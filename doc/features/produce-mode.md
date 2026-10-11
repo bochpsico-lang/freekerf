@@ -10,6 +10,7 @@ service. Code: `ui/web/src/produce/`.
 | --- | --- | --- |
 | Connection | port (serial ports found, or the built-in emulator), Connect / Disconnect, detected firmware and work area | `machine.list_ports`, `machine.connect {port \| emulator}`, `machine.disconnect`, `machine.info` |
 | Job | Open G-code… (file picked in the window and sent as text), estimate, progress bar, elapsed / remaining / lines, **Start**, Pause ↔ Resume, Stop job, Frame | `job.load_text`, `job.run` (through the fire confirmation), `machine.feed_hold`, `machine.resume`, `job.abort`, `job.frame` |
+| Job from the design (when the document has objects) | **Job start**: absolute (the document's coordinates), current position (the head's work position; needs a connection) or user origin (work 0,0), and the **3×3 anchor** (the point of the job's box that goes there; off when absolute); *Make the job from the design* plans the document and loads it (preview and estimate as for a file) | `job.from_document {start, anchor}` |
 | Overrides | speed and power sliders (10–200 %), rapid moves 25/50/100 % | `machine.overrides` |
 | Jog | DRO (head at 60 Hz), 3×3 pad with Home, step 0.1/1/10/50 mm, continuous, Home, Unlock, Origin here | `machine.jog`, `machine.jog_stop`, `machine.home`, `machine.unlock`, `machine.set_zero` |
 | Custom buttons | `[[buttons]]` of `settings.toml` | `machine.custom_code` (through the fire confirmation) |
@@ -57,17 +58,19 @@ Going on runs `job.resume` through the fire confirmation.
 In the medium layout the Machine panel stays docked in Produce; in the narrow
 layout Start, Pause and Frame move to the bottom bar next to STOP.
 
-## Not in M4a
+## Not yet
 
-Job start options (absolute / current position / user origin) with the 3×3 anchor
-need the planner (M2): listed in `doc/roadmap.md`. Dropping a file on the window
-is not wired yet (Tauri intercepts drops; to do with the import flow, M4b).
+Dropping a file on the window is not wired yet (Tauri intercepts drops; listed in
+`doc/roadmap.md`).
 
 ## Tests
 
-`ui/web/src/produce/produce.test.ts` (open a file, step jog, dead-man continuous
+`ui/web/src/produce/produce.test.ts` (open a file, the job from the design with
+its start and anchor, step jog, dead-man continuous
 jog, home/unlock/origin/frame/overrides, Start and console G-code never dispatch a
 laser action, alarm banner and recovery), `job.test.ts` (progress, recovery
 options), `state/console.test.ts`; Rust:
 `service.rs::produce_mode_helpers_frame_info_and_system_commands` (emulator),
+`service.rs::document_session_actions_and_events` (job start and anchor),
+`freekerf-planner/src/origin.rs` (anchors),
 `freekerf-settings::custom_buttons`. End to end against the emulator: PR 9.

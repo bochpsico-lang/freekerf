@@ -24,6 +24,7 @@ pub mod generators;
 pub mod hershey;
 mod hershey_table;
 pub mod image;
+pub mod origin;
 pub mod vector;
 pub mod writer;
 

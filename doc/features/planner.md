@@ -47,6 +47,11 @@ ends) follow LaserGRBL and are described in `vector.rs`.
 laser on/off commands, the defaults of jobs without layers and unidirectional
 engraving (LaserGRBL settings of the same meaning).
 
+**Placing a job** (`origin::place`, design/ux.md flow 3): before planning, the
+service can move the document so a point of its bounds (the 3×3 `Anchor`) lands on
+a start point: the head's current work position or the user origin
+(`job.from_document {start, anchor}`).
+
 ## Limits
 
 - Raster images: after the vector objects, every image in document order, as the
