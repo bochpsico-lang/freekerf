@@ -37,15 +37,48 @@ export interface InteractionHost {
   setCamera(c: CameraState): void;
   /** Object under a world point, if any. */
   hitTest(wx: number, wy: number): string | null;
-  /** Click on an object (or on nothing: `null`). */
-  select(id: string | null, additive: boolean): void;
+  /**
+   * Click on an object (or on nothing: `null`). `keepIfSelected`: a drag starts on
+   * an object; keep the selection when the object is already in it.
+   */
+  select(id: string | null, additive: boolean, keepIfSelected?: boolean): void;
   /** Marquee finished: a world rectangle; `crossing` selects what it touches. */
   selectArea(rect: Rect, crossing: boolean, additive: boolean): void;
   /** Marquee in screen pixels while dragging (`null` when done). */
   marquee(m: { x0: number; y0: number; x1: number; y1: number; crossing: boolean } | null): void;
   /** Context menu (right click or long press) at a screen point. */
   contextMenu?(x: number, y: number, id: string | null): void;
+  /**
+   * Design mode editing: the handle under a screen point (`move` for the inside of
+   * the selection), or `null`.
+   */
+  hitHandle?(sx: number, sy: number): Handle | null;
+  /** A handle drag: started, moved, ended (or cancelled: a second finger, a lost pointer). */
+  drag?(
+    phase: 'start' | 'move' | 'end' | 'cancel',
+    handle: Handle,
+    world: [number, number],
+    mods: DragMods,
+  ): void;
+  /** Design mode: a drawing tool is active (a press places, a drag draws a box). */
+  placing?(): boolean;
+  /** A drawing tool placed a box (world, mm; zero size for a click). */
+  place?(rect: Rect, mods: DragMods): void;
 }
+
+/** Selection handles: corners, sides, rotation, or the whole selection. */
+export type Handle = 'move' | 'rotate' | 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+
+/** Modifiers of a drag (design/interaction.md §3). */
+export interface DragMods {
+  /** Inverts "keep proportions" on corners; 15° steps when rotating. */
+  shift: boolean;
+  /** Resize from the centre. */
+  alt: boolean;
+  touch: boolean;
+}
+
+const mods = (p: PointerInput): DragMods => ({ shift: p.shift, alt: p.alt, touch: p.type === 'touch' });
 
 /** Movement before a press becomes a drag: 3 px with a mouse, 8 px with a finger. */
 export const DRAG_THRESHOLD = { mouse: 3, pen: 3, touch: 8 } as const;
@@ -56,9 +89,10 @@ export const WHEEL_ZOOM = 1.2;
 
 type State =
   | { kind: 'idle' }
-  | { kind: 'press'; p: PointerInput; onObject: string | null; at: number }
+  | { kind: 'press'; p: PointerInput; onObject: string | null; at: number; place?: boolean }
   | { kind: 'pan'; id: number; x: number; y: number }
-  | { kind: 'marquee'; p: PointerInput; x: number; y: number }
+  | { kind: 'marquee'; p: PointerInput; x: number; y: number; place?: boolean }
+  | { kind: 'handle'; p: PointerInput; handle: Handle; dragging: boolean }
   | { kind: 'pinch'; a: number; b: number };
 
 /** The gesture state machine. */
@@ -83,9 +117,11 @@ export class CanvasInteraction {
   pointerDown(p: PointerInput): void {
     this.pointers.set(p.id, { x: p.x, y: p.y });
     if (this.pointers.size === 2 && p.type === 'touch') {
-      // a second finger cancels whatever the first one was doing (interaction.md §3)
+      // a second finger cancels whatever the first one was doing (interaction.md §3):
+      // a drag of the selection is undone
       this.cancelLongPress();
       if (this.state.kind === 'marquee') this.host.marquee(null);
+      if (this.state.kind === 'handle' && this.state.dragging) this.endHandle(this.state, p, 'cancel');
       const [a, b] = [...this.pointers.keys()] as [number, number];
       this.state = { kind: 'pinch', a, b };
       return;
@@ -101,6 +137,15 @@ export class CanvasInteraction {
       return;
     }
     const [wx, wy] = Camera.toWorld(this.host.camera(), p.x, p.y);
+    if (this.host.mode() === 'design' && this.host.placing?.()) {
+      this.state = { kind: 'press', p, onObject: null, at: 0, place: true };
+      return;
+    }
+    const handle = this.host.mode() === 'design' ? (this.host.hitHandle?.(p.x, p.y) ?? null) : null;
+    if (handle && handle !== 'move') {
+      this.state = { kind: 'handle', p, handle, dragging: false };
+      return;
+    }
     this.state = { kind: 'press', p, onObject: this.host.hitTest(wx, wy), at: 0 };
     if (p.type === 'touch' && this.host.contextMenu) {
       const id = (this.state as { onObject: string | null }).onObject;
@@ -143,8 +188,19 @@ export class CanvasInteraction {
         if (s.p.id !== p.id) return;
         if (Math.hypot(p.x - s.p.x, p.y - s.p.y) < DRAG_THRESHOLD[s.p.type]) return;
         this.cancelLongPress();
-        // moving objects comes with the Design mode (handles); for now a drag on an
-        // object behaves like a drag on empty space
+        if (s.place) {
+          this.state = { kind: 'marquee', p: s.p, x: p.x, y: p.y, place: true };
+          this.host.marquee({ x0: s.p.x, y0: s.p.y, x1: p.x, y1: p.y, crossing: false });
+          return;
+        }
+        // Design: dragging an object moves the selection (selecting it first)
+        if (this.host.mode() === 'design' && s.onObject !== null && this.host.drag) {
+          this.host.select(s.onObject, false, true);
+          const h: State = { kind: 'handle', p: s.p, handle: 'move', dragging: false };
+          this.state = h;
+          this.pointerMove(p);
+          return;
+        }
         if (this.host.mode() === 'produce' || s.p.type === 'touch') {
           this.state = { kind: 'pan', id: p.id, x: s.p.x, y: s.p.y };
           this.pointerMove(p);
@@ -154,10 +210,20 @@ export class CanvasInteraction {
         }
         return;
       }
+      case 'handle': {
+        if (s.p.id !== p.id) return;
+        if (!s.dragging) {
+          if (Math.hypot(p.x - s.p.x, p.y - s.p.y) < DRAG_THRESHOLD[s.p.type]) return;
+          s.dragging = true;
+          this.host.drag?.('start', s.handle, Camera.toWorld(this.host.camera(), s.p.x, s.p.y), mods(s.p));
+        }
+        this.host.drag?.('move', s.handle, Camera.toWorld(this.host.camera(), p.x, p.y), mods(p));
+        return;
+      }
       case 'marquee': {
         if (s.p.id !== p.id) return;
         this.state = { ...s, x: p.x, y: p.y };
-        this.host.marquee({ x0: s.p.x, y0: s.p.y, x1: p.x, y1: p.y, crossing: p.x < s.p.x });
+        this.host.marquee({ x0: s.p.x, y0: s.p.y, x1: p.x, y1: p.y, crossing: !s.place && p.x < s.p.x });
         return;
       }
       case 'idle':
@@ -173,7 +239,10 @@ export class CanvasInteraction {
       case 'press':
         if (s.p.id === p.id) {
           this.state = { kind: 'idle' };
-          this.host.select(s.onObject, s.p.shift || s.p.ctrl);
+          if (s.place) {
+            const [x, y] = Camera.toWorld(this.host.camera(), s.p.x, s.p.y);
+            this.host.place?.({ x, y, width: 0, height: 0 }, mods(s.p));
+          } else this.host.select(s.onObject, s.p.shift || s.p.ctrl);
         }
         return;
       case 'marquee': {
@@ -183,6 +252,10 @@ export class CanvasInteraction {
         const cam = this.host.camera();
         const [ax, ay] = Camera.toWorld(cam, Math.min(s.p.x, s.x), Math.max(s.p.y, s.y));
         const [bx, by] = Camera.toWorld(cam, Math.max(s.p.x, s.x), Math.min(s.p.y, s.y));
+        if (s.place) {
+          this.host.place?.({ x: ax, y: ay, width: bx - ax, height: by - ay }, mods(p));
+          return;
+        }
         this.host.selectArea(
           { x: ax, y: ay, width: bx - ax, height: by - ay },
           s.x < s.p.x,
@@ -192,6 +265,11 @@ export class CanvasInteraction {
       }
       case 'pan':
         if (s.id === p.id) this.state = { kind: 'idle' };
+        return;
+      case 'handle':
+        if (s.p.id !== p.id) return;
+        this.state = { kind: 'idle' };
+        if (s.dragging) this.endHandle(s, p, 'end');
         return;
       case 'pinch':
         if (this.pointers.size < 2) this.state = { kind: 'idle' };
@@ -206,6 +284,7 @@ export class CanvasInteraction {
     this.pointers.delete(p.id);
     this.cancelLongPress();
     if (this.state.kind === 'marquee') this.host.marquee(null);
+    if (this.state.kind === 'handle' && this.state.dragging) this.endHandle(this.state, p, 'cancel');
     this.state = { kind: 'idle' };
   }
 
@@ -224,6 +303,11 @@ export class CanvasInteraction {
     }
     // a two-finger scroll on a trackpad pans
     this.host.setCamera(Camera.panBy(cam, -w.dx, -w.dy));
+  }
+
+  private endHandle(s: Extract<State, { kind: 'handle' }>, p: PointerInput, phase: 'end' | 'cancel'): void {
+    this.state = this.state.kind === 'handle' ? { kind: 'idle' } : this.state;
+    this.host.drag?.(phase, s.handle, Camera.toWorld(this.host.camera(), p.x, p.y), mods(p));
   }
 
   private cancelLongPress(): void {

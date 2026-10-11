@@ -4,20 +4,39 @@
 // at most once per animation frame.
 
 import { Camera, type CameraState, type Rect } from './camera';
-import { CanvasInteraction, type InteractionHost, type PointerInput } from './interaction';
+import {
+  CanvasInteraction,
+  type DragMods,
+  type Handle,
+  type InteractionHost,
+  type PointerInput,
+} from './interaction';
 import { drawOverlay, type OverlayScene } from './overlay';
 import { readTheme, type CanvasTheme } from './theme';
 import type { Toolpath } from './toolpath';
-import { WebGL2Renderer, type PathBatch, type RasterImage } from './webgl2';
+import { WebGL2Renderer, type PathBatch, type RasterImage, type Rgba } from './webgl2';
 
 /** What the owner gets back from the canvas. */
 export interface CanvasViewEvents {
-  select?(id: string | null, additive: boolean): void;
+  select?(id: string | null, additive: boolean, keepIfSelected?: boolean): void;
   selectArea?(rect: Rect, crossing: boolean, additive: boolean): void;
   contextMenu?(x: number, y: number, id: string | null): void;
   /** The camera changed (pan, zoom, resize). */
   camera?(c: CameraState): void;
   hitTest?(wx: number, wy: number): string | null;
+  /** Design mode: the handle of the selection under a screen point. */
+  hitHandle?(sx: number, sy: number): Handle | null;
+  /** Design mode: a handle drag (see {@link InteractionHost.drag}). */
+  drag?(
+    phase: 'start' | 'move' | 'end' | 'cancel',
+    handle: Handle,
+    world: [number, number],
+    mods: DragMods,
+  ): void;
+  /** Design mode: a drawing tool is active. */
+  placing?(): boolean;
+  /** Design mode: a drawing tool placed a box. */
+  place?(rect: Rect, mods: DragMods): void;
 }
 
 /** Error when WebGL2 is not available. */
@@ -54,7 +73,10 @@ export class CanvasView {
     frame: null,
     marquee: null,
     units: 'mm',
+    selection: null,
   };
+  /** Layer colours of the design paths (by layer index); `null` = the token palette. */
+  private layerColors: Rgba[] | null = null;
   /** Called after each drawn frame. */
   onFrame: ((t: FrameTiming) => void) | null = null;
 
@@ -86,13 +108,17 @@ export class CanvasView {
       camera: () => this.cam,
       setCamera: (c) => this.setCamera(c),
       hitTest: (x, y) => this.events.hitTest?.(x, y) ?? null,
-      select: (id, add) => this.events.select?.(id, add),
+      select: (id, add, keep) => this.events.select?.(id, add, keep),
       selectArea: (rect, crossing, add) => this.events.selectArea?.(rect, crossing, add),
       marquee: (m) => {
         this.scene.marquee = m;
         this.invalidate();
       },
       contextMenu: (x, y, id) => this.events.contextMenu?.(x, y, id),
+      hitHandle: (x, y) => this.events.hitHandle?.(x, y) ?? null,
+      drag: (phase, h, w, m) => this.events.drag?.(phase, h, w, m),
+      placing: () => this.events.placing?.() ?? false,
+      place: (r, m) => this.events.place?.(r, m),
     };
     this.interaction = new CanvasInteraction(ih);
     this.bind();
@@ -233,6 +259,18 @@ export class CanvasView {
     this.invalidate();
   }
 
+  /** Colours of the design layers, by layer index (`null`: the design palette). */
+  setLayerColors(colors: Rgba[] | null): void {
+    this.layerColors = colors;
+    this.invalidate();
+  }
+
+  /** The selection outline, its handles and the preview of a drag (overlay). */
+  setSelection(selection: OverlayScene['selection']): void {
+    this.scene.selection = selection;
+    this.invalidate();
+  }
+
   setImages(images: RasterImage[]): void {
     this.renderer.setImages(images);
     this.invalidate();
@@ -279,7 +317,7 @@ export class CanvasView {
     this.renderer.render(
       this.cam,
       {
-        colors: this.theme.render,
+        colors: this.layerColors ? { ...this.theme.render, layers: this.layerColors } : this.theme.render,
         workArea: this.scene.workArea,
         executed: this.executed,
         showTravel: this.showTravel,

@@ -49,6 +49,27 @@ for (const width of WIDTHS) {
   });
 }
 
+for (const width of [1366, 1000]) {
+  test(`German fits the Design mode at ${width} px`, async ({ page }) => {
+    await openInGerman(page, width);
+    await page.getByTestId('mode-design').click();
+    await expect(page.locator('html')).toHaveAttribute('data-mode', 'design');
+    const box = (await page.getByTestId('canvas').boundingBox())!;
+    await page.keyboard.press('r');
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.locator('.palette [data-color="#E8622C"]').click();
+    if (width < 1200) await page.locator('.dockrail [aria-label="Ebenen"]').click();
+    await page.locator('.layer .exp').first().click();
+    expect(await clipped(page), 'layers').toEqual([]);
+    if (width < 1200) await page.locator('.dockrail [aria-label="Objekteigenschaften"]').click();
+    else await page.locator('.dock-tabs [data-panel="object"]').click();
+    expect(await clipped(page), 'object').toEqual([]);
+    await page.keyboard.press('Control+i');
+    await page.getByTestId('dialog-import').waitFor();
+    expect(await clipped(page), 'import').toEqual([]);
+  });
+}
+
 test('the check catches clipped text', async ({ page }) => {
   await page.goto('/dev.html');
   await page.getByTestId('state-chip').waitFor();

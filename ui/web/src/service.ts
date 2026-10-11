@@ -3,6 +3,7 @@
 // implementations exist: `ipc/tauri.ts` (the desktop app) and `dev/fake-service.ts`
 // (browser development and component tests; never in production builds).
 
+import type { DocumentService } from './contract/document';
 import type { ActionError, ActionName, ActionSpec, Actions, EventMessage } from './gen/api';
 
 /** Parameters of an action. */
@@ -52,4 +53,9 @@ export interface AppService {
    * not an action of the registry, so scripts and agents cannot confirm.
    */
   confirmFire(id: number): Promise<unknown>;
+  /**
+   * The Design mode document (doc/features/ui-contract.md). Absent until M2
+   * implements it (M4b): the Design mode is then hidden.
+   */
+  readonly document?: DocumentService;
 }

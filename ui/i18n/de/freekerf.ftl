@@ -383,3 +383,23 @@ kb-pause = Pausieren / Fortsetzen
 kb-frame = Umriss abfahren
 kb-hold = Laufenden Auftrag pausieren
 kb-estop = STOPP (funktioniert überall)
+
+## design (M4a, on the UI contract)
+layers-mode-fill_and_line = Füllen und Kontur
+layers-mode-cut = Schneiden
+import-title = Importieren
+import-file = Datei (SVG, DXF oder Bild)
+import-colors = Farben der Datei
+import-colors-keep = Farben behalten: eine Ebene pro Farbe
+import-colors-unify = Alles auf die aktuelle Ebene legen
+import-go = Importieren
+import-done = { $objects } Objekte importiert ({ $layers } neue Ebenen).
+welcome-migrateSub = Verbindung, benutzerdefinierte Schaltflächen, Materialien und Zähler
+migrate-none = Auf diesem Computer wurde keine LaserGRBL-Installation gefunden.
+migrate-connection = Verbindung: Anschluss, Baudrate, Firmware und Streaming-Modus
+migrate-buttons = { $n } benutzerdefinierte Schaltflächen
+migrate-materials = { $n } Materialien der Leistungs- und Geschwindigkeitsbibliothek
+migrate-counters = Nutzungszähler von { $n } Lasermodulen
+migrate-shortcuts = Tastenkürzel
+migrate-preferences = Importeinstellungen
+migrate-language = Sprache

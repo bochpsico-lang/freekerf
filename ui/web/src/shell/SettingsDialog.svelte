@@ -202,6 +202,12 @@
   {#snippet footer()}
     <button
       class="btn"
+      onclick={() => run(() => service.dispatch('view.open_dialog', { dialog: 'welcome' }))}
+    >
+      <Icon name="sparkle" /><span>{t('settings-welcome')}</span>
+    </button>
+    <button
+      class="btn"
       onclick={() => run(() => service.dispatch('view.open_dialog', { dialog: 'shortcuts' }))}
     >
       <Icon name="info" /><span>{t('settings-shortcuts')}</span>

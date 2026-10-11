@@ -383,3 +383,23 @@ kb-pause = Pause / resume
 kb-frame = Frame
 kb-hold = Pause the running job
 kb-estop = STOP (works everywhere)
+
+## design (M4a, on the UI contract)
+layers-mode-fill_and_line = Fill and line
+layers-mode-cut = Cut
+import-title = Import
+import-file = File (SVG, DXF or image)
+import-colors = Colours of the file
+import-colors-keep = Keep the colours: one layer per colour
+import-colors-unify = Put everything on the current layer
+import-go = Import
+import-done = Imported { $objects } objects ({ $layers } new layers).
+welcome-migrateSub = Connection, custom buttons, materials and counters
+migrate-none = No LaserGRBL installation was found on this computer.
+migrate-connection = Connection: port, speed, firmware and streaming mode
+migrate-buttons = { $n } custom buttons
+migrate-materials = { $n } materials of the power and speed library
+migrate-counters = Usage counters of { $n } laser modules
+migrate-shortcuts = Keyboard shortcuts
+migrate-preferences = Import preferences
+migrate-language = Language
