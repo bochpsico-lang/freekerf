@@ -15,6 +15,7 @@ import type {
 import { ACTION_TIERS } from '../gen/api';
 import { ActionFailure, type AppService, type Params, type Result } from '../service';
 import { encodeToolpath, type SegmentRecord } from '../canvas/toolpath';
+import { FakeDocument } from './fake-document';
 
 /** Found in the bundle only if the fake service leaked into it. */
 export const FAKE_SERVICE_MARKER = 'freekerf-fake-service-do-not-ship';
@@ -67,6 +68,12 @@ type Handler = (params: unknown) => unknown;
 /** In-memory service with a tiny machine model (connect, stop, jog). */
 export class FakeService implements AppService {
   readonly marker = FAKE_SERVICE_MARKER;
+  /** The Design mode document (fake of doc/features/ui-contract.md); absent hides the Design mode. */
+  readonly document: FakeDocument | undefined;
+
+  constructor(options: { document?: boolean } = {}) {
+    this.document = options.document === false ? undefined : new FakeDocument();
+  }
   readonly calls: { action: ActionName; params: unknown }[] = [];
   state: State = initialState();
   private listeners = new Set<(event: EventMessage) => void>();
@@ -75,6 +82,7 @@ export class FakeService implements AppService {
   now = 0;
   view: ViewState = {
     mode: 'produce',
+    tool: 'select',
     panel: 'machine',
     drawer_open: false,
     dialogs: [],
@@ -86,7 +94,7 @@ export class FakeService implements AppService {
   };
   settings: Settings = {
     version: 1,
-    ui: { theme: 'dark', high_contrast: false, density: 'auto', units: 'mm' },
+    ui: { language: 'en', theme: 'dark', high_contrast: false, density: 'auto', units: 'mm' },
   };
   private nextToast = 1;
   /** Tool path returned by `toolpath()` (set by `job.load_text`, or by tests). */
@@ -123,6 +131,10 @@ export class FakeService implements AppService {
       this.changeView((v) => {
         v.mode = (p as Params<'view.set_mode'>).mode;
         if (v.mode === 'produce') v.panel = 'machine';
+      }),
+    'view.set_tool': (p) =>
+      this.changeView((v) => {
+        v.tool = (p as Params<'view.set_tool'>).tool;
       }),
     'view.show_panel': (p) =>
       this.changeView((v) => {

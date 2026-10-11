@@ -1,3 +1,4 @@
+/* eslint-disable svelte/prefer-svelte-reactivity -- sets here are local lookups, not state */
 // UI text through Fluent (`ui/i18n/<locale>/*.ftl`). Components call `t(id, args)`;
 // the locale is reactive, so text updates when it changes. Missing messages fall
 // back to English, then to the id (never an empty string).
@@ -10,16 +11,25 @@ const sources = import.meta.glob('../../../i18n/*/*.ftl', {
   eager: true,
 }) as Record<string, string>;
 
-/** Locales with a translation, in the order of the language picker. */
-export const LOCALES = ['en', 'pt-BR', 'de'] as const;
-export type Locale = (typeof LOCALES)[number];
+/** A BCP 47 locale with a folder in `ui/i18n`. */
+export type Locale = string;
 
 const FALLBACK: Locale = 'en';
 
+/** Every locale with a translation: `en` first, then by tag. */
+export const LOCALES: Locale[] = [...new Set(Object.keys(sources).map((p) => p.split('/').at(-2)!))].sort(
+  (a, b) => (a === FALLBACK ? -1 : b === FALLBACK ? 1 : a.localeCompare(b)),
+);
+
 function bundle(locale: Locale): FluentBundle {
   const b = new FluentBundle(locale, { useIsolating: false });
-  for (const [path, text] of Object.entries(sources)) {
-    if (path.split('/').at(-2) !== locale) continue;
+  // the hand-written freekerf.ftl wins over lasergrbl.ftl (resx2ftl skips its ids anyway)
+  const files = Object.entries(sources)
+    .filter(([p]) => p.split('/').at(-2) === locale)
+    .sort(([a], [b]) =>
+      a.endsWith('/freekerf.ftl') ? -1 : b.endsWith('/freekerf.ftl') ? 1 : a.localeCompare(b),
+    );
+  for (const [, text] of files) {
     const errors = b.addResource(new FluentResource(text));
     for (const e of errors) console.warn(`i18n ${locale}: ${String(e)}`);
   }
@@ -46,9 +56,10 @@ export function locale(): Locale {
   return current.locale;
 }
 
-/** Changes the locale (from the settings). */
+/** Changes the locale (from the settings; `auto` = the system's). */
 export function setLocale(l: Locale): void {
-  current.locale = l;
+  if (l === 'auto') l = matchLocale(typeof navigator === 'undefined' ? undefined : navigator.language);
+  current.locale = LOCALES.includes(l) ? l : matchLocale(l);
   if (typeof document !== 'undefined') document.documentElement.lang = l;
 }
 
@@ -70,4 +81,21 @@ export function t(id: string, args?: Record<string, FluentVariable>): string {
     if (b && m?.value) return b.formatPattern(m.value, args);
   }
   return id;
+}
+
+/** Share of the English messages a locale translates, 0..1 (language picker). */
+export function completeness(l: Locale): number {
+  const en = new Set(messageIds(FALLBACK));
+  if (!en.size) return 0;
+  const ids = new Set(messageIds(l));
+  return [...en].filter((id) => ids.has(id)).length / en.size;
+}
+
+/** The name of a locale in that language (`Deutsch`, `português (Brasil)`). */
+export function localeName(l: Locale): string {
+  try {
+    return new Intl.DisplayNames([l], { type: 'language' }).of(l) ?? l;
+  } catch {
+    return l;
+  }
 }

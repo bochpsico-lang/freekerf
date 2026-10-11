@@ -65,4 +65,26 @@ CI on native runners (`desktop-platforms`); installers come with M5.
 - `ui/web`: Vitest unit and component tests (`npm test`), the architecture lint
   rules (`tests/unit/architecture.test.ts`) and the bundle check
   (`tests/unit/bundle-check.test.ts`).
-- CI jobs `ui`, `desktop`, `desktop-platforms`.
+- `ui/web/tests/web/` (Playwright, Chromium on `dev.html` and the fake service):
+  German long strings in the three layouts, the Design mode gestures on the real
+  WebGL2 canvas.
+- `ui/web/tests/e2e/` (WebdriverIO + `tauri-driver`, Linux/WebKitWebDriver): the
+  real app, the real service and the built-in emulator (never a serial port), a
+  fresh `FREEKERF_HOME` per spec with a 1 s fire countdown. Produce: connect, console
+  `$$`, jog, load a program, the fire confirmation (disabled during the countdown,
+  cancel runs nothing), a job to its end, STOP during a run. Safety: `machine.send`
+  called directly from the page is refused (only `fire.request` is allowed),
+  Shift+Esc from a text field resets the controller, settings reach
+  `settings.toml`. Run:
+
+  ```bash
+  cargo install tauri-driver --locked          # once; Linux also needs webkit2gtk-driver
+  cd ui/web && npm run build
+  cargo build -p freekerf-desktop --features custom-protocol
+  xvfb-run -a npm run test:e2e                 # or without xvfb-run on a desktop
+  ```
+
+  WebKitWebDriver cannot type into file inputs: the tests set the program with a
+  `DataTransfer` on the panel's own input (the native picker is not driven).
+- CI jobs `ui` (with coverage in the job summary), `desktop` (smoke run and the
+  end-to-end tests), `desktop-platforms`.

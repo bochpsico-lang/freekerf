@@ -4,6 +4,7 @@ import App from './App.svelte';
 import type { BenchReport } from './canvas/bench';
 import type { AppService } from './service';
 import { ConsoleProjection } from './state/console.svelte';
+import { DocumentProjection } from './state/document.svelte';
 import { Environment } from './state/environment.svelte';
 import { MachineState } from './state/machine.svelte';
 import { PreviewState } from './state/preview.svelte';
@@ -21,6 +22,7 @@ export function projections(service: AppService) {
     settings: new SettingsProjection(service),
     env: new Environment(),
     console: new ConsoleProjection(service),
+    doc: service.document ? new DocumentProjection(service.document) : null,
   };
 }
 
@@ -34,6 +36,7 @@ export function start(service: AppService): void {
     props.view.refresh(),
     props.settings.refresh(),
     props.preview.reload(),
+    props.doc?.refresh(),
   ]);
   mount(App, { target, props });
 }

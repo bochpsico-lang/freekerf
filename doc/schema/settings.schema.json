@@ -73,6 +73,7 @@
       "default": {
         "density": "auto",
         "high_contrast": false,
+        "language": "auto",
         "theme": "dark",
         "units": "mm"
       }
@@ -392,6 +393,11 @@
           "description": "High contrast (on top of the theme).",
           "type": "boolean",
           "default": false
+        },
+        "language": {
+          "description": "Language: `auto` (the system's) or a locale of `ui/i18n` (`en`, `pt-BR`, `de`...).",
+          "type": "string",
+          "default": "auto"
         },
         "theme": {
           "description": "Theme.",

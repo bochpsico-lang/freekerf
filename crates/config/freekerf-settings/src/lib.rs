@@ -282,9 +282,11 @@ pub enum Units {
 }
 
 /// Appearance of the desktop app.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct UiSettings {
+    /// Language: `auto` (the system's) or a locale of `ui/i18n` (`en`, `pt-BR`, `de`...).
+    pub language: String,
     /// Theme.
     pub theme: Theme,
     /// High contrast (on top of the theme).
@@ -293,6 +295,18 @@ pub struct UiSettings {
     pub density: Density,
     /// Units shown.
     pub units: Units,
+}
+
+impl Default for UiSettings {
+    fn default() -> Self {
+        Self {
+            language: "auto".into(),
+            theme: Theme::default(),
+            high_contrast: false,
+            density: Density::default(),
+            units: Units::default(),
+        }
+    }
 }
 
 /// A custom button of the machine panel: G-code (custom code with `[expr]`) run on
@@ -589,11 +603,14 @@ mod tests {
         s.set("ui.density", serde_json::json!("comfortable"), false)
             .unwrap();
         s.set("ui.units", serde_json::json!("in"), false).unwrap();
+        s.set("ui.language", serde_json::json!("pt-BR"), false).unwrap();
         let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
         assert_eq!(back.ui.theme, Theme::Light);
         assert!(back.ui.high_contrast);
         assert_eq!(back.ui.density, Density::Comfortable);
         assert_eq!(back.ui.units, Units::In);
+        assert_eq!(back.ui.language, "pt-BR");
+        assert_eq!(UiSettings::default().language, "auto");
         assert!(s.set("ui.theme", serde_json::json!("sepia"), false).is_err());
     }
 

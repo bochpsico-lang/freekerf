@@ -59,4 +59,29 @@ describe('shortcuts', () => {
     expect(isTyping(document.createElement('button'))).toBe(false);
     expect(isTyping(null)).toBe(false);
   });
+
+  it('editing keys only in the Design mode, never while typing or over a dialog', () => {
+    const design: KeyContext = { ...idle, design: true };
+    expect(shortcut(key('r'), design)).toBe('tool-rect');
+    expect(shortcut(key('V'), design)).toBe('tool-select');
+    expect(shortcut(key('e'), design)).toBe('tool-ellipse');
+    expect(shortcut(key('t'), design)).toBe('tool-text');
+    expect(shortcut(key('Delete'), design)).toBe('delete');
+    expect(shortcut(key('Backspace'), design)).toBe('delete');
+    expect(shortcut(key('d', { ctrl: true }), design)).toBe('duplicate');
+    expect(shortcut(key('a', { meta: true }), design)).toBe('select-all');
+    expect(shortcut(key('i', { ctrl: true }), design)).toBe('import');
+    expect(shortcut(key('z', { ctrl: true }), design)).toBe('undo');
+    expect(shortcut(key('Z', { ctrl: true, shift: true }), design)).toBe('redo');
+    expect(shortcut(key('y', { ctrl: true }), design)).toBe('redo');
+    expect(shortcut(key('ArrowLeft', { alt: true }), design)).toBe('nudge-left');
+    expect(shortcut(key('ArrowUp', { shift: true }), design)).toBe('nudge-up');
+    expect(shortcut(key('Escape'), design)).toBe('deselect');
+    expect(shortcut(key('r'), idle)).toBeNull();
+    expect(shortcut(key('Delete'), { ...design, typing: true })).toBeNull();
+    expect(shortcut(key('Delete'), { ...design, dialogOpen: true })).toBeNull();
+    expect(shortcut(key('z', { ctrl: true }), { ...design, dialogOpen: true })).toBeNull();
+    // STOP still wins
+    expect(shortcut(key('Escape', { shift: true }), design)).toBe('stop');
+  });
 });

@@ -11,5 +11,8 @@ if (location.hash === '#bench-canvas') {
     );
   });
 } else {
-  start(new FakeService());
+  const service = new FakeService();
+  // for the browser tests (tests/web): dev.html is never part of a build
+  (window as unknown as { fkFake: FakeService }).fkFake = service;
+  start(service);
 }

@@ -582,6 +582,12 @@ export type SetModeParams = {
   mode: Mode;
 };
 
+/** `view.set_tool`. */
+export type SetToolParams = {
+  /** `select`, `rect`, `ellipse` or `text`. */
+  tool: Tool;
+};
+
 /** `settings.get`. */
 export type SettingsGetParams = {
   /** Dotted key (`machine.baud`); all settings when absent. */
@@ -662,12 +668,17 @@ export type ToastParams = {
   message: string;
 };
 
+/** Active tool of the Design mode (`design/interaction.md` §2). */
+export type Tool = "select" | "rect" | "ellipse" | "text";
+
 /** Appearance of the desktop app. */
 export type UiSettings = {
   /** Density of the controls. */
   density?: Density;
   /** High contrast (on top of the theme). */
   high_contrast?: boolean;
+  /** Language: `auto` (the system's) or a locale of `ui/i18n` (`en`, `pt-BR`, `de`...). */
+  language?: string;
   /** Theme. */
   theme?: Theme;
   /** Units shown. */
@@ -698,6 +709,8 @@ export type ViewState = {
   panel: Panel;
   /** Toasts, oldest first (at most [`MAX_TOASTS`]). */
   toasts: Toast[];
+  /** Active tool of the Design mode. */
+  tool: Tool;
   /** Viewport, once the UI or a caller set it. */
   viewport?: Viewport | null;
 };
@@ -1061,6 +1074,12 @@ export interface Actions {
     result: null;
     tier: "ui";
   };
+  /** Chooses the Design mode tool (select, rectangle, ellipse, text). */
+  "view.set_tool": {
+    params: SetToolParams;
+    result: null;
+    tier: "ui";
+  };
   /** Shows the table around a point at a zoom (CSS pixels per mm). */
   "view.set_viewport": {
     params: Viewport;
@@ -1128,6 +1147,7 @@ export const ACTION_TIERS = {
   "view.open_dialog": "ui",
   "view.set_drawer": "ui",
   "view.set_mode": "ui",
+  "view.set_tool": "ui",
   "view.set_viewport": "ui",
   "view.show_panel": "ui",
   "view.toast": "ui",

@@ -2015,3 +2015,9 @@ body.ready [data-layout] .dock,
 .num input {
   min-width: 5ch;
 }
+
+/* panel notes rendered in the panel body (layers order, inspector subject) */
+.panel > .panel-sub {
+  margin: 0;
+  padding: 0 var(--fk-space-3) var(--fk-space-2);
+}
