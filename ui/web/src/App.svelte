@@ -93,6 +93,19 @@
 
   $effect(() => setLocale(settings.ui.language));
 
+  // the first run opens the welcome by itself (once; closing it records it)
+  let welcomeOffered = false;
+  $effect(() => {
+    if (!settings.firstRun || welcomeOffered) return;
+    welcomeOffered = true;
+    void run(() => service.dispatch('view.open_dialog', { name: 'welcome' }));
+  });
+  function closeWelcome(close: () => void) {
+    close();
+    if (!settings.ui.welcomed)
+      void run(() => service.dispatch('settings.set', { key: 'ui.welcomed', value: true }));
+  }
+
   $effect(() => {
     const root = document.documentElement;
     const ui = settings.ui;
@@ -271,7 +284,7 @@
   <ObjectPanel {doc} />
 {/snippet}
 {#snippet welcomeDialog(close: () => void)}
-  <WelcomeDialog onclose={close} />
+  <WelcomeDialog onclose={() => closeWelcome(close)} />
 {/snippet}
 {#snippet importDialog(close: () => void)}
   <ImportDialog onclose={close} />

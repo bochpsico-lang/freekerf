@@ -329,6 +329,18 @@ describe('Design mode', () => {
     await waitFor(() => expect(screen.queryByTestId('dialog-welcome')).toBeNull());
   });
 
+  it('welcome: opens by itself on the first run, and closing it records it', async () => {
+    const service = new FakeService();
+    service.settings.ui!.welcomed = false;
+    const props = projections(service);
+    await Promise.all([props.view.refresh(), props.settings.refresh(), props.doc.refresh()]);
+    render(App, props);
+    const dialog = await screen.findByTestId('dialog-welcome');
+    await fireEvent.click(within(dialog).getByLabelText('Close'));
+    await waitFor(() => expect(service.settings.ui!.welcomed).toBe(true));
+    await waitFor(() => expect(screen.queryByTestId('dialog-welcome')).toBeNull());
+  });
+
   it('welcome: nothing to migrate, and explore connects the emulator', async () => {
     const { service } = await mountDesign();
     service.document.migration.found = false;

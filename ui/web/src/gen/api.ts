@@ -1488,6 +1488,8 @@ export type UiSettings = {
   theme?: Theme;
   /** Units shown. */
   units?: Units;
+  /** The welcome was shown and closed (it opens by itself on the first run only). */
+  welcomed?: boolean;
 };
 
 /** Length units shown in the app (the machine always works in mm). */

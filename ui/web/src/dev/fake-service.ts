@@ -98,7 +98,7 @@ export class FakeService implements AppService {
   };
   settings: Settings = {
     version: 1,
-    ui: { language: 'en', theme: 'dark', high_contrast: false, density: 'auto', units: 'mm' },
+    ui: { language: 'en', theme: 'dark', high_contrast: false, density: 'auto', units: 'mm', welcomed: true },
   };
   private nextToast = 1;
   private revision = 0;

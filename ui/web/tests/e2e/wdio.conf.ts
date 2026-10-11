@@ -17,7 +17,17 @@ function freshHome(): string {
   const home = mkdtempSync(join(tmpdir(), 'freekerf-e2e-'));
   writeFileSync(
     join(home, 'settings.toml'),
-    ['version = 1', '', '[ui]', 'language = "en"', '', '[safety]', 'fire_countdown_s = 1', ''].join('\n'),
+    [
+      'version = 1',
+      '',
+      '[ui]',
+      'language = "en"',
+      'welcomed = true',
+      '',
+      '[safety]',
+      'fire_countdown_s = 1',
+      '',
+    ].join('\n'),
   );
   return home;
 }

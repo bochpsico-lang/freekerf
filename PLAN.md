@@ -457,6 +457,7 @@ Updated by every PR that delivers a milestone item.
 | M4b: job from the design in Produce: job start (absolute / current position / user origin) and the 3×3 anchor | `freekerf-planner/src/origin.rs`, `job.from_document {start, anchor}` in `freekerf-service`, `ui/web/src/produce/MachinePanel.svelte` | `origin.rs` tests, `service.rs::document_session_actions_and_events`, `produce.test.ts` | `doc/features/produce-mode.md` |
 | M4b: images in the Design mode: the raster dialog (method, dithering, resolution, adjustments, powers) with a Rust preview; toasts above the palette | `freekerf-planner::image::preview_bitmap`, `document.raster_settings/set_raster/raster_preview` in `freekerf-session`, `ui/web/src/design/RasterDialog.svelte` | `actions.rs::raster_settings_and_preview`, `design.test.ts`, `design.e2e.ts` | `doc/features/{design-mode,session}.md` |
 | M4b: material test (flow 6: power × speed grid, a layer per cell, Hershey labels) from the tool rail | `document.material_test` in `freekerf-session`, `ui/web/src/design/MaterialTestDialog.svelte`, `Dialog::MaterialTest` | `actions.rs::material_test_grid`, `design.test.ts` | `doc/features/{design-mode,session}.md`, roadmap (library and "save as material") |
+| M4b: the welcome opens by itself on the first run (`[ui] welcomed`) | `freekerf-settings` (`UiSettings::welcomed`), `ui/web/src/App.svelte`, `state/settings.svelte.ts` | `ui_section_is_optional_and_settable`, `design.test.ts` | `doc/features/{settings,design-mode}.md` |
 
 ## 14. Decisions already taken
 

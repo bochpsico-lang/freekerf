@@ -23,7 +23,7 @@ memory, for development in a browser and component tests).
 | Raster dialog (an image selected: *Image engraving…* in the inspector) | method (grey levels, dithering with the 9 algorithms, as it is, trace outlines), resolution, brightness, contrast, threshold, direction, speed, minimum and maximum power; a preview of the bitmap the settings make (computed in Rust); Apply is one undo step | `document.raster_settings`, `document.raster_preview`, `document.set_raster` |
 | Material test dialog | filled cells (engraving) or outlines (lines, cuts); power from / to / steps by row, speed from / to / steps by column (1 to 20 steps each), cell size; `S` of 100 % is the board's `$30` | `document.material_test` |
 | Import dialog | a file (SVG, DXF, image) and its colours: keep (one layer per colour) or put everything on the current layer; the bytes cross as base64; the report comes back as a toast | `document.import_data` |
-| Welcome dialog | set up the machine (opens Settings), import from LaserGRBL (scan, choose, report; the LaserGRBL files are only read), explore with the emulator; reopened from Settings | `migrate.detect`, `migrate.run`, `machine.connect` |
+| Welcome dialog | set up the machine (opens Settings), import from LaserGRBL (scan, choose, report; the LaserGRBL files are only read), explore with the emulator; opens by itself on the first run (until it is closed once: `ui.welcomed`), reopened from Settings | `migrate.detect`, `migrate.run`, `machine.connect`, `settings.set` |
 
 The active tool is part of the view state (`tool`, [shell.md](shell.md)), so scripts
 and agents see and set it like a person.
@@ -72,8 +72,6 @@ drawn in this mode.
 - No material picker in the layer editor yet, no context menu, no z-order, no
   node editing: listed in [roadmap.md](../roadmap.md). Booleans and offsets turn
   curves into polygons (0.01 mm) and drop editable text.
-- The welcome dialog does not open by itself on the first run yet (needs a
-  "welcomed" flag in the settings).
 - The fake document reads simple SVG shapes only (rect, circle, ellipse, line,
   polyline, polygon); the app uses the real importers.
 

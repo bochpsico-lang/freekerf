@@ -27,7 +27,13 @@ export class SettingsProjection {
       high_contrast: ui.high_contrast ?? false,
       density: ui.density ?? 'auto',
       units: ui.units ?? 'mm',
+      welcomed: ui.welcomed ?? false,
     };
+  }
+
+  /** The settings were read and the welcome was never closed: the first run. */
+  get firstRun(): boolean {
+    return this.#settings !== null && !this.#settings.ui?.welcomed;
   }
 
   async refresh(): Promise<void> {

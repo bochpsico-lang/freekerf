@@ -315,6 +315,8 @@ pub struct UiSettings {
     pub density: Density,
     /// Units shown.
     pub units: Units,
+    /// The welcome was shown and closed (it opens by itself on the first run only).
+    pub welcomed: bool,
 }
 
 impl Default for UiSettings {
@@ -325,6 +327,7 @@ impl Default for UiSettings {
             high_contrast: false,
             density: Density::default(),
             units: Units::default(),
+            welcomed: false,
         }
     }
 }
@@ -659,7 +662,11 @@ mod tests {
             .unwrap();
         s.set("ui.units", serde_json::json!("in"), false).unwrap();
         s.set("ui.language", serde_json::json!("pt-BR"), false).unwrap();
+        // files without `welcomed` show the welcome once
+        assert!(!s.ui.welcomed);
+        s.set("ui.welcomed", serde_json::json!(true), false).unwrap();
         let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
+        assert!(back.ui.welcomed);
         assert_eq!(back.ui.theme, Theme::Light);
         assert!(back.ui.high_contrast);
         assert_eq!(back.ui.density, Density::Comfortable);

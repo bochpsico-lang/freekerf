@@ -61,6 +61,7 @@ theme = "dark"              # dark | light
 high_contrast = false
 density = "auto"            # auto | compact | comfortable
 units = "mm"                # mm | in (display only; the machine works in mm)
+welcomed = false            # the welcome opens by itself until it is closed once (M4b)
 
 [safety]                    # user-only (M4a)
 fire_countdown_s = 3        # seconds before "Fire laser" works (1-10)
@@ -76,7 +77,7 @@ Grants are added when the person chooses "always" in the permission dialog
 (or one by one in the app). See [mcp.md](mcp.md).
 
 
-`[ui]`, `[safety]` and `[[buttons]]` were added in M4a with defaults for every key, so older files load unchanged
+`[ui]`, `[safety]` and `[[buttons]]` were added in M4a (and `ui.welcomed` in M4b) with defaults for every key, so older files load unchanged
 and no migration (or version bump) is needed; `ui_section_is_optional_and_settable`
 tests it. The desktop app reads and writes these keys only through
 `settings.get` / `settings.set` ([theming.md](theming.md)).

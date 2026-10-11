@@ -76,7 +76,8 @@
         "high_contrast": false,
         "language": "auto",
         "theme": "dark",
-        "units": "mm"
+        "units": "mm",
+        "welcomed": false
       }
     },
     "version": {
@@ -507,6 +508,11 @@
           "description": "Units shown.",
           "$ref": "#/$defs/Units",
           "default": "mm"
+        },
+        "welcomed": {
+          "description": "The welcome was shown and closed (it opens by itself on the first run only).",
+          "type": "boolean",
+          "default": false
         }
       },
       "additionalProperties": false
