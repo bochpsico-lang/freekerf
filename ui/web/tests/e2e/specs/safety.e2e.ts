@@ -42,17 +42,18 @@ describe('Safety in the real app', () => {
   it('Shift+Esc is STOP, even from a text field', async () => {
     await $('.dock-tabs [data-panel="console"]').click();
     const consoleText = async () => String(await (await byTestId('console')).getProperty('textContent'));
-    await byTestId('console-input').setValue('$I');
+    // `$G` (parser state): the app never sends it by itself, unlike `$I` and `$$`,
+    // which it reads again after a reset
+    await byTestId('console-input').setValue('$G');
     await browser.keys('Enter');
-    await browser.waitUntil(async () => (await consoleText()).includes('[VER:'));
+    await browser.waitUntil(async () => (await consoleText()).includes('[GC:'));
     await byTestId('console-input').click();
     await browser.action('key').down('\uE008').down('\uE00C').up('\uE00C').up('\uE008').perform();
-    // the soft reset: the controller starts again and the console shows its banner only
-    // (the console is cleared first and the banner arrives after, so wait for both)
+    // the soft reset: the console is cleared and the controller's banner arrives after
     await browser.waitUntil(
       async () => {
         const text = await consoleText();
-        return !text.includes('[VER:') && text.includes('Grbl');
+        return !text.includes('[GC:') && text.includes('Grbl');
       },
       { timeout: 10_000 },
     );

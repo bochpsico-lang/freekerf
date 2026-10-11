@@ -45,3 +45,56 @@ export async function waitForText(id: string, text: string, timeout = 10_000): P
     timeoutMsg: `${id} never contained "${text}" (it has "${String(await el.getProperty('textContent'))}")`,
   });
 }
+
+/** Runs an action with the window's own `dispatch` command (reads, selection). */
+export function dispatch<T = unknown>(action: string, params: unknown = {}): Promise<T> {
+  return browser.execute(
+    async (a: string, p: unknown) => {
+      const w = window as unknown as {
+        __TAURI_INTERNALS__: { invoke: (cmd: string, args: unknown) => Promise<unknown> };
+      };
+      return w.__TAURI_INTERNALS__.invoke('dispatch', { action: a, params: p });
+    },
+    action,
+    params,
+  ) as Promise<T>;
+}
+
+/** The parts of `session.snapshot` the tests read. */
+export interface Snapshot {
+  selection: number[];
+  undo: string[];
+  document: {
+    layers: { id: number; color: string; mode: string; speed_mm_min: number; power: number }[];
+    objects: { id: number; layer: number; kind: string; image?: { tool: string } }[];
+  };
+}
+
+/** The app's session snapshot. */
+export const snapshot = () => dispatch<Snapshot>('session.snapshot');
+
+/** Picks a file in a file input, as a person would (see `loadProgram`). */
+export async function pickFile(testid: string, name: string, type: string, text: string): Promise<void> {
+  const input = await byTestId(testid);
+  await input.waitForExist();
+  await browser.execute(
+    (el, n, ty, body) => {
+      const i = el as unknown as HTMLInputElement;
+      const dt = new DataTransfer();
+      dt.items.add(new File([body], n, { type: ty }));
+      i.files = dt.files;
+      i.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+    input,
+    name,
+    type,
+    text,
+  );
+}
+
+/** Sets a number field and commits it (Enter). */
+export async function setNumber(testid: string, value: number): Promise<void> {
+  const el = await byTestId(testid);
+  await el.setValue(String(value));
+  await browser.keys('Enter');
+}

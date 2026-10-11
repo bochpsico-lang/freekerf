@@ -51,6 +51,8 @@ describe('Design mode on the real document', () => {
   it('imports an SVG by colour layer through the dialog', async () => {
     await $('[data-tool="import"]').click();
     const input = await byTestId('import-file');
+    // the dialog opens on the next view event
+    await input.waitForExist();
     await browser.execute(
       (el, text) => {
         const i = el as unknown as HTMLInputElement;
@@ -96,6 +98,8 @@ describe('Design mode on the real document', () => {
   it('imports a photo and sets its engraving in the raster dialog (Rust preview)', async () => {
     await $('[data-tool="import"]').click();
     const input = await byTestId('import-file');
+    // the dialog opens on the next view event
+    await input.waitForExist();
     // a 40 × 20 grey ramp drawn with a canvas, as a PNG file
     await browser.execute(async (el) => {
       const c = document.createElement('canvas');

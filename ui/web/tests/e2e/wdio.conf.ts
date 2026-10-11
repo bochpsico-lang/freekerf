@@ -13,24 +13,18 @@ const app = process.env.FREEKERF_DESKTOP ?? join(root, 'target/debug/freekerf-de
 let driver: ChildProcess | null = null;
 
 /** A fresh app home per session: default settings, a 1 s fire countdown. */
-function freshHome(): string {
+function freshHome(firstRun: boolean): string {
   const home = mkdtempSync(join(tmpdir(), 'freekerf-e2e-'));
+  const ui = firstRun ? ['[ui]', 'language = "en"'] : ['[ui]', 'language = "en"', 'welcomed = true'];
   writeFileSync(
     join(home, 'settings.toml'),
-    [
-      'version = 1',
-      '',
-      '[ui]',
-      'language = "en"',
-      'welcomed = true',
-      '',
-      '[safety]',
-      'fire_countdown_s = 1',
-      '',
-    ].join('\n'),
+    ['version = 1', '', ...ui, '', '[safety]', 'fire_countdown_s = 1', ''].join('\n'),
   );
   return home;
 }
+
+/** LaserGRBL files written by LaserGRBL's own code (the migration's test fixtures). */
+const LASERGRBL_FIXTURES = join(root, 'crates/config/freekerf-migrate/tests/fixtures');
 
 export const config: WebdriverIO.Config = {
   runner: 'local',
@@ -45,9 +39,14 @@ export const config: WebdriverIO.Config = {
   mochaOpts: { ui: 'bdd', timeout: 60_000 },
   waitforTimeout: 10_000,
 
-  // one app (and one home) per spec file
-  beforeSession() {
-    process.env.FREEKERF_HOME = freshHome();
+  // one app (and one home) per spec file; `welcome.e2e.ts` is a first run on a
+  // computer with LaserGRBL
+  beforeSession(_config, _capabilities, specs) {
+    const firstRun = specs.some((s) => s.endsWith('welcome.e2e.ts'));
+    process.env.FREEKERF_HOME = freshHome(firstRun);
+    process.env.FREEKERF_LASERGRBL_DIR = firstRun
+      ? LASERGRBL_FIXTURES
+      : join(process.env.FREEKERF_HOME, 'no-lasergrbl');
     driver = spawn(process.env.TAURI_DRIVER ?? 'tauri-driver', [], {
       stdio: [null, process.stdout, process.stderr],
       env: process.env,

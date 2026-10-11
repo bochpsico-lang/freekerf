@@ -63,7 +63,7 @@
         <button class="wel-card" data-testid="welcome-migrate" onclick={migrate}
           ><Icon name="import" /><b>{t('welcome-migrate')}</b><small>{t('welcome-migrateSub')}</small></button
         >
-        <button class="wel-card" onclick={explore}
+        <button class="wel-card" data-testid="welcome-explore" onclick={explore}
           ><Icon name="sparkle" /><b>{t('welcome-explore')}</b><small>{t('machine-emulator')}</small></button
         >
       </div>
@@ -117,7 +117,9 @@
       </div>
       <div class="wel-foot">
         <span></span>
-        <button class="btn primary" onclick={onclose}><span>{t('welcome-finish')}</span></button>
+        <button class="btn primary" data-testid="welcome-finish" onclick={onclose}
+          ><span>{t('welcome-finish')}</span></button
+        >
       </div>
     {/if}
   </div>

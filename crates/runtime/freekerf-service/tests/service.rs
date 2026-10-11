@@ -656,3 +656,37 @@ fn laser_actions_run_only_after_a_confirmed_countdown() {
     ));
     assert!(call(&s, "view.get", json!({}))["fire_request"].is_null());
 }
+
+#[test]
+fn stop_after_a_system_command_clears_the_console_and_resets() {
+    let s = Service::in_memory().unwrap();
+    let user = Caller::user();
+    s.dispatch(&user, "machine.connect", json!({"emulator": true}))
+        .unwrap();
+    let wait = |what: &str, f: &dyn Fn(&str) -> bool| {
+        let end = Instant::now() + Duration::from_secs(10);
+        loop {
+            let c = s.dispatch(&user, "console.get", Value::Null).unwrap().to_string();
+            if f(&c) {
+                return;
+            }
+            assert!(Instant::now() < end, "{what}: {c}");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    };
+    wait("ready", &|_| {
+        s.dispatch(&user, "state.get", Value::Null).unwrap()["machine"]["status"] == "Idle"
+    });
+    for i in 0..30 {
+        // `$G`: never sent by the host itself (it reads `$$` and `$I` again after a reset)
+        s.dispatch(&user, "machine.system_command", json!({"line": "$G"}))
+            .unwrap();
+        wait("$G answered", &|c| {
+            c.contains("[GC:") && c.contains("\"result\":\"OK\"")
+        });
+        s.dispatch(&user, "machine.stop", Value::Null).unwrap();
+        wait(&format!("reset {i}"), &|c| {
+            !c.contains("[GC:") && c.contains("Grbl")
+        });
+    }
+}

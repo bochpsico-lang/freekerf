@@ -90,7 +90,18 @@ CI on native runners (`native-check`, which checks the whole workspace); install
   cancel runs nothing), a job to its end, STOP during a run. Safety: `machine.send`
   called directly from the page is refused (only `fire.request` is allowed),
   Shift+Esc from a text field resets the controller, settings reach
-  `settings.toml`. Run:
+  `settings.toml`. The flows of `design/ux.md`, one spec each:
+
+  | Flow | Spec |
+  | --- | --- |
+  | 1 first run (the welcome by itself, explore with the simulator) and 2 LaserGRBL migration | `welcome.e2e.ts` (a first-run home; `FREEKERF_LASERGRBL_DIR` = the migration's fixtures, files written by LaserGRBL's code) |
+  | 3 import an SVG → tune a layer → job from the design at the head, frame, burn | `job-flows.e2e.ts` |
+  | 4 photo → raster settings | `design.e2e.ts` |
+  | 5 text and a rectangle → subtract → array → cut layer, and 6 material test | `design-flows.e2e.ts` |
+  | 7 pause, resume, STOP, recover the job from the banner | `job-flows.e2e.ts` |
+  | 8 tablet controls, desktop prepares | not in the MVP: the remote client is M6 (`PLAN.md`) |
+
+  Run:
 
   ```bash
   cargo install tauri-driver --locked          # once; Linux also needs webkit2gtk-driver
