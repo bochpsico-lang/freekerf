@@ -1820,6 +1820,10 @@ kbd {
 [data-layout='narrow'] .toasts {
   bottom: calc(var(--fk-control-h) + 56px);
 }
+/* above the palette, which sits at the bottom of the canvas in the Design mode */
+[data-mode='design'] .toasts {
+  bottom: calc(52px + var(--fk-icon-btn) + 8px);
+}
 .toast {
   pointer-events: auto;
   display: flex;

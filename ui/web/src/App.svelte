@@ -5,6 +5,7 @@
   // view state in Rust (PLAN §9: the UI changes app state only through actions).
   import { setApp, type AppContext, type LaserRequest } from './context';
   import ImportDialog from './design/ImportDialog.svelte';
+  import RasterDialog from './design/RasterDialog.svelte';
   import LayersPanel from './design/LayersPanel.svelte';
   import ObjectPanel from './design/ObjectPanel.svelte';
   import WelcomeDialog from './design/WelcomeDialog.svelte';
@@ -247,6 +248,7 @@
     fire_confirmation: fireDialog,
     welcome: welcomeDialog,
     import: importDialog,
+    raster: rasterDialog,
   }}
 />
 <Toasts />
@@ -271,6 +273,9 @@
 {/snippet}
 {#snippet importDialog(close: () => void)}
   <ImportDialog onclose={close} />
+{/snippet}
+{#snippet rasterDialog(close: () => void)}
+  <RasterDialog onclose={close} />
 {/snippet}
 {#snippet fireDialog()}
   <FireConfirmation />

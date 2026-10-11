@@ -273,6 +273,21 @@ pub fn plan_image_object(
     )
 }
 
+/// The bitmap the raster dialog's settings make of an image object (what
+/// line-by-line engraving burns: grey levels, or black and white when dithered or
+/// thresholded), for previews.
+///
+/// # Errors
+/// The image cannot be decoded, or the resolution comes out as zero.
+pub fn preview_bitmap(obj: &ImageObject, settings: &RasterSettings) -> Result<Image, PlanError> {
+    let original = processor::normalize(&decode(&obj.data)?);
+    let gray = processor::is_gray(&original);
+    let edited = processor::apply_edits(&original, &obj.edits);
+    let prepared =
+        processor::prepare(&edited, gray, settings, obj.size_mm, DEFAULT_DPI).map_err(image_error)?;
+    Ok(prepared.bitmap)
+}
+
 /// A document holding one image on its own layer (for tests and scripts).
 #[must_use]
 pub fn single_image_document(obj: ImageObject) -> Document {

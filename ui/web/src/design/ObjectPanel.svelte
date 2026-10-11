@@ -136,6 +136,15 @@
       ></label
     >
 
+    {#if sel.length === 1 && sel[0]!.kind === 'image'}
+      <button
+        class="btn"
+        data-testid="obj-image-open"
+        onclick={() => run(() => doc.service.dispatch('view.open_dialog', { name: 'raster' }))}
+        ><Icon name="image" /><span>{t('obj-image-open')}</span></button
+      >
+    {/if}
+
     {#if text?.text}
       <div class="field">
         <label for="obj-text">{t('obj-text')}</label>

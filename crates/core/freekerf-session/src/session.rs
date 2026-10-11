@@ -137,6 +137,20 @@ pub struct ObjectSummary {
     /// The text of a text object.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<TextSpec>,
+    /// How an image object is engraved.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<ImageSummary>,
+}
+
+/// How an image is engraved (the raster dialog's main choices).
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct ImageSummary {
+    /// Line by line, dithering, vectorize, centerline or pass-through.
+    pub tool: freekerf_document::RasterTool,
+    /// Dithering algorithm (when dithering).
+    pub dithering: freekerf_document::DitherMode,
+    /// Lines per mm.
+    pub lines_per_mm: f64,
 }
 
 /// The document without geometry.
@@ -195,6 +209,14 @@ pub fn summary(doc: &Document) -> DocumentSummary {
                     [m.m11, m.m12, m.m21, m.m22, m.offset_x, m.offset_y]
                 },
                 text: o.text.clone(),
+                image: match &o.kind {
+                    ObjectKind::Image(img) => Some(ImageSummary {
+                        tool: img.settings.tool,
+                        dithering: img.settings.dithering,
+                        lines_per_mm: img.settings.lines_per_mm,
+                    }),
+                    _ => None,
+                },
             })
             .collect(),
         bounds: rect(doc.bounds()),

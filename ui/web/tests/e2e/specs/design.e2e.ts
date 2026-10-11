@@ -92,4 +92,57 @@ describe('Design mode on the real document', () => {
     await $('[data-tool="undo"]').click();
     await browser.waitUntil(async () => (await layerOf()) !== '#B36AE2', { timeout: 10_000 });
   });
+
+  it('imports a photo and sets its engraving in the raster dialog (Rust preview)', async () => {
+    await $('[data-tool="import"]').click();
+    const input = await byTestId('import-file');
+    // a 40 × 20 grey ramp drawn with a canvas, as a PNG file
+    await browser.execute(async (el) => {
+      const c = document.createElement('canvas');
+      c.width = 40;
+      c.height = 20;
+      const g = c.getContext('2d')!;
+      for (let x = 0; x < 40; x++) {
+        g.fillStyle = `rgb(${x * 6},${x * 6},${x * 6})`;
+        g.fillRect(x, 0, 1, 20);
+      }
+      const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), 'image/png'));
+      const dt = new DataTransfer();
+      dt.items.add(new File([blob], 'ramp.png', { type: 'image/png' }));
+      const i = el as unknown as HTMLInputElement;
+      i.files = dt.files;
+      i.dispatchEvent(new Event('change', { bubbles: true }));
+    }, input);
+    await byTestId('import-go').click();
+    await browser.waitUntil(async () => (await snapshot()).document.objects.some((o) => o.kind === 'image'), {
+      timeout: 10_000,
+    });
+    const image = (await snapshot()).document.objects.find((o) => o.kind === 'image')!;
+    await browser.execute(
+      async (ids) => {
+        const w = window as unknown as {
+          __TAURI_INTERNALS__: { invoke: (cmd: string, args: unknown) => Promise<unknown> };
+        };
+        await w.__TAURI_INTERNALS__.invoke('dispatch', { action: 'document.select', params: { ids } });
+        await w.__TAURI_INTERNALS__.invoke('dispatch', {
+          action: 'view.open_panel',
+          params: { name: 'object' },
+        });
+      },
+      [image.id],
+    );
+    await byTestId('obj-image-open').click();
+    await expect(byTestId('raster-preview')).toBeDisplayed({ wait: 10_000 });
+    await $('[data-tool-mode="dithering"]').click();
+    await byTestId('raster-apply').click();
+    await browser.waitUntil(
+      async () => {
+        const s = (await snapshot()) as unknown as {
+          document: { objects: { id: number; image?: { tool: string } }[] };
+        };
+        return s.document.objects.find((o) => o.id === image.id)?.image?.tool === 'dithering';
+      },
+      { timeout: 10_000 },
+    );
+  });
 });

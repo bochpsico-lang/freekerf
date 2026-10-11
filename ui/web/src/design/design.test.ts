@@ -214,6 +214,47 @@ describe('Design mode', () => {
     await waitFor(() => expect(service.calls.some((c) => c.action === 'document.boolean')).toBe(true));
   });
 
+  it('raster dialog: method, dithering, preview, apply as one step', async () => {
+    const { service, summary } = await mountDesign();
+    await service.dispatch('view.open_panel', { name: 'object' });
+    const { objects } = await service.dispatch('document.import_data', {
+      format: 'image',
+      data: '',
+      name: 'photo.png',
+    });
+    await service.dispatch('document.select', { ids: objects });
+    await fireEvent.click(await screen.findByTestId('obj-image-open'));
+    const dialog = await screen.findByTestId('dialog-raster');
+    await within(dialog).findByTestId('raster-preview');
+    expect(dialog.textContent).toContain('120 × 90 px');
+    expect(within(dialog).queryByTestId('raster-dither')).toBeNull();
+    await fireEvent.click(dialog.querySelector('[data-tool-mode="dithering"]')!);
+    const dither = (await within(dialog).findByTestId('raster-dither')) as HTMLSelectElement;
+    dither.value = 'atkinson';
+    await fireEvent.change(dither);
+    const lines = within(dialog).getByTestId('raster-lines') as HTMLInputElement;
+    lines.value = '5';
+    await fireEvent.change(lines);
+    await waitFor(() => expect(dialog.textContent).toContain('200 × 150 px'), { timeout: 2000 });
+    // nothing changed before Apply
+    expect((await summary()).objects[0]!.image).toMatchObject({ tool: 'line_to_line' });
+    await fireEvent.click(within(dialog).getByTestId('raster-apply'));
+    await waitFor(() => expect(screen.queryByTestId('dialog-raster')).toBeNull());
+    expect((await summary()).objects[0]!.image).toEqual({
+      tool: 'dithering',
+      dithering: 'atkinson',
+      lines_per_mm: 5,
+    });
+    expect((await service.dispatch('session.snapshot', {})).undo.at(-1)).toBe('image settings');
+  });
+
+  it('raster dialog without an image says so', async () => {
+    const { service } = await mountDesign();
+    await service.dispatch('view.open_dialog', { name: 'raster' });
+    await screen.findByTestId('raster-none');
+    expect((screen.getByTestId('raster-apply') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('import dialog: a file, keep or unify colours, a toast with the report', async () => {
     const { service, summary } = await mountDesign();
     await service.dispatch('view.open_dialog', { name: 'import' });

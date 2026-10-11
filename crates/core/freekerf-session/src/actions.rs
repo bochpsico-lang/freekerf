@@ -702,6 +702,59 @@ fn geometry_failed(e: impl std::fmt::Display) -> ActionError {
     ActionError::Failed(format!("geometry: {e}"))
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ImageIdParams {
+    /// Id of an image object.
+    id: u64,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct SetRasterParams {
+    /// Id of an image object.
+    id: u64,
+    /// The raster dialog's settings (all of them, as `document.raster_settings` gives).
+    settings: RasterSettings,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct RasterPreviewParams {
+    /// Id of an image object.
+    id: u64,
+    /// Settings to try (default: the image's own).
+    #[serde(default)]
+    settings: Option<RasterSettings>,
+}
+
+#[derive(Serialize, JsonSchema)]
+struct RasterPreview {
+    /// The bitmap as a PNG file, base64.
+    png: String,
+    /// Width in pixels.
+    width: u32,
+    /// Height in pixels.
+    height: u32,
+}
+
+fn image_of(d: &Document, id: u64) -> Result<&ImageObject, ActionError> {
+    match d.object(ObjectId(id)).map(|o| &o.kind) {
+        Some(ObjectKind::Image(img)) => Ok(img),
+        Some(_) => Err(ActionError::InvalidParams(format!("object {id} is not an image"))),
+        None => Err(ActionError::InvalidParams(format!("no object {id}"))),
+    }
+}
+
+fn check_raster(s: &RasterSettings) -> Result<(), ActionError> {
+    if !(s.lines_per_mm > 0.0 && s.lines_per_mm.is_finite()) || s.min_power > s.max_power {
+        return Err(ActionError::InvalidParams(
+            "lines_per_mm must be positive and min_power at most max_power".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Default height of new text, mm.
 const TEXT_HEIGHT_MM: f64 = 10.0;
 
@@ -1395,6 +1448,48 @@ pub fn register_session_actions<C: SessionHost>(r: &mut Registry<C>) -> Result<(
         },
     )?;
     r.register(
+        "document.raster_settings",
+        "The raster dialog's settings of an image object (tool, dithering, resolution, grey adjustments, speeds, powers).",
+        Tier::Read,
+        |c: &C, p: ImageIdParams| Ok(image_of(lock(c).document(), p.id)?.settings.clone()),
+    )?;
+    r.register(
+        "document.set_raster",
+        "Changes the raster dialog's settings of an image object. One undo step.",
+        Tier::Edit,
+        |c: &C, p: SetRasterParams| {
+            check_raster(&p.settings)?;
+            let changed = lock(c).edit("image settings", |d, _| {
+                image_of(d, p.id)?;
+                match d.object_mut(ObjectId(p.id)).map(|o| &mut o.kind) {
+                    Some(ObjectKind::Image(img)) if img.settings != p.settings => {
+                        img.settings = p.settings.clone();
+                        Ok(true)
+                    }
+                    _ => Ok::<_, ActionError>(false),
+                }
+            })?;
+            Ok(Changed { changed })
+        },
+    )?;
+    r.register(
+        "document.raster_preview",
+        "The bitmap an image object's raster settings (or the ones given) make: grey levels, or black and white when dithered; a PNG, base64.",
+        Tier::Read,
+        |c: &C, p: RasterPreviewParams| {
+            let img = image_of(lock(c).document(), p.id)?.clone();
+            let settings = p.settings.unwrap_or_else(|| img.settings.clone());
+            check_raster(&settings)?;
+            let bitmap = freekerf_planner::image::preview_bitmap(&img, &settings).map_err(failed)?;
+            let png = bitmap.encode_png().map_err(failed)?;
+            Ok(RasterPreview {
+                png: base64::engine::general_purpose::STANDARD.encode(png),
+                width: bitmap.width(),
+                height: bitmap.height(),
+            })
+        },
+    )?;
+    r.register(
         "document.layer_for_color",
         "The layer of a colour, created (line, 1000 mm/min, power 1000) when missing; it becomes the current layer. Creating it is one undo step.",
         Tier::Edit,
@@ -1625,6 +1720,80 @@ mod tests {
 
     fn b64(b: &[u8]) -> String {
         base64::engine::general_purpose::STANDARD.encode(b)
+    }
+
+    #[test]
+    fn raster_settings_and_preview() {
+        let (r, h) = setup();
+        let user = Caller::user();
+        let d = |name: &str, p: Value| r.dispatch(&h, &user, name, p);
+        // a 20 × 10 grey ramp
+        let mut px = Vec::new();
+        for _y in 0..10 {
+            for x in 0..20u8 {
+                px.extend_from_slice(&[x * 12, x * 12, x * 12, 255]);
+            }
+        }
+        let png = freekerf_raster::image::Image::from_rgba(20, 10, &px)
+            .unwrap()
+            .encode_png()
+            .unwrap();
+        let id = d(
+            "document.import_data",
+            json!({"format": "image", "data": b64(&png), "dpi": 25.4}),
+        )
+        .unwrap()["objects"][0]
+            .clone();
+        let snap = d("session.snapshot", Value::Null).unwrap();
+        assert_eq!(snap["document"]["objects"][0]["image"]["tool"], "line_to_line");
+        let mut settings = d("document.raster_settings", json!({"id": id})).unwrap();
+        assert_eq!(settings["lines_per_mm"], 3.0);
+        // grey preview, then dithered: only black and white
+        let grey = d("document.raster_preview", json!({"id": id})).unwrap();
+        assert_eq!(
+            (grey["width"].as_u64(), grey["height"].as_u64()),
+            (Some(60), Some(30))
+        );
+        settings["tool"] = json!("dithering");
+        settings["dithering"] = json!("atkinson");
+        let dithered = d("document.raster_preview", json!({"id": id, "settings": settings})).unwrap();
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(dithered["png"].as_str().unwrap())
+            .unwrap();
+        let img = freekerf_raster::image::Image::decode(&bytes).unwrap();
+        assert!(
+            img.pixels()
+                .iter()
+                .all(|&p| matches!(freekerf_raster::image::split(p).1, 0 | 255))
+        );
+        // nothing changed until set_raster
+        assert_eq!(
+            d("session.snapshot", Value::Null).unwrap()["document"]["objects"][0]["image"]["tool"],
+            "line_to_line"
+        );
+        assert_eq!(
+            d("document.set_raster", json!({"id": id, "settings": settings})).unwrap()["changed"],
+            true
+        );
+        let snap = d("session.snapshot", Value::Null).unwrap();
+        assert_eq!(snap["document"]["objects"][0]["image"]["dithering"], "atkinson");
+        assert_eq!(snap["undo"].as_array().unwrap().last().unwrap(), "image settings");
+        assert_eq!(
+            d("document.set_raster", json!({"id": id, "settings": settings})).unwrap()["changed"],
+            false
+        );
+        // errors
+        settings["lines_per_mm"] = json!(0.0);
+        assert!(d("document.set_raster", json!({"id": id, "settings": settings})).is_err());
+        assert!(d("document.raster_preview", json!({"id": id, "settings": settings})).is_err());
+        let rect = d(
+            "document.add_shape",
+            json!({"shape": "rect", "x": 0, "y": 0, "width": 1, "height": 1}),
+        )
+        .unwrap()["id"]
+            .clone();
+        assert!(d("document.raster_settings", json!({"id": rect})).is_err());
+        assert!(d("document.raster_settings", json!({"id": 999})).is_err());
     }
 
     #[test]

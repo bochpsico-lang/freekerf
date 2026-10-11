@@ -424,3 +424,25 @@ migrate-buttons = { $n } custom buttons
 migrate-materials = User materials (UserMaterials.psh)
 migrate-counters = Usage counters of { $n } laser modules
 migrate-preferences = { $n } other settings: jog, cooling, job header and footer
+
+## raster
+raster-title = Image engraving
+raster-none = Select one image to set how it is engraved.
+raster-tool = Method
+raster-tool-line_to_line = Grey levels
+raster-tool-dithering = Dithering
+raster-tool-passthrough = As it is
+raster-tool-vectorize = Trace outlines
+raster-tool-centerline = Centre lines
+raster-dither-random = Random
+raster-lines = Resolution
+raster-speed = Speed
+raster-minPower = Minimum power
+raster-maxPower = Maximum power
+raster-direction = Direction
+raster-dir-horizontal = Horizontal
+raster-dir-vertical = Vertical
+raster-dir-diagonal = Diagonal
+raster-preview = Preview of the engraving
+raster-apply = Apply
+obj-image-open = Image engraving…

@@ -424,3 +424,25 @@ migrate-buttons = { $n } botões personalizados
 migrate-materials = Materiais do usuário (UserMaterials.psh)
 migrate-counters = Contadores de uso de { $n } módulos laser
 migrate-preferences = { $n } outras configurações: jog, refrigeração, cabeçalho e rodapé do trabalho
+
+## raster
+raster-title = Gravação da imagem
+raster-none = Selecione uma imagem para definir como ela é gravada.
+raster-tool = Método
+raster-tool-line_to_line = Tons de cinza
+raster-tool-dithering = Pontilhado
+raster-tool-passthrough = Como está
+raster-tool-vectorize = Contornar
+raster-tool-centerline = Linhas centrais
+raster-dither-random = Aleatório
+raster-lines = Resolução
+raster-speed = Velocidade
+raster-minPower = Potência mínima
+raster-maxPower = Potência máxima
+raster-direction = Direção
+raster-dir-horizontal = Horizontal
+raster-dir-vertical = Vertical
+raster-dir-diagonal = Diagonal
+raster-preview = Prévia da gravação
+raster-apply = Aplicar
+obj-image-open = Gravação da imagem…

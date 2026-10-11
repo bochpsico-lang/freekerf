@@ -126,6 +126,18 @@ interface AppDocument {
    */
   open(params: { path: string }): unknown;
   /**
+   * The bitmap an image object's raster settings (or the ones given) make: grey levels, or black and white when dithered; a PNG, base64.
+   *
+   * Action `document.raster_preview`, tier `read`.
+   */
+  rasterPreview(params: { id: number; settings?: { adjustments: { blue: number; brightness: number; contrast: number; formula: "simple_average" | "weight_average" | "optical_correct" | "custom"; green: number; red: number; threshold?: number | null; white_clip: number }; border_speed_mm_min: number; centerline: { corner_threshold?: number | null; line_threshold?: number | null }; direction: "horizontal" | "vertical" | "diagonal"; dithering: "atkinson" | "floyd_steinberg" | "burks" | "jarvis" | "random" | "sierra2" | "sierra3" | "sierra_light" | "stucki"; interpolation: "nearest_neighbor" | "bilinear" | "bicubic" | "high_quality_bilinear" | "high_quality_bicubic"; laser_off: string; laser_on: string; lines_per_mm: number; mark_speed_mm_min: number; max_power: number; min_power: number; tool: "line_to_line" | "dithering" | "vectorize" | "centerline" | "passthrough"; vectorize: { adaptive_quality: boolean; down_sampling?: number | null; fill?: { direction: unknown; kind: unknown } | null; fill_lines_per_mm: number; optimize?: number | null; optimize_fast: boolean; smoothing?: number | null; spot_removal?: number | null } } | null }): unknown;
+  /**
+   * The raster dialog's settings of an image object (tool, dithering, resolution, grey adjustments, speeds, powers).
+   *
+   * Action `document.raster_settings`, tier `read`.
+   */
+  rasterSettings(params: { id: number }): unknown;
+  /**
    * Removes a layer and its objects. One undo step.
    *
    * Action `document.remove_layer`, tier `edit`.
@@ -155,6 +167,12 @@ interface AppDocument {
    * Action `document.set_current_layer`, tier `ui`.
    */
   setCurrentLayer(params: { id: number }): unknown;
+  /**
+   * Changes the raster dialog's settings of an image object. One undo step.
+   *
+   * Action `document.set_raster`, tier `edit`.
+   */
+  setRaster(params: { id: number; settings: { adjustments: { blue: number; brightness: number; contrast: number; formula: "simple_average" | "weight_average" | "optical_correct" | "custom"; green: number; red: number; threshold?: number | null; white_clip: number }; border_speed_mm_min: number; centerline: { corner_threshold?: number | null; line_threshold?: number | null }; direction: "horizontal" | "vertical" | "diagonal"; dithering: "atkinson" | "floyd_steinberg" | "burks" | "jarvis" | "random" | "sierra2" | "sierra3" | "sierra_light" | "stucki"; interpolation: "nearest_neighbor" | "bilinear" | "bicubic" | "high_quality_bilinear" | "high_quality_bicubic"; laser_off: string; laser_on: string; lines_per_mm: number; mark_speed_mm_min: number; max_power: number; min_power: number; tool: "line_to_line" | "dithering" | "vectorize" | "centerline" | "passthrough"; vectorize: { adaptive_quality: boolean; down_sampling?: number | null; fill?: { direction: unknown; kind: "raster" } | { direction: unknown; kind: "hatch" } | null; fill_lines_per_mm: number; optimize?: number | null; optimize_fast: boolean; smoothing?: number | null; spot_removal?: number | null } } }): unknown;
   /**
    * Changes a text object's text or font height (its position, rotation and scale stay). One undo step.
    *

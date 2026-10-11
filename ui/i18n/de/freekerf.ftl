@@ -424,3 +424,25 @@ migrate-buttons = { $n } benutzerdefinierte Schaltflächen
 migrate-materials = Benutzermaterialien (UserMaterials.psh)
 migrate-counters = Nutzungszähler von { $n } Lasermodulen
 migrate-preferences = { $n } weitere Einstellungen: Joggen, Kühlung, Kopf- und Fußzeilen des Auftrags
+
+## raster
+raster-title = Bildgravur
+raster-none = Wählen Sie ein Bild, um festzulegen, wie es graviert wird.
+raster-tool = Methode
+raster-tool-line_to_line = Graustufen
+raster-tool-dithering = Rasterung
+raster-tool-passthrough = Unverändert
+raster-tool-vectorize = Konturen nachzeichnen
+raster-tool-centerline = Mittellinien
+raster-dither-random = Zufällig
+raster-lines = Auflösung
+raster-speed = Geschwindigkeit
+raster-minPower = Minimale Leistung
+raster-maxPower = Maximale Leistung
+raster-direction = Richtung
+raster-dir-horizontal = Horizontal
+raster-dir-vertical = Vertikal
+raster-dir-diagonal = Diagonal
+raster-preview = Vorschau der Gravur
+raster-apply = Anwenden
+obj-image-open = Bildgravur…

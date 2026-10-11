@@ -20,6 +20,7 @@ memory, for development in a browser and component tests).
 | Layers panel | one row per colour layer in output order: code (C00…), mode, object count, speed · power · passes; the row makes the layer current; show/hide; expand to edit mode, speed, power (% of `$30`), passes; move up/down in the output order | `document.set_current_layer`, `document.update_layer`, `document.move_layer` |
 | Palette (over the canvas) | colour = layer: the colour's layer (created if missing) becomes the layer of new shapes, and a selection moves to it | `document.layer_for_color`, `document.move_to_layer` |
 | Inspector (Object panel) | X/Y of the centre, width, height (keep proportions), rotation (read from the object's transform), text and its size, layer swatches, align (2+ objects), combine (weld, subtract, intersect; 2+ objects), offset outline (distance), array (columns, rows, gap), duplicate, delete | `document.transform`, `document.set_text`, `document.align`, `document.boolean`, `document.offset`, `document.array`, `document.duplicate`, `document.delete` |
+| Raster dialog (an image selected: *Image engraving…* in the inspector) | method (grey levels, dithering with the 9 algorithms, as it is, trace outlines), resolution, brightness, contrast, threshold, direction, speed, minimum and maximum power; a preview of the bitmap the settings make (computed in Rust); Apply is one undo step | `document.raster_settings`, `document.raster_preview`, `document.set_raster` |
 | Import dialog | a file (SVG, DXF, image) and its colours: keep (one layer per colour) or put everything on the current layer; the bytes cross as base64; the report comes back as a toast | `document.import_data` |
 | Welcome dialog | set up the machine (opens Settings), import from LaserGRBL (scan, choose, report; the LaserGRBL files are only read), explore with the emulator; reopened from Settings | `migrate.detect`, `migrate.run`, `machine.connect` |
 
@@ -65,7 +66,8 @@ drawn in this mode.
 
 ## Limits
 
-- Images show as their frame; the raster dialog (dithering, preview) comes next.
+- Images show as their frame on the canvas; the dithered dots show in the raster
+  dialog's preview.
 - No material picker in the layer editor yet, no context menu, no z-order, no
   node editing: listed in [roadmap.md](../roadmap.md). Booleans and offsets turn
   curves into polygons (0.01 mm) and drop editable text.
@@ -85,7 +87,7 @@ drawn in this mode.
 - `ui/web/src/design/import.test.ts`, `ui/web/src/dev/fake-document.test.ts`,
   `ui/web/src/state/document.test.ts`.
 - `ui/web/tests/e2e/specs/design.e2e.ts` (the real app): draw with the tool, import
-  an SVG through the dialog, the palette and undo.
+  an SVG through the dialog, the palette and undo, a photo and its raster settings.
 - `ui/web/tests/web/design-canvas.spec.ts` (Playwright, real WebGL2 canvas): draw,
   select, move, resize with a handle, marquee, undo; the palette.
 - `ui/web/tests/web/long-strings.spec.ts`: German in the Design screens at 1366 and

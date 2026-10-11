@@ -10,6 +10,7 @@ import type {
   AlignHow,
   Color,
   LayerSummary,
+  RasterSettings,
   ObjectSummary,
   Snapshot,
   TextSpec,
@@ -21,7 +22,7 @@ import { PALETTE_COLORS } from '../design/layers';
 import { ActionFailure, type Params, type Result } from '../service';
 
 type Layer = Omit<LayerSummary, 'objects'>;
-type ObjectKind = 'shape' | 'text';
+type ObjectKind = 'shape' | 'text' | 'image';
 type Change = 'document' | 'selection' | 'history';
 
 type Affine = [number, number, number, number, number, number];
@@ -36,7 +37,51 @@ interface FakeObject {
   paths: [number, number][][];
   transform: Affine;
   text?: TextSpec;
+  /** Images: the raster dialog's settings (the frame is the outline). */
+  raster?: RasterSettings;
 }
+
+/** The Rust defaults of `RasterSettings`. */
+export function defaultRaster(): RasterSettings {
+  return {
+    tool: 'line_to_line',
+    direction: 'horizontal',
+    lines_per_mm: 3,
+    adjustments: {
+      formula: 'simple_average',
+      red: 100,
+      green: 100,
+      blue: 100,
+      brightness: 100,
+      contrast: 100,
+      threshold: null,
+      white_clip: 5,
+    },
+    dithering: 'floyd_steinberg',
+    interpolation: 'high_quality_bicubic',
+    vectorize: {
+      spot_removal: null,
+      smoothing: null,
+      optimize: null,
+      adaptive_quality: false,
+      down_sampling: null,
+      optimize_fast: false,
+      fill: null,
+      fill_lines_per_mm: 3,
+    },
+    centerline: { corner_threshold: 110, line_threshold: 10 },
+    border_speed_mm_min: 1000,
+    mark_speed_mm_min: 1000,
+    min_power: 0,
+    max_power: 1000,
+    laser_on: 'M3',
+    laser_off: 'M5',
+  };
+}
+
+/** A 1 × 1 white PNG: the fake's preview. */
+const WHITE_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
 
 interface Doc {
   layers: Layer[];
@@ -234,6 +279,12 @@ export class FakeDocument {
     return ids ?? this.doc.selection;
   }
 
+  private image(id: number, action: string): FakeObject {
+    const o = this.obj(id, action);
+    if (!o.raster) throw invalid(action, `object ${id} is not an image`);
+    return o;
+  }
+
   private currentLayer(): number {
     if (this.doc.layers.some((l) => l.id === this.doc.current_layer)) return this.doc.current_layer;
     const first = this.doc.layers[0];
@@ -280,6 +331,15 @@ export class FakeDocument {
       bounds: this.bounds(o),
       transform: o.transform,
       ...(o.text ? { text: o.text } : {}),
+      ...(o.raster
+        ? {
+            image: {
+              tool: o.raster.tool,
+              dithering: o.raster.dithering,
+              lines_per_mm: o.raster.lines_per_mm,
+            },
+          }
+        : {}),
     }));
     return structuredClone({
       revision,
@@ -572,6 +632,30 @@ export class FakeDocument {
       return { changed: true };
     },
     'document.import_data': (p) => {
+      if (p.format === 'image') {
+        // a 40 × 30 mm image on a layer of its own
+        const before = this.doc.layers.map((l) => l.id);
+        const id = this.edit('import', (d) => {
+          const layer = Math.max(0, ...d.layers.map((l) => l.id)) + 1;
+          d.layers.push(newLayer(layer, '#000000'));
+          const oid = d.next_id++;
+          d.objects.push({
+            id: oid,
+            layer,
+            name: p.name ?? '',
+            kind: 'image',
+            paths: [rectPath(0, 0, 40, 30)],
+            transform: IDENTITY,
+            raster: defaultRaster(),
+          });
+          return oid;
+        });
+        return {
+          objects: [id],
+          layers: this.doc.layers.map((l) => l.id).filter((l) => !before.includes(l)),
+          unsupported: 0,
+        };
+      }
       if (p.format !== 'svg')
         throw new ActionFailure('document.import_data', {
           kind: 'failed',
@@ -601,6 +685,28 @@ export class FakeDocument {
         objects,
         layers: this.doc.layers.map((l) => l.id).filter((id) => !before.includes(id)),
         unsupported: 0,
+      };
+    },
+    'document.raster_settings': (p) => structuredClone(this.image(p.id, 'document.raster_settings').raster!),
+    'document.set_raster': (p) => {
+      if (!(p.settings.lines_per_mm > 0))
+        throw invalid('document.set_raster', 'lines_per_mm must be positive');
+      const changed = this.edit('image settings', () => {
+        const o = this.image(p.id, 'document.set_raster');
+        if (JSON.stringify(o.raster) === JSON.stringify(p.settings)) return false;
+        o.raster = structuredClone(p.settings);
+        return true;
+      });
+      return { changed };
+    },
+    'document.raster_preview': (p) => {
+      const o = this.image(p.id, 'document.raster_preview');
+      const s = p.settings ?? o.raster!;
+      if (!(s.lines_per_mm > 0)) throw invalid('document.raster_preview', 'lines_per_mm must be positive');
+      return {
+        png: WHITE_PNG,
+        width: Math.round(40 * s.lines_per_mm),
+        height: Math.round(30 * s.lines_per_mm),
       };
     },
     'migrate.detect': () =>

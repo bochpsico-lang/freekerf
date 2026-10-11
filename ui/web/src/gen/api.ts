@@ -591,6 +591,11 @@ export type ImageEdit = {
   reference: [number, number];
 };
 
+export type ImageIdParams = {
+  /** Id of an image object. */
+  id: number;
+};
+
 /** An image placed on the bed. */
 export type ImageObject = {
   /** Pixels. */
@@ -603,6 +608,16 @@ export type ImageObject = {
   settings: RasterSettings;
   /** Size on the bed, mm `[width, height]`. */
   size_mm: [number, number];
+};
+
+/** How an image is engraved (the raster dialog's main choices). */
+export type ImageSummary = {
+  /** Dithering algorithm (when dithering). */
+  dithering: DitherMode;
+  /** Lines per mm. */
+  lines_per_mm: number;
+  /** Line by line, dithering, vectorize, centerline or pass-through. */
+  tool: RasterTool;
 };
 
 /** Layers of an imported drawing. */
@@ -991,6 +1006,8 @@ export type ObjectSummary = {
   bounds?: [number, number, number, number] | null;
   /** Id. */
   id: number;
+  /** How an image object is engraved. */
+  image?: ImageSummary | null;
   /** `shape`, `text`, `image` or `unsupported`. */
   kind: string;
   /** Layer id. */
@@ -1086,6 +1103,22 @@ export type ProgramInfo = {
   name: string;
   /** Quadrant of the drawing. */
   quadrant: string;
+};
+
+export type RasterPreview = {
+  /** Height in pixels. */
+  height: number;
+  /** The bitmap as a PNG file, base64. */
+  png: string;
+  /** Width in pixels. */
+  width: number;
+};
+
+export type RasterPreviewParams = {
+  /** Id of an image object. */
+  id: number;
+  /** Settings to try (default: the image's own). */
+  settings?: RasterSettings | null;
 };
 
 /** How an image becomes a job (the raster dialog values). */
@@ -1215,6 +1248,13 @@ export type SelectParams = {
 export type SendParams = {
   /** One line of G-code or a `$` command. */
   line: string;
+};
+
+export type SetRasterParams = {
+  /** Id of an image object. */
+  id: number;
+  /** The raster dialog's settings (all of them, as `document.raster_settings` gives). */
+  settings: RasterSettings;
 };
 
 export type SetTextParams = {
@@ -1724,6 +1764,18 @@ export interface Actions {
     result: FilePath;
     tier: "edit";
   };
+  /** The bitmap an image object's raster settings (or the ones given) make: grey levels, or black and white when dithered; a PNG, base64. */
+  "document.raster_preview": {
+    params: RasterPreviewParams;
+    result: RasterPreview;
+    tier: "read";
+  };
+  /** The raster dialog's settings of an image object (tool, dithering, resolution, grey adjustments, speeds, powers). */
+  "document.raster_settings": {
+    params: ImageIdParams;
+    result: RasterSettings;
+    tier: "read";
+  };
   /** Removes a layer and its objects. One undo step. */
   "document.remove_layer": {
     params: LayerIdParams;
@@ -1753,6 +1805,12 @@ export interface Actions {
     params: LayerIdParams;
     result: Changed;
     tier: "ui";
+  };
+  /** Changes the raster dialog's settings of an image object. One undo step. */
+  "document.set_raster": {
+    params: SetRasterParams;
+    result: Changed;
+    tier: "edit";
   };
   /** Changes a text object's text or font height (its position, rotation and scale stay). One undo step. */
   "document.set_text": {
@@ -2117,11 +2175,14 @@ export const ACTION_TIERS = {
   "document.new": "edit",
   "document.offset": "edit",
   "document.open": "edit",
+  "document.raster_preview": "read",
+  "document.raster_settings": "read",
   "document.remove_layer": "edit",
   "document.save": "edit",
   "document.select": "ui",
   "document.select_all": "ui",
   "document.set_current_layer": "ui",
+  "document.set_raster": "edit",
   "document.set_text": "edit",
   "document.to_fkproj": "read",
   "document.transform": "edit",

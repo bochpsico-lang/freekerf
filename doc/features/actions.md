@@ -26,11 +26,14 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `document.new` | edit | Starts an empty document (the undo history starts again). |
 | `document.offset` | edit | Adds the outline of shapes (default: the selection) grown or shrunk by `distance_mm`, as new objects on the same layers, selected. One undo step. |
 | `document.open` | edit | Opens a `.fkproj` project file (the undo history starts again). |
+| `document.raster_preview` | read | The bitmap an image object's raster settings (or the ones given) make: grey levels, or black and white when dithered; a PNG, base64. |
+| `document.raster_settings` | read | The raster dialog's settings of an image object (tool, dithering, resolution, grey adjustments, speeds, powers). |
 | `document.remove_layer` | edit | Removes a layer and its objects. One undo step. |
 | `document.save` | edit | Saves the document as a `.fkproj` project file (written atomically). |
 | `document.select` | ui | Selects objects (replace, add to or remove from the selection). Unknown ids are ignored. |
 | `document.select_all` | ui | Selects every object. |
 | `document.set_current_layer` | ui | Chooses the layer new shapes and text go to. |
+| `document.set_raster` | edit | Changes the raster dialog's settings of an image object. One undo step. |
 | `document.set_text` | edit | Changes a text object's text or font height (its position, rotation and scale stay). One undo step. |
 | `document.to_fkproj` | read | The document as `.fkproj` text. |
 | `document.transform` | edit | Moves, scales, mirrors or rotates objects (default: the selection): `{translate}`, `{scale, pivot}`, `{rotate_deg, pivot}` or `{matrix}`. Images only move and scale. One undo step. |
@@ -278,6 +281,23 @@ Opens a `.fkproj` project file (the undo history starts again).
 | --- | --- | --- |
 | `path` | yes | Path of a G-code file. |
 
+### `document.raster_preview`
+
+The bitmap an image object's raster settings (or the ones given) make: grey levels, or black and white when dithered; a PNG, base64.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `id` | yes | Id of an image object. |
+| `settings` | no | Settings to try (default: the image's own). |
+
+### `document.raster_settings`
+
+The raster dialog's settings of an image object (tool, dithering, resolution, grey adjustments, speeds, powers).
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `id` | yes | Id of an image object. |
+
 ### `document.remove_layer`
 
 Removes a layer and its objects. One undo step.
@@ -316,6 +336,15 @@ Chooses the layer new shapes and text go to.
 | Parameter | Required | Description |
 | --- | --- | --- |
 | `id` | yes | Layer id. |
+
+### `document.set_raster`
+
+Changes the raster dialog's settings of an image object. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `id` | yes | Id of an image object. |
+| `settings` | yes | The raster dialog's settings (all of them, as `document.raster_settings` gives). |
 
 ### `document.set_text`
 
