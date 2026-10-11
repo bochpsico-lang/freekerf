@@ -611,6 +611,97 @@ struct MoveLayerParams {
     to: usize,
 }
 
+/// Operations of `document.boolean`.
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum BooleanOp {
+    /// Weld: the area of any of them.
+    Union,
+    /// The first (in drawing order) minus the others.
+    Difference,
+    /// The area of all of them.
+    Intersection,
+    /// The area of exactly one of them.
+    Xor,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct BooleanParams {
+    /// The operation.
+    op: BooleanOp,
+    /// Object ids (default: the selection; at least two shapes).
+    #[serde(default)]
+    ids: Option<Vec<u64>>,
+}
+
+/// Corners of `document.offset`.
+#[derive(Debug, Clone, Copy, Default, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum OffsetJoin {
+    /// Rounded (default).
+    #[default]
+    Round,
+    /// Square.
+    Square,
+    /// Sharp (mitered up to twice the distance).
+    Miter,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct OffsetParams {
+    /// Distance, mm: positive grows, negative shrinks.
+    distance_mm: f64,
+    /// Corners.
+    #[serde(default)]
+    join: OffsetJoin,
+    /// Object ids (default: the selection).
+    #[serde(default)]
+    ids: Option<Vec<u64>>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ArrayParams {
+    /// Columns (at least 1).
+    columns: u32,
+    /// Rows (at least 1).
+    rows: u32,
+    /// Gap between copies, `[x, y]` mm (default `[5, 5]`); rows go down.
+    #[serde(default)]
+    gap_mm: Option<[f64; 2]>,
+    /// Object ids (default: the selection).
+    #[serde(default)]
+    ids: Option<Vec<u64>>,
+}
+
+/// Most copies `document.array` makes.
+const ARRAY_MAX_COPIES: u32 = 10_000;
+
+/// Tolerance, mm, of curves turned into polygons for boolean operations and offsets.
+const POLYGON_TOLERANCE_MM: f64 = 0.01;
+
+/// The closed polygons of a shape object (open paths are closed).
+fn polygons(o: &Object) -> Vec<Vec<Point>> {
+    match &o.kind {
+        ObjectKind::Shape { paths } => paths
+            .iter()
+            .map(|p| p.to_polyline(POLYGON_TOLERANCE_MM))
+            .filter(|p| p.len() >= 3)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn closed_paths(polys: Vec<Vec<Point>>) -> Vec<Path> {
+    polys.into_iter().map(|p| Path::polyline(&p, true)).collect()
+}
+
+fn geometry_failed(e: impl std::fmt::Display) -> ActionError {
+    ActionError::Failed(format!("geometry: {e}"))
+}
+
 /// Default height of new text, mm.
 const TEXT_HEIGHT_MM: f64 = 10.0;
 
@@ -1154,6 +1245,156 @@ pub fn register_session_actions<C: SessionHost>(r: &mut Registry<C>) -> Result<(
         },
     )?;
     r.register(
+        "document.boolean",
+        "Combines shapes (default: the selection, at least two) into one: union (weld), difference (the first in drawing order minus the others), intersection or xor. The result takes the first one's layer and is selected. One undo step.",
+        Tier::Edit,
+        |c: &C, p: BooleanParams| {
+            let mut s = lock(c);
+            let ids = targets(p.ids, &s);
+            let mut new = ObjectId(0);
+            s.edit("boolean", |d, sel| {
+                let chosen: Vec<&Object> = d
+                    .objects
+                    .iter()
+                    .filter(|o| ids.contains(&o.id) && matches!(o.kind, ObjectKind::Shape { .. }))
+                    .collect();
+                if chosen.len() < 2 {
+                    return Err(ActionError::InvalidParams("choose at least two shapes".into()));
+                }
+                let (first, rest) = (chosen[0], &chosen[1..]);
+                let (layer, name) = (first.layer, first.name.clone());
+                let scale = freekerf_geometry::boolean::DEFAULT_SCALE;
+                let all = |objs: &[&Object]| objs.iter().flat_map(|o| polygons(o)).collect::<Vec<_>>();
+                let op = |a: &[Vec<Point>], b: &[Vec<Point>], op| {
+                    freekerf_geometry::boolean::boolean(a, b, op, scale).map_err(geometry_failed)
+                };
+                use freekerf_geometry::boolean::Op;
+                let result = match p.op {
+                    BooleanOp::Union => op(&all(&chosen), &[], Op::Union)?,
+                    BooleanOp::Difference => op(&polygons(first), &all(rest), Op::Difference)?,
+                    BooleanOp::Xor => op(&polygons(first), &all(rest), Op::Xor)?,
+                    BooleanOp::Intersection => {
+                        let mut acc = polygons(first);
+                        for o in rest {
+                            acc = op(&acc, &polygons(o), Op::Intersection)?;
+                        }
+                        acc
+                    }
+                };
+                let gone: Vec<ObjectId> = chosen.iter().map(|o| o.id).collect();
+                for id in gone {
+                    d.remove_object(id).map_err(failed)?;
+                }
+                new = add_native(d, sel, layer, ObjectKind::Shape { paths: closed_paths(result) }, &name)?;
+                Ok::<_, ActionError>(true)
+            })?;
+            Ok(NewId { id: new.0 })
+        },
+    )?;
+    r.register(
+        "document.offset",
+        "Adds the outline of shapes (default: the selection) grown or shrunk by `distance_mm`, as new objects on the same layers, selected. One undo step.",
+        Tier::Edit,
+        |c: &C, p: OffsetParams| {
+            if !(p.distance_mm.is_finite() && p.distance_mm != 0.0) {
+                return Err(ActionError::InvalidParams("distance_mm must be finite and not 0".into()));
+            }
+            let mut s = lock(c);
+            let ids = targets(p.ids, &s);
+            let join = match p.join {
+                OffsetJoin::Round => freekerf_geometry::boolean::Join::Round {
+                    arc_tolerance: POLYGON_TOLERANCE_MM,
+                },
+                OffsetJoin::Square => freekerf_geometry::boolean::Join::Square,
+                OffsetJoin::Miter => freekerf_geometry::boolean::Join::Miter { limit: 2.0 },
+            };
+            let mut new = Vec::new();
+            s.edit("offset", |d, sel| {
+                let sources: Vec<(LayerId, Vec<Vec<Point>>)> = d
+                    .objects
+                    .iter()
+                    .filter(|o| ids.contains(&o.id))
+                    .map(|o| (o.layer, polygons(o)))
+                    .filter(|(_, p)| !p.is_empty())
+                    .collect();
+                for (layer, polys) in sources {
+                    let out = freekerf_geometry::boolean::offset(
+                        &polys,
+                        p.distance_mm,
+                        join,
+                        freekerf_geometry::boolean::DEFAULT_SCALE,
+                    )
+                    .map_err(geometry_failed)?;
+                    if out.is_empty() {
+                        continue;
+                    }
+                    new.push(add_native(d, sel, layer, ObjectKind::Shape { paths: closed_paths(out) }, "offset")?);
+                }
+                if new.is_empty() {
+                    return Ok(false);
+                }
+                *sel = new.iter().copied().collect();
+                Ok::<_, ActionError>(true)
+            })?;
+            Ok(NewIds {
+                ids: new.into_iter().map(|i| i.0).collect(),
+            })
+        },
+    )?;
+    r.register(
+        "document.array",
+        "Copies objects (default: the selection) in a grid of `columns` × `rows` (the originals are the top-left cell; rows go down), `gap_mm` apart; selects the originals and the copies. One undo step.",
+        Tier::Edit,
+        |c: &C, p: ArrayParams| {
+            let [gx, gy] = p.gap_mm.unwrap_or([5.0, 5.0]);
+            if p.columns == 0 || p.rows == 0 || !(gx.is_finite() && gy.is_finite()) {
+                return Err(ActionError::InvalidParams(
+                    "columns and rows must be at least 1, the gap finite".into(),
+                ));
+            }
+            if p.columns.saturating_mul(p.rows) > ARRAY_MAX_COPIES {
+                return Err(ActionError::InvalidParams(format!(
+                    "at most {ARRAY_MAX_COPIES} cells"
+                )));
+            }
+            let mut s = lock(c);
+            let ids = targets(p.ids, &s);
+            let mut new = Vec::new();
+            s.edit("array", |d, sel| {
+                let originals: Vec<Object> = d.objects.iter().filter(|o| ids.contains(&o.id)).cloned().collect();
+                let b = bounds_of(originals.iter());
+                if originals.is_empty() || b.is_empty() {
+                    return Ok(false);
+                }
+                let (sx, sy) = (b.width() + gx, b.height() + gy);
+                for row in 0..p.rows {
+                    for col in 0..p.columns {
+                        if row == 0 && col == 0 {
+                            continue;
+                        }
+                        for o in &originals {
+                            let mut copy = o.clone();
+                            copy.translate(f64::from(col) * sx, -f64::from(row) * sy);
+                            let id = d
+                                .add_object_with(copy.layer, copy.kind, copy.name, copy.source)
+                                .map_err(failed)?;
+                            if let Some(added) = d.object_mut(id) {
+                                added.text = copy.text;
+                                added.transform = copy.transform;
+                            }
+                            new.push(id);
+                        }
+                    }
+                }
+                *sel = originals.iter().map(|o| o.id).chain(new.iter().copied()).collect();
+                Ok::<_, ActionError>(!new.is_empty())
+            })?;
+            Ok(NewIds {
+                ids: new.into_iter().map(|i| i.0).collect(),
+            })
+        },
+    )?;
+    r.register(
         "document.layer_for_color",
         "The layer of a colour, created (line, 1000 mm/min, power 1000) when missing; it becomes the current layer. Creating it is one undo step.",
         Tier::Edit,
@@ -1384,6 +1625,102 @@ mod tests {
 
     fn b64(b: &[u8]) -> String {
         base64::engine::general_purpose::STANDARD.encode(b)
+    }
+
+    #[test]
+    fn boolean_offset_and_array() {
+        let (r, h) = setup();
+        let user = Caller::user();
+        let d = |name: &str, p: Value| r.dispatch(&h, &user, name, p);
+        let objects = || d("session.snapshot", Value::Null).unwrap()["document"]["objects"].clone();
+        let bounds_of = |id: &Value| -> [f64; 4] {
+            let o = objects()
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|o| o["id"] == *id)
+                .cloned()
+                .unwrap();
+            serde_json::from_value(o["bounds"].clone()).unwrap()
+        };
+        let close = |a: [f64; 4], b: [f64; 4]| a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-3);
+        let a = d(
+            "document.add_shape",
+            json!({"shape": "rect", "x": 0, "y": 0, "width": 10, "height": 10}),
+        )
+        .unwrap()["id"]
+            .clone();
+        let b = d(
+            "document.add_shape",
+            json!({"shape": "rect", "x": 5, "y": 0, "width": 10, "height": 10}),
+        )
+        .unwrap()["id"]
+            .clone();
+
+        // weld: one object over both
+        let u = d("document.boolean", json!({"op": "union", "ids": [a, b]})).unwrap()["id"].clone();
+        assert_eq!(objects().as_array().unwrap().len(), 1);
+        assert!(close(bounds_of(&u), [0.0, 0.0, 15.0, 10.0]));
+        assert_eq!(
+            d("session.snapshot", Value::Null).unwrap()["selection"],
+            json!([u])
+        );
+        d("history.undo", Value::Null).unwrap();
+        // the first minus the others
+        let diff = d("document.boolean", json!({"op": "difference", "ids": [a, b]})).unwrap()["id"].clone();
+        assert!(close(bounds_of(&diff), [0.0, 0.0, 5.0, 10.0]));
+        d("history.undo", Value::Null).unwrap();
+        let inter =
+            d("document.boolean", json!({"op": "intersection", "ids": [a, b]})).unwrap()["id"].clone();
+        assert!(close(bounds_of(&inter), [5.0, 0.0, 10.0, 10.0]));
+        d("history.undo", Value::Null).unwrap();
+        let xor = d("document.boolean", json!({"op": "xor", "ids": [a, b]})).unwrap()["id"].clone();
+        assert!(close(bounds_of(&xor), [0.0, 0.0, 15.0, 10.0]));
+        d("history.undo", Value::Null).unwrap();
+        assert!(d("document.boolean", json!({"op": "union", "ids": [a]})).is_err());
+        let text = d("document.add_text", json!({"text": "I", "x": 0, "y": 0})).unwrap()["id"].clone();
+        assert!(d("document.boolean", json!({"op": "union", "ids": [text, 999]})).is_err());
+
+        // offset: a new outline around, the original stays
+        let grown = d("document.offset", json!({"distance_mm": 2, "ids": [a]})).unwrap()["ids"][0].clone();
+        assert!(close(bounds_of(&grown), [-2.0, -2.0, 12.0, 12.0]));
+        let shrunk = d(
+            "document.offset",
+            json!({"distance_mm": -1, "join": "miter", "ids": [a]}),
+        )
+        .unwrap()["ids"][0]
+            .clone();
+        assert!(close(bounds_of(&shrunk), [1.0, 1.0, 9.0, 9.0]));
+        d(
+            "document.offset",
+            json!({"distance_mm": 1, "join": "square", "ids": [a]}),
+        )
+        .unwrap();
+        assert!(d("document.offset", json!({"distance_mm": 0, "ids": [a]})).is_err());
+        // an open stroke has no area to grow
+        assert_eq!(
+            d("document.offset", json!({"distance_mm": 1, "ids": [text]})).unwrap()["ids"],
+            json!([])
+        );
+
+        // array: 3 × 2 of a 10 mm square with 5 mm gaps
+        let before = objects().as_array().unwrap().len();
+        let copies =
+            d("document.array", json!({"columns": 3, "rows": 2, "ids": [b]})).unwrap()["ids"].clone();
+        let copies = copies.as_array().unwrap().clone();
+        assert_eq!(copies.len(), 5);
+        assert_eq!(objects().as_array().unwrap().len(), before + 5);
+        assert!(close(bounds_of(&copies[1]), [35.0, 0.0, 45.0, 10.0]));
+        assert!(close(bounds_of(&copies[4]), [35.0, -15.0, 45.0, -5.0]));
+        assert_eq!(
+            d("session.snapshot", Value::Null).unwrap()["selection"]
+                .as_array()
+                .unwrap()
+                .len(),
+            6
+        );
+        assert!(d("document.array", json!({"columns": 0, "rows": 2})).is_err());
+        assert!(d("document.array", json!({"columns": 1000, "rows": 1000})).is_err());
     }
 
     #[test]

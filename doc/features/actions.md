@@ -11,6 +11,8 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `document.add_shape` | edit | Draws a rectangle or an ellipse on a layer (default: the current layer) and selects it. One undo step. |
 | `document.add_text` | edit | Writes text in the single-stroke font on a layer (default: the current layer) and selects it; the text stays editable (`document.set_text`). One undo step. |
 | `document.align` | edit | Lines up objects (default: the selection, at least two) on the box around them: left, center_h, right, top, middle_v or bottom. One undo step. |
+| `document.array` | edit | Copies objects (default: the selection) in a grid of `columns` × `rows` (the originals are the top-left cell; rows go down), `gap_mm` apart; selects the originals and the copies. One undo step. |
+| `document.boolean` | edit | Combines shapes (default: the selection, at least two) into one: union (weld), difference (the first in drawing order minus the others), intersection or xor. The result takes the first one's layer and is selected. One undo step. |
 | `document.clear_selection` | ui | Selects nothing. |
 | `document.delete` | edit | Deletes objects (default: the selection). One undo step. |
 | `document.duplicate` | edit | Copies objects (default: the selection), offset by `offset_mm`, and selects the copies. One undo step. |
@@ -22,6 +24,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `document.move_layer` | edit | Moves a layer in the layer list (the order of layers of the same mode is the order they run). One undo step. |
 | `document.move_to_layer` | edit | Moves objects (default: the selection) to another layer. One undo step. |
 | `document.new` | edit | Starts an empty document (the undo history starts again). |
+| `document.offset` | edit | Adds the outline of shapes (default: the selection) grown or shrunk by `distance_mm`, as new objects on the same layers, selected. One undo step. |
 | `document.open` | edit | Opens a `.fkproj` project file (the undo history starts again). |
 | `document.remove_layer` | edit | Removes a layer and its objects. One undo step. |
 | `document.save` | edit | Saves the document as a `.fkproj` project file (written atomically). |
@@ -145,6 +148,26 @@ Lines up objects (default: the selection, at least two) on the box around them: 
 | `how` | yes | Which edge or centre. |
 | `ids` | no | Object ids (default: the selection; at least two). |
 
+### `document.array`
+
+Copies objects (default: the selection) in a grid of `columns` × `rows` (the originals are the top-left cell; rows go down), `gap_mm` apart; selects the originals and the copies. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `columns` | yes | Columns (at least 1). |
+| `gap_mm` | no | Gap between copies, `[x, y]` mm (default `[5, 5]`); rows go down. |
+| `ids` | no | Object ids (default: the selection). |
+| `rows` | yes | Rows (at least 1). |
+
+### `document.boolean`
+
+Combines shapes (default: the selection, at least two) into one: union (weld), difference (the first in drawing order minus the others), intersection or xor. The result takes the first one's layer and is selected. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `ids` | no | Object ids (default: the selection; at least two shapes). |
+| `op` | yes | The operation. |
+
 ### `document.clear_selection`
 
 Selects nothing.
@@ -236,6 +259,16 @@ Moves objects (default: the selection) to another layer. One undo step.
 Starts an empty document (the undo history starts again).
 
 No parameters.
+
+### `document.offset`
+
+Adds the outline of shapes (default: the selection) grown or shrunk by `distance_mm`, as new objects on the same layers, selected. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `distance_mm` | yes | Distance, mm: positive grows, negative shrinks. |
+| `ids` | no | Object ids (default: the selection). |
+| `join` | no | Corners. |
 
 ### `document.open`
 

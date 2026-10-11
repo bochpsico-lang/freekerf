@@ -421,6 +421,71 @@ export class FakeDocument {
       });
       return { ids };
     },
+    // stand-ins for the real geometry: union and xor merge the outlines, difference
+    // keeps the first, intersection is the overlap of the boxes; offsets are boxes
+    'document.boolean': (p) => {
+      const chosen = this.doc.objects.filter((o) => this.targets(p.ids).includes(o.id));
+      if (chosen.length < 2) throw invalid('document.boolean', 'choose at least two shapes');
+      const world = (o: FakeObject) => o.paths.map((path) => path.map(([x, y]) => apply(o.transform, x, y)));
+      const first = chosen[0]!;
+      let paths: [number, number][][];
+      if (p.op === 'difference') paths = world(first);
+      else if (p.op === 'intersection') {
+        const bs = chosen.map((o) => this.bounds(o)!);
+        const [x0, y0] = [Math.max(...bs.map((b) => b[0])), Math.max(...bs.map((b) => b[1]))];
+        const [x1, y1] = [Math.min(...bs.map((b) => b[2])), Math.min(...bs.map((b) => b[3]))];
+        paths = x1 > x0 && y1 > y0 ? [rectPath(x0, y0, x1 - x0, y1 - y0)] : [];
+      } else paths = chosen.flatMap(world);
+      const id = this.edit('boolean', (d) => {
+        d.objects = d.objects.filter((o) => !chosen.includes(o));
+        return this.add(first.name, paths, first.layer);
+      });
+      return { id };
+    },
+    'document.offset': (p) => {
+      const ids = this.edit('offset', (d) => {
+        const out: number[] = [];
+        for (const o of d.objects.filter((x) => this.targets(p.ids).includes(x.id) && !x.text)) {
+          const b = this.bounds(o)!;
+          const k = p.distance_mm;
+          out.push(
+            this.add(
+              'offset',
+              [rectPath(b[0] - k, b[1] - k, b[2] - b[0] + 2 * k, b[3] - b[1] + 2 * k)],
+              o.layer,
+            ),
+          );
+        }
+        if (out.length) d.selection = out;
+        return out;
+      });
+      return { ids };
+    },
+    'document.array': (p) => {
+      if (p.columns < 1 || p.rows < 1) throw invalid('document.array', 'columns and rows must be at least 1');
+      const [gx, gy] = p.gap_mm ?? [5, 5];
+      const ids = this.edit('array', (d) => {
+        const originals = d.objects.filter((o) => this.targets(p.ids).includes(o.id));
+        const bs = originals.map((o) => this.bounds(o)!);
+        const w = Math.max(...bs.map((b) => b[2])) - Math.min(...bs.map((b) => b[0]));
+        const h = Math.max(...bs.map((b) => b[3])) - Math.min(...bs.map((b) => b[1]));
+        const out: number[] = [];
+        for (let r = 0; r < p.rows; r++)
+          for (let c = 0; c < p.columns; c++) {
+            if (r === 0 && c === 0) continue;
+            for (const o of originals) {
+              const copy = structuredClone(o);
+              copy.id = d.next_id++;
+              copy.transform = compose([1, 0, 0, 1, c * (w + gx), -r * (h + gy)], copy.transform);
+              d.objects.push(copy);
+              out.push(copy.id);
+            }
+          }
+        d.selection = [...originals.map((o) => o.id), ...out];
+        return out;
+      });
+      return { ids };
+    },
     'document.move_to_layer': (p) => {
       const ids = this.targets(p.ids);
       this.edit('move to layer', () => {

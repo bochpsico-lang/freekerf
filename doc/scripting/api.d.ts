@@ -36,6 +36,18 @@ interface AppDocument {
    */
   align(params: { how: "left" | "center_h" | "right" | "top" | "middle_v" | "bottom"; ids?: number[] | null }): unknown;
   /**
+   * Copies objects (default: the selection) in a grid of `columns` × `rows` (the originals are the top-left cell; rows go down), `gap_mm` apart; selects the originals and the copies. One undo step.
+   *
+   * Action `document.array`, tier `edit`.
+   */
+  array(params: { columns: number; gap_mm?: number[] | null; ids?: number[] | null; rows: number }): unknown;
+  /**
+   * Combines shapes (default: the selection, at least two) into one: union (weld), difference (the first in drawing order minus the others), intersection or xor. The result takes the first one's layer and is selected. One undo step.
+   *
+   * Action `document.boolean`, tier `edit`.
+   */
+  boolean(params: { ids?: number[] | null; op: "union" | "difference" | "intersection" | "xor" }): unknown;
+  /**
    * Selects nothing.
    *
    * Action `document.clear_selection`, tier `ui`.
@@ -101,6 +113,12 @@ interface AppDocument {
    * Action `document.new`, tier `edit`.
    */
   "new"(params?: Record<string, unknown>): unknown;
+  /**
+   * Adds the outline of shapes (default: the selection) grown or shrunk by `distance_mm`, as new objects on the same layers, selected. One undo step.
+   *
+   * Action `document.offset`, tier `edit`.
+   */
+  offset(params: { distance_mm: number; ids?: number[] | null; join?: "round" | "square" | "miter" }): unknown;
   /**
    * Opens a `.fkproj` project file (the undo history starts again).
    *

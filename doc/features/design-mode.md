@@ -16,10 +16,10 @@ memory, for development in a browser and component tests).
 
 | Screen | What it does | Actions |
 | --- | --- | --- |
-| Tool rail | select (V), rectangle (R), ellipse (E), text (T), import (Ctrl+I), undo, redo; node editing, trace, boolean operations, offset, array and material test are listed and disabled until they exist | `view.set_tool`, `view.open_dialog`, `history.undo/redo` |
+| Tool rail | select (V), rectangle (R), ellipse (E), text (T), import (Ctrl+I), weld and subtract (2+ selected), offset and array (open the inspector), undo, redo; node editing, trace and material test are listed and disabled until they exist | `view.set_tool`, `view.open_dialog`, `document.boolean`, `view.open_panel`, `history.undo/redo` |
 | Layers panel | one row per colour layer in output order: code (C00…), mode, object count, speed · power · passes; the row makes the layer current; show/hide; expand to edit mode, speed, power (% of `$30`), passes; move up/down in the output order | `document.set_current_layer`, `document.update_layer`, `document.move_layer` |
 | Palette (over the canvas) | colour = layer: the colour's layer (created if missing) becomes the layer of new shapes, and a selection moves to it | `document.layer_for_color`, `document.move_to_layer` |
-| Inspector (Object panel) | X/Y of the centre, width, height (keep proportions), rotation (read from the object's transform), text and its size, layer swatches, align (2+ objects), duplicate, delete | `document.transform`, `document.set_text`, `document.align`, `document.duplicate`, `document.delete` |
+| Inspector (Object panel) | X/Y of the centre, width, height (keep proportions), rotation (read from the object's transform), text and its size, layer swatches, align (2+ objects), combine (weld, subtract, intersect; 2+ objects), offset outline (distance), array (columns, rows, gap), duplicate, delete | `document.transform`, `document.set_text`, `document.align`, `document.boolean`, `document.offset`, `document.array`, `document.duplicate`, `document.delete` |
 | Import dialog | a file (SVG, DXF, image) and its colours: keep (one layer per colour) or put everything on the current layer; the bytes cross as base64; the report comes back as a toast | `document.import_data` |
 | Welcome dialog | set up the machine (opens Settings), import from LaserGRBL (scan, choose, report; the LaserGRBL files are only read), explore with the emulator; reopened from Settings | `migrate.detect`, `migrate.run`, `machine.connect` |
 
@@ -67,7 +67,8 @@ drawn in this mode.
 
 - Images show as their frame; the raster dialog (dithering, preview) comes next.
 - No material picker in the layer editor yet, no context menu, no z-order, no
-  array, no node editing: listed in [roadmap.md](../roadmap.md).
+  node editing: listed in [roadmap.md](../roadmap.md). Booleans and offsets turn
+  curves into polygons (0.01 mm) and drop editable text.
 - The welcome dialog does not open by itself on the first run yet (needs a
   "welcomed" flag in the settings).
 - The fake document reads simple SVG shapes only (rect, circle, ellipse, line,

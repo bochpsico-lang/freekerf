@@ -2,7 +2,7 @@
   // The inspector of the selection (design/design-system.md "Objeto"): position by
   // the centre, size, rotation, text, layer, align, duplicate, delete. Each edit is
   // one `document.*` action; "keep proportions" is a local preference of the panel.
-  import type { AlignHow, TransformOp } from '../gen/api';
+  import type { AlignHow, BooleanOp, TransformOp } from '../gen/api';
   import { app } from '../context';
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
@@ -14,6 +14,11 @@
   let { doc }: { doc: DocumentProjection } = $props();
   const { run, settings } = app();
   let lock = $state(true);
+  /** Offset and array parameters: local, kept while the panel is open. */
+  let offsetMm = $state(1);
+  let columns = $state(2);
+  let rows = $state(2);
+  let gapMm = $state(5);
 
   const sel = $derived(doc.selected);
   const ids = $derived(sel.map((o) => o.id));
@@ -39,6 +44,12 @@
     return transform({ scale, pivot: [cx, cy] });
   }
   const align = (how: AlignHow) => run(() => doc.service.dispatch('document.align', { ids, how }));
+  const combine = (op: BooleanOp) => run(() => doc.service.dispatch('document.boolean', { ids, op }));
+  const combines: [BooleanOp, 'weld' | 'subtract' | 'intersect'][] = [
+    ['union', 'weld'],
+    ['difference', 'subtract'],
+    ['intersection', 'intersect'],
+  ];
   const aligns: [
     AlignHow,
     'alignLeft' | 'alignCenterH' | 'alignRight' | 'alignTop' | 'alignMiddleV' | 'alignBottom',
@@ -177,6 +188,80 @@
             onclick={() => align(how)}><Icon name={icon} /></button
           >
         {/each}
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="mini">{t('obj-combine')}</span>
+      <div class="btn-row" role="group" aria-label={t('obj-combine')}>
+        {#each combines as [op, icon] (op)}
+          <button
+            class="icon-btn"
+            title={t(`tool-${icon}`)}
+            aria-label={t(`tool-${icon}`)}
+            data-testid="obj-{op}"
+            disabled={sel.length < 2}
+            onclick={() => combine(op)}><Icon name={icon} /></button
+          >
+        {/each}
+      </div>
+    </div>
+
+    <div class="field" data-testid="obj-offset">
+      <span class="mini">{t('obj-offset')}</span>
+      <div class="btn-row">
+        <NumField
+          label={t('obj-offset-distance')}
+          value={offsetMm}
+          unit={lenUnit}
+          scale={lenScale}
+          testid="obj-offset-distance"
+          oncommit={(v) => (offsetMm = v)}
+        />
+        <button
+          class="btn"
+          data-testid="obj-offset-go"
+          disabled={offsetMm === 0}
+          onclick={() => run(() => doc.service.dispatch('document.offset', { ids, distance_mm: offsetMm }))}
+          ><Icon name="offset" /><span>{t('obj-offset-go')}</span></button
+        >
+      </div>
+    </div>
+
+    <div class="field" data-testid="obj-array">
+      <span class="mini">{t('obj-array')}</span>
+      <div class="fgrid">
+        <NumField
+          label={t('obj-array-columns')}
+          value={columns}
+          decimals={0}
+          min={1}
+          testid="obj-array-columns"
+          oncommit={(v) => (columns = Math.max(1, Math.round(v)))}
+        />
+        <NumField
+          label={t('obj-array-rows')}
+          value={rows}
+          decimals={0}
+          min={1}
+          testid="obj-array-rows"
+          oncommit={(v) => (rows = Math.max(1, Math.round(v)))}
+        />
+        <NumField
+          label={t('obj-array-gap')}
+          value={gapMm}
+          unit={lenUnit}
+          scale={lenScale}
+          testid="obj-array-gap"
+          oncommit={(v) => (gapMm = v)}
+        />
+        <button
+          class="btn"
+          data-testid="obj-array-go"
+          onclick={() =>
+            run(() => doc.service.dispatch('document.array', { ids, columns, rows, gap_mm: [gapMm, gapMm] }))}
+          ><Icon name="array" /><span>{t('obj-array-go')}</span></button
+        >
       </div>
     </div>
 

@@ -176,6 +176,44 @@ describe('Design mode', () => {
     await waitFor(async () => expect((await summary()).objects[0]!.text!.text).toBe('Hello'));
   });
 
+  it('combine, offset and array from the inspector and the rail', async () => {
+    const { service, summary } = await mountDesign();
+    await service.dispatch('view.open_panel', { name: 'object' });
+    const a = (
+      await service.dispatch('document.add_shape', { shape: 'rect', x: 0, y: 0, width: 10, height: 10 })
+    ).id;
+    const weld = document.querySelector<HTMLButtonElement>('[data-tool="weld"]')!;
+    await waitFor(() => expect(weld.disabled).toBe(true));
+    // offset of one object
+    const distance = (await screen.findByTestId('obj-offset-distance')) as HTMLInputElement;
+    distance.value = '2';
+    await fireEvent.change(distance);
+    await fireEvent.click(screen.getByTestId('obj-offset-go'));
+    await waitFor(async () => expect((await summary()).objects).toHaveLength(2));
+    expect(service.calls.find((c) => c.action === 'document.offset')!.params).toEqual({
+      ids: [a],
+      distance_mm: 2,
+    });
+    // two selected: weld from the rail
+    await service.dispatch('document.select_all', {});
+    await waitFor(() => expect(weld.disabled).toBe(false));
+    await fireEvent.click(weld);
+    await waitFor(async () => expect((await summary()).objects).toHaveLength(1));
+    // array of the result, 3 × 1
+    const cols = screen.getByTestId('obj-array-columns') as HTMLInputElement;
+    cols.value = '3';
+    await fireEvent.change(cols);
+    const rows = screen.getByTestId('obj-array-rows') as HTMLInputElement;
+    rows.value = '1';
+    await fireEvent.change(rows);
+    await fireEvent.click(screen.getByTestId('obj-array-go'));
+    await waitFor(async () => expect((await summary()).objects).toHaveLength(3));
+    // the subtract button needs two
+    expect((screen.getByTestId('obj-difference') as HTMLButtonElement).disabled).toBe(false);
+    await fireEvent.click(screen.getByTestId('obj-intersection'));
+    await waitFor(() => expect(service.calls.some((c) => c.action === 'document.boolean')).toBe(true));
+  });
+
   it('import dialog: a file, keep or unify colours, a toast with the report', async () => {
     const { service, summary } = await mountDesign();
     await service.dispatch('view.open_dialog', { name: 'import' });

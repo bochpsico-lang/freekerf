@@ -81,6 +81,17 @@ export type AlignParams = {
   ids?: number[] | null;
 };
 
+export type ArrayParams = {
+  /** Columns (at least 1). */
+  columns: number;
+  /** Gap between copies, `[x, y]` mm (default `[5, 5]`); rows go down. */
+  gap_mm?: [number, number] | null;
+  /** Object ids (default: the selection). */
+  ids?: number[] | null;
+  /** Rows (at least 1). */
+  rows: number;
+};
+
 /** Automatic cooling: hold the job `off_s` every `on_s` seconds of work. */
 export type AutoCoolingSettings = {
   /** Enabled. */
@@ -97,6 +108,16 @@ export type AutomationSettings = {
   grants?: Grant[];
   /** MCP. */
   mcp?: McpSettings;
+};
+
+/** Operations of `document.boolean`. */
+export type BooleanOp = "union" | "difference" | "intersection" | "xor";
+
+export type BooleanParams = {
+  /** Object ids (default: the selection; at least two shapes). */
+  ids?: number[] | null;
+  /** The operation. */
+  op: BooleanOp;
 };
 
 /** binary data, base64 */
@@ -971,6 +992,18 @@ export type ObjectSummary = {
   transform: [number, number, number, number, number, number];
 };
 
+/** Corners of `document.offset`. */
+export type OffsetJoin = "round" | "square" | "miter";
+
+export type OffsetParams = {
+  /** Distance, mm: positive grows, negative shrinks. */
+  distance_mm: number;
+  /** Object ids (default: the selection). */
+  ids?: number[] | null;
+  /** Corners. */
+  join?: OffsetJoin;
+};
+
 export type OptionalDialogParams = {
   /** The dialog (default: the one on top). */
   name?: Dialog | null;
@@ -1587,6 +1620,18 @@ export interface Actions {
     result: Changed;
     tier: "edit";
   };
+  /** Copies objects (default: the selection) in a grid of `columns` × `rows` (the originals are the top-left cell; rows go down), `gap_mm` apart; selects the originals and the copies. One undo step. */
+  "document.array": {
+    params: ArrayParams;
+    result: NewIds;
+    tier: "edit";
+  };
+  /** Combines shapes (default: the selection, at least two) into one: union (weld), difference (the first in drawing order minus the others), intersection or xor. The result takes the first one's layer and is selected. One undo step. */
+  "document.boolean": {
+    params: BooleanParams;
+    result: NewId;
+    tier: "edit";
+  };
   /** Selects nothing. */
   "document.clear_selection": {
     params: NoParams;
@@ -1651,6 +1696,12 @@ export interface Actions {
   "document.new": {
     params: NoParams;
     result: Changed;
+    tier: "edit";
+  };
+  /** Adds the outline of shapes (default: the selection) grown or shrunk by `distance_mm`, as new objects on the same layers, selected. One undo step. */
+  "document.offset": {
+    params: OffsetParams;
+    result: NewIds;
     tier: "edit";
   };
   /** Opens a `.fkproj` project file (the undo history starts again). */
@@ -2037,6 +2088,8 @@ export const ACTION_TIERS = {
   "document.add_shape": "edit",
   "document.add_text": "edit",
   "document.align": "edit",
+  "document.array": "edit",
+  "document.boolean": "edit",
   "document.clear_selection": "ui",
   "document.delete": "edit",
   "document.duplicate": "edit",
@@ -2048,6 +2101,7 @@ export const ACTION_TIERS = {
   "document.move_layer": "edit",
   "document.move_to_layer": "edit",
   "document.new": "edit",
+  "document.offset": "edit",
   "document.open": "edit",
   "document.remove_layer": "edit",
   "document.save": "edit",

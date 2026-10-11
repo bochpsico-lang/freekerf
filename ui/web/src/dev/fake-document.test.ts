@@ -129,6 +129,28 @@ describe('the fake document (the session actions, in memory)', () => {
     expect(t.bounds).toMatchObject({ x: 0, y: 0, width: 30, height: 10 });
   });
 
+  it('stand-ins for booleans, offsets and arrays', async () => {
+    const s = new FakeService();
+    const a = await rect(s, 0, 0, 10, 10);
+    const b = await rect(s, 5, 0, 10, 10);
+    await expect(s.dispatch('document.boolean', { op: 'union', ids: [a] })).rejects.toThrow('two shapes');
+    const { id } = await s.dispatch('document.boolean', { op: 'intersection', ids: [a, b] });
+    expect(await box(s, id)).toEqual([5, 0, 10, 10]);
+    await s.dispatch('history.undo', {});
+    const u = (await s.dispatch('document.boolean', { op: 'union', ids: [a, b] })).id;
+    expect(await box(s, u)).toEqual([0, 0, 15, 10]);
+    await s.dispatch('history.undo', {});
+    expect((await s.dispatch('document.boolean', { op: 'difference', ids: [a, b] })).id).toBeGreaterThan(b);
+    await s.dispatch('history.undo', {});
+    const [o] = (await s.dispatch('document.offset', { ids: [a], distance_mm: 2 })).ids;
+    expect(await box(s, o!)).toEqual([-2, -2, 12, 12]);
+    const { ids } = await s.dispatch('document.array', { ids: [a], columns: 2, rows: 2 });
+    expect(ids).toHaveLength(3);
+    expect(await box(s, ids[2]!)).toEqual([15, -15, 25, -5]);
+    expect((await snap(s)).selection).toHaveLength(4);
+    await expect(s.dispatch('document.array', { columns: 0, rows: 1 })).rejects.toThrow('at least 1');
+  });
+
   it('text objects and their edits', async () => {
     const s = new FakeService();
     const { id } = await s.dispatch('document.add_text', { text: 'AB', x: 0, y: 0, height_mm: 10 });
