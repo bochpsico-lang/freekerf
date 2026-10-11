@@ -20,7 +20,13 @@
 //! Arcs (G2/G3) are flattened into chords no farther than [`ARC_TOLERANCE_MM`] from
 //! the true arc. The output only depends on the program and the analysis options
 //! (deterministic).
+//!
+//! The Design mode's document geometry uses the same format ([`encode_document`]):
+//! `power` is the index of the object's layer in the layer list, the command index
+//! is the index of the object in drawing order, the command count is the number of
+//! objects; objects on hidden layers are left out, images are drawn as their frame.
 
+use freekerf_document::{Document, ObjectKind};
 use freekerf_gcode::arc::ArcHelper;
 use freekerf_gcode::number::f64_from_decimal;
 use freekerf_gcode::{AnalysisOptions, MachineState, Program};
@@ -132,10 +138,65 @@ fn arc_chords(radius: f64, angle: f64) -> usize {
 /// The binary buffer described in the module documentation.
 #[must_use]
 pub fn encode(program: &Program, options: &AnalysisOptions) -> Vec<u8> {
-    let segs = segments(program, options);
+    encode_segments(&segments(program, options), program.len())
+}
+
+/// The drawable segments of a document (see the module documentation).
+#[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)] // mm fit f32; indexes fit u32
+pub fn document_segments(doc: &Document) -> Vec<Segment> {
+    let mut out = Vec::new();
+    let f = |p: freekerf_geometry::Point| [p.x as f32, p.y as f32];
+    for (index, o) in doc.objects.iter().enumerate() {
+        let Some(layer) = doc.layers.iter().position(|l| l.id == o.layer) else {
+            continue;
+        };
+        if !doc.layers[layer].visible {
+            continue;
+        }
+        let mut push = |pts: &[freekerf_geometry::Point]| {
+            for w in pts.windows(2) {
+                out.push(Segment {
+                    from: f(w[0]),
+                    to: f(w[1]),
+                    power: layer as f32,
+                    command: index as u32,
+                });
+            }
+        };
+        match &o.kind {
+            ObjectKind::Shape { paths } => {
+                for p in paths {
+                    push(&p.to_polyline(ARC_TOLERANCE_MM));
+                }
+            }
+            ObjectKind::Image(_) => {
+                let b = o.bounds();
+                let corners = [
+                    freekerf_geometry::Point::new(b.min_x, b.min_y),
+                    freekerf_geometry::Point::new(b.max_x, b.min_y),
+                    freekerf_geometry::Point::new(b.max_x, b.max_y),
+                    freekerf_geometry::Point::new(b.min_x, b.max_y),
+                    freekerf_geometry::Point::new(b.min_x, b.min_y),
+                ];
+                push(&corners);
+            }
+            ObjectKind::Unsupported { .. } => {}
+        }
+    }
+    out
+}
+
+/// The document's geometry as a buffer of this format.
+#[must_use]
+pub fn encode_document(doc: &Document) -> Vec<u8> {
+    encode_segments(&document_segments(doc), doc.objects.len())
+}
+
+fn encode_segments(segs: &[Segment], commands: usize) -> Vec<u8> {
     let mut bounds = [f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY];
     let mut max_s = 0.0f32;
-    for s in &segs {
+    for s in segs {
         for p in [s.from, s.to] {
             bounds[0] = bounds[0].min(p[0]);
             bounds[1] = bounds[1].min(p[1]);
@@ -151,13 +212,13 @@ pub fn encode(program: &Program, options: &AnalysisOptions) -> Vec<u8> {
     out.extend_from_slice(MAGIC);
     out.extend_from_slice(&VERSION.to_le_bytes());
     out.extend_from_slice(&u32::try_from(segs.len()).unwrap_or(u32::MAX).to_le_bytes());
-    out.extend_from_slice(&u32::try_from(program.len()).unwrap_or(u32::MAX).to_le_bytes());
+    out.extend_from_slice(&u32::try_from(commands).unwrap_or(u32::MAX).to_le_bytes());
     for b in bounds {
         out.extend_from_slice(&b.to_le_bytes());
     }
     out.extend_from_slice(&max_s.to_le_bytes());
     out.extend_from_slice(&0u32.to_le_bytes());
-    for s in &segs {
+    for s in segs {
         for v in [s.from[0], s.from[1], s.to[0], s.to[1], s.power] {
             out.extend_from_slice(&v.to_le_bytes());
         }
@@ -207,6 +268,56 @@ mod tests {
 
     fn u32_at(b: &[u8], at: usize) -> u32 {
         u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
+    }
+
+    #[test]
+    fn document_geometry_by_layer_and_object() {
+        use freekerf_document::{
+            Bytes, Color, ImageData, ImageObject, Layer, LayerId, RasterSettings, rect_path,
+        };
+        let mut d = Document::new();
+        let a = d.add_layer(Layer::new(LayerId(0), Color::BLACK, 1000, 1000));
+        let b = d.add_layer(Layer::new(
+            LayerId(0),
+            "#FF0000".parse::<Color>().unwrap(),
+            1000,
+            1000,
+        ));
+        d.add_object(
+            a,
+            ObjectKind::Shape {
+                paths: vec![rect_path(0.0, 0.0, 10.0, 5.0)],
+            },
+        )
+        .unwrap();
+        d.add_object(
+            b,
+            ObjectKind::Image(Box::new(ImageObject {
+                data: ImageData::Rgba {
+                    width: 1,
+                    height: 1,
+                    pixels: Bytes(vec![0, 0, 0, 255]),
+                },
+                position: freekerf_geometry::Point::new(20.0, 0.0),
+                size_mm: [4.0, 4.0],
+                settings: RasterSettings::default(),
+                edits: vec![],
+            })),
+        )
+        .unwrap();
+        let segs = document_segments(&d);
+        assert_eq!(segs.len(), 8, "a rectangle and an image frame");
+        assert!(segs[..4].iter().all(|s| s.power == 0.0 && s.command == 0));
+        assert!(segs[4..].iter().all(|s| s.power == 1.0 && s.command == 1));
+        let buf = encode_document(&d);
+        assert_eq!(&buf[..4], MAGIC);
+        assert_eq!(u32_at(&buf, 8), 8);
+        assert_eq!(u32_at(&buf, 12), 2);
+        assert_eq!(f32_at(&buf, 24), 24.0, "max x");
+        // hidden layers are left out
+        d.layers[1].visible = false;
+        assert_eq!(document_segments(&d).len(), 4);
+        assert_eq!(u32_at(&encode_document(&Document::new()), 8), 0);
     }
 
     #[test]

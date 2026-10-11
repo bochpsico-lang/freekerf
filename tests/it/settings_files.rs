@@ -13,6 +13,7 @@ fn an_unversioned_file_is_migrated_and_saved_as_the_current_version() {
     let stores = Stores {
         settings: Some(Arc::new(FileStore(file.clone()))),
         cache: None,
+        ..Stores::default()
     };
     let s = Service::new(stores).unwrap();
     let user = Caller::user();
@@ -34,6 +35,7 @@ fn a_file_from_a_newer_freekerf_is_refused() {
     let e = Service::new(Stores {
         settings: Some(Arc::new(FileStore(file))),
         cache: None,
+        ..Stores::default()
     })
     .unwrap_err();
     assert!(e.to_string().contains("newer"));

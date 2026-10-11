@@ -178,6 +178,10 @@ pub struct Stores {
     pub settings: Option<Arc<dyn SettingsStore>>,
     /// Machine cache (last version, `$$`, laser counters).
     pub cache: Option<Arc<dyn SettingsStore>>,
+    /// The macro folder (migrated LaserGRBL buttons).
+    pub macros: Option<std::path::PathBuf>,
+    /// LaserGRBL's data folder, read by the welcome flow's migration.
+    pub lasergrbl: Option<std::path::PathBuf>,
 }
 
 impl std::fmt::Debug for Stores {
@@ -185,6 +189,8 @@ impl std::fmt::Debug for Stores {
         f.debug_struct("Stores")
             .field("settings", &self.settings.is_some())
             .field("cache", &self.cache.is_some())
+            .field("macros", &self.macros)
+            .field("lasergrbl", &self.lasergrbl)
             .finish()
     }
 }
@@ -203,6 +209,10 @@ impl Stores {
         Ok(Self {
             settings: Some(Arc::new(FileStore(dirs.settings_file()))),
             cache: Some(Arc::new(FileStore(dirs.data_file("machine-cache.json")))),
+            macros: Some(dirs.data.join("macros")),
+            lasergrbl: std::env::var_os("FREEKERF_LASERGRBL_DIR")
+                .map(std::path::PathBuf::from)
+                .or_else(migrate::default_lasergrbl_dir),
         })
     }
 
@@ -406,6 +416,14 @@ impl Service {
         Some(Arc::clone(l.preview.get_or_insert_with(|| {
             Arc::new(preview::encode(&l.program, &options))
         })))
+    }
+
+    /// The document's drawable geometry for the Design mode canvas (raw, the
+    /// [`preview`] format; see [`preview::encode_document`]).
+    #[must_use]
+    pub fn document_geometry(&self) -> Vec<u8> {
+        let doc = lock(&self.inner.session).document().clone();
+        preview::encode_document(&doc)
     }
 
     /// Runs the pending laser request `id` after the person confirmed it on screen
@@ -779,6 +797,40 @@ pub struct SettingsGetParams {
     pub key: Option<String>,
 }
 
+/// The file of `document.open` and `document.save`.
+#[derive(Debug, Serialize, JsonSchema)]
+struct FilePath {
+    /// The file.
+    path: String,
+}
+
+/// What `document.import` added.
+#[derive(Debug, Serialize, JsonSchema)]
+struct ImportedFile {
+    /// Ids of the new objects.
+    objects: Vec<u64>,
+}
+
+/// `migrate.detect`.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct MigrateDetectParams {
+    /// LaserGRBL's data folder (default: its folder on this computer).
+    #[serde(default)]
+    path: Option<String>,
+}
+
+/// `migrate.run`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct MigrateRunParams {
+    /// What to import.
+    items: Vec<migrate::MigrationItem>,
+    /// LaserGRBL's data folder (default: its folder on this computer).
+    #[serde(default)]
+    path: Option<String>,
+}
+
 /// `settings.set`.
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -968,6 +1020,38 @@ fn build_registry() -> Registry<Inner> {
             })?;
             s.publish(&ServiceEvent::SettingsChanged);
             Ok(())
+        },
+    ));
+
+    // ---- LaserGRBL migration (the welcome flow)
+    add(r.register(
+        "migrate.detect",
+        "What can be imported from LaserGRBL's data folder (`path`, default: LaserGRBL's folder on this computer): connection, preferences, laser counters, custom buttons, materials. Nothing is written.",
+        Tier::Read,
+        |s: &Inner, p: MigrateDetectParams| {
+            let from = p.path.map(std::path::PathBuf::from).or_else(|| s.stores.lasergrbl.clone());
+            migrate::scan(from.as_deref(), &s.stores).map_err(ActionError::Failed)
+        },
+    ));
+    add(r.register(
+        "migrate.run",
+        "Imports the chosen items from LaserGRBL's data folder into FreeKerf's settings, machine cache and macro folder. LaserGRBL's files are only read.",
+        Tier::Edit,
+        |s: &Inner, p: MigrateRunParams| {
+            let from = p.path.map(std::path::PathBuf::from).or_else(|| s.stores.lasergrbl.clone());
+            let macros = s
+                .stores
+                .macros
+                .clone()
+                .ok_or_else(|| ActionError::Refused("this instance has no macro folder".into()))?;
+            let r = migrate::run(from.as_deref(), &s.stores, &macros, &p.items).map_err(ActionError::Failed)?;
+            // the settings file changed under the service: read it again
+            if let Some(store) = &s.stores.settings {
+                let fresh = Settings::load(store.as_ref()).map_err(|e| ActionError::Failed(e.to_string()))?;
+                *lock(&s.settings) = fresh;
+                s.publish(&ServiceEvent::SettingsChanged);
+            }
+            Ok(r)
         },
     ));
 
@@ -1208,7 +1292,7 @@ fn build_registry() -> Registry<Inner> {
             let doc = freekerf_document::Document::from_fkproj(&bytes)
                 .map_err(|e| ActionError::Failed(e.to_string()))?;
             lock(&s.session).replace_document(doc);
-            Ok(serde_json::json!({"path": p.path}))
+            Ok(FilePath { path: p.path })
         },
     ));
     add(r.register(
@@ -1220,7 +1304,7 @@ fn build_registry() -> Registry<Inner> {
             freekerf_platform::write_atomic(Path::new(&p.path), text.as_bytes())
                 .map_err(|e| ActionError::Failed(e.to_string()))?;
             lock(&s.session).mark_saved();
-            Ok(serde_json::json!({"path": p.path}))
+            Ok(FilePath { path: p.path })
         },
     ));
     add(r.register(
@@ -1231,7 +1315,7 @@ fn build_registry() -> Registry<Inner> {
             let bytes = freekerf_platform::read(Path::new(&p.path))
                 .map_err(|e| ActionError::Failed(e.to_string()))?;
             let ids = freekerf_session::actions::import_file(&mut lock(&s.session), &p.path, &bytes)?;
-            Ok(serde_json::json!({"objects": ids}))
+            Ok(ImportedFile { objects: ids })
         },
     ));
     add(r.register(
@@ -1375,9 +1459,9 @@ fn register_fire(r: &mut Registry<Inner>) {
     ));
 }
 
-/// Result schemas, used to generate the front-end types (`cargo xtask gen-ts`).
-/// Actions not listed here (`settings.get`, and new actions until they are added)
-/// are typed as unknown.
+/// Result schemas of the actions whose handlers return any JSON, used to generate
+/// the front-end types (`cargo xtask gen-ts`); the others are typed from their
+/// handler. `settings.get` stays unknown (a setting's value is any JSON).
 fn describe_results(r: &mut Registry<Inner>) {
     let add = |result: Result<(), freekerf_session::RegistryError>| {
         if let Err(e) = result {

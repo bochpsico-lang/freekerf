@@ -27,6 +27,7 @@ pub fn run() {
             commands::subscribe,
             commands::confirm_fire,
             commands::preview,
+            commands::document_geometry,
             commands::subscribe_head,
             commands::bench_report
         ])
@@ -104,6 +105,13 @@ pub mod commands {
     #[allow(clippy::needless_pass_by_value)]
     pub fn preview(bridge: tauri::State<'_, Bridge>) -> Response {
         Response::new(bridge.preview().map(|p| p.as_ref().clone()).unwrap_or_default())
+    }
+
+    /// The document's drawable geometry as raw bytes (the Design mode canvas).
+    #[tauri::command]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn document_geometry(bridge: tauri::State<'_, Bridge>) -> Response {
+        Response::new(bridge.document_geometry())
     }
 
     /// Streams head frames (raw bytes) at up to 60 Hz while they change.

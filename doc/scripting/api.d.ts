@@ -72,11 +72,11 @@ interface AppDocument {
    */
   import(params: { path: string }): unknown;
   /**
-   * Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step.
+   * Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, into the document: SVG and DXF by colour layer (or all on the current layer), images on a layer of their own. Returns the new objects and layers. One undo step.
    *
    * Action `document.import_data`, tier `edit`.
    */
-  importData(params: { data?: string | null; dpi?: number | null; format: "svg" | "dxf" | "image"; name?: string; power?: number | null; speed_mm_min?: number | null; text?: string | null }): unknown;
+  importData(params: { colors?: "keep" | "unify"; data?: string | null; dpi?: number | null; format: "svg" | "dxf" | "image"; name?: string; power?: number | null; speed_mm_min?: number | null; text?: string | null }): unknown;
   /**
    * The layer of a colour, created (line, 1000 mm/min, power 1000) when missing; it becomes the current layer. Creating it is one undo step.
    *
@@ -379,6 +379,21 @@ interface AppMachine {
   writeSettings(params: { settings: Record<string, unknown> }): unknown;
 }
 
+interface AppMigrate {
+  /**
+   * What can be imported from LaserGRBL's data folder (`path`, default: LaserGRBL's folder on this computer): connection, preferences, laser counters, custom buttons, materials. Nothing is written.
+   *
+   * Action `migrate.detect`, tier `read`.
+   */
+  detect(params?: { path?: string | null }): unknown;
+  /**
+   * Imports the chosen items from LaserGRBL's data folder into FreeKerf's settings, machine cache and macro folder. LaserGRBL's files are only read.
+   *
+   * Action `migrate.run`, tier `edit`.
+   */
+  run(params: { items: ("connection" | "preferences" | "counters" | "buttons" | "materials")[]; path?: string | null }): unknown;
+}
+
 interface AppSession {
   /**
    * The session as front ends and agents read it: revision, selection, view, undo/redo labels, layers and objects without geometry.
@@ -495,6 +510,7 @@ declare const app: {
   readonly history: AppHistory;
   readonly job: AppJob;
   readonly machine: AppMachine;
+  readonly migrate: AppMigrate;
   readonly session: AppSession;
   readonly settings: AppSettings;
   readonly state: AppState;

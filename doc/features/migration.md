@@ -4,8 +4,17 @@
 (`%APPDATA%\LaserGRBL` by default on Windows) and shows what it would take; with
 `--apply` it writes the result into FreeKerf's settings file, machine cache and
 macro folder.
-LaserGRBL's files are **only read**. The desktop app's welcome flow (M4) uses the
-same function (`freekerf_service::migrate::lasergrbl`).
+LaserGRBL's files are **only read**. The desktop app's welcome flow uses the same
+code through two actions:
+
+| Action | Tier | What |
+| --- | --- | --- |
+| `migrate.detect {path?}` | read | what the folder holds, by item: `connection` (port, baud rate, firmware, streaming mode, reset on connect), `preferences` (the other settings), `counters`, `buttons`, `materials` (found only) |
+| `migrate.run {items, path?}` | edit | imports the chosen items; the service reads its settings again |
+
+The folder defaults to LaserGRBL's on this computer (`$FREEKERF_LASERGRBL_DIR`
+overrides it, for tests). User materials are reported but not kept yet (they come
+with the material library UI).
 
 ## What is taken
 
@@ -62,5 +71,5 @@ feed it random and damaged files.
 `crates/config/freekerf-migrate/tests/lasergrbl_files.rs` on files written by
 LaserGRBL's own code (`tests/fixtures/LaserGrblFiles.cs`, run with Mono against
 `LaserGRBL.exe`) and on LaserGRBL's own `StandardButtons.zbn`; `tests/properties.rs`;
-`freekerf-service/src/migrate.rs`;
+`freekerf-service/src/migrate.rs` (report and apply, chosen items);
 `apps/cli/tests/cli.rs::migrate_lasergrbl`.

@@ -259,6 +259,7 @@ fn settings_are_saved_and_automation_is_user_only() {
     let stores = || Stores {
         settings: Some(Arc::new(FileStore(dir.path().join("settings.toml")))),
         cache: Some(Arc::new(FileStore(dir.path().join("cache.json")))),
+        ..Stores::default()
     };
     {
         let s = Service::new(stores()).unwrap();
@@ -396,14 +397,10 @@ fn results_are_described_for_the_front_ends() {
         .into_iter()
         .filter(|s| s.result.is_none())
         .map(|s| s.name)
-        .filter(|n| {
-            ["machine.", "job.", "fire.", "state.", "console."]
-                .iter()
-                .any(|p| n.starts_with(p))
-                || n == "view.get"
-        })
         .collect();
-    assert_eq!(untyped, ["job.from_document"]);
+    // every result is typed, from the handler's type or described; a setting's value
+    // is any JSON
+    assert_eq!(untyped, ["settings.get"]);
     let state = service.registry().spec("state.get").unwrap();
     let schema = state.result.as_ref().unwrap();
     assert!(schema["properties"]["machine"].is_object(), "{schema}");

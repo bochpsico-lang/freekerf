@@ -51,6 +51,26 @@ export type AddTextParams = {
   y: number;
 };
 
+/** Grey-level adjustments, in the units of LaserGRBL's dialog. */
+export type Adjustments = {
+  /** Blue weight, percent. */
+  blue: number;
+  /** Brightness, percent (100 = unchanged). */
+  brightness: number;
+  /** Contrast, percent (100 = unchanged). */
+  contrast: number;
+  /** Grey formula. */
+  formula: GrayFormula;
+  /** Green weight, percent. */
+  green: number;
+  /** Red weight, percent (`Custom` formula). */
+  red: number;
+  /** Black/white threshold, percent (`None`: keep the grey levels). */
+  threshold?: number | null;
+  /** Lighter greys become white, percent. */
+  white_clip: number;
+};
+
 /** How `document.align` lines objects up (on the box around all of them). */
 export type AlignHow = "left" | "center_h" | "right" | "top" | "middle_v" | "bottom";
 
@@ -79,11 +99,27 @@ export type AutomationSettings = {
   mcp?: McpSettings;
 };
 
+/** binary data, base64 */
+export type Bytes = string;
+
 /** Who calls an action. */
 export type CallerKind = "user" | "macro" | "agent" | "test";
 
+/** Centerline (autotrace) thresholds; `None` disables one. */
+export type CenterlineSettings = {
+  /** Corner threshold, degrees. */
+  corner_threshold?: number | null;
+  /** Line threshold, tenths of a pixel. */
+  line_threshold?: number | null;
+};
+
 /** What changed (events for the front ends, carried with the revision). */
 export type Change = "document" | "selection" | "view" | "history";
+
+export type Changed = {
+  /** Whether anything changed. */
+  changed: boolean;
+};
 
 /** sRGB colour `#RRGGBB` */
 export type Color = string;
@@ -176,6 +212,33 @@ export type DialogParams = {
   name: Dialog;
 };
 
+/** Dithering algorithm (`ImageTransform.DitheringMode`). */
+export type DitherMode = "atkinson" | "floyd_steinberg" | "burks" | "jarvis" | "random" | "sierra2" | "sierra3" | "sierra_light" | "stucki";
+
+/** A project. */
+export type Document = {
+  /** Always [`FORMAT`]. */
+  format: string;
+  /** Layers in user order (execution order also depends on their mode). */
+  layers: Layer[];
+  /** Next object id (ids are never reused). */
+  next_object_id?: number;
+  /** Objects in drawing order. */
+  objects: Object[];
+  /** File version ([`VERSION`] when written by this FreeKerf). */
+  version: number;
+};
+
+/** The document without geometry. */
+export type DocumentSummary = {
+  /** Bounds of everything, mm. */
+  bounds?: [number, number, number, number] | null;
+  /** Layers in id order. */
+  layers: LayerSummary[];
+  /** Objects in drawing order. */
+  objects: ObjectSummary[];
+};
+
 export type DuplicateParams = {
   /** Object ids (default: the selection). */
   ids?: number[] | null;
@@ -238,8 +301,22 @@ export type Event = {
   LoopCountChanged: number;
 };
 
+/** The file of `document.open` and `document.save`. */
+export type FilePath = {
+  /** The file. */
+  path: string;
+};
+
 /** The filling patterns (LaserGRBL's `Direction.New*` values). */
 export type FillPattern = "horizontal" | "vertical" | "diagonal" | "reverse_diagonal" | "grid" | "diagonal_grid" | "cross" | "diagonal_cross" | "squares" | "zig_zag" | "hilbert" | "inset";
+
+/** Hatch filling of a layer. */
+export type FillSettings = {
+  /** Lines per millimetre (the distance between lines is `1 / lines_per_mm`). */
+  lines_per_mm: number;
+  /** Pattern. */
+  pattern: FillPattern;
+};
 
 /** `fire.cancel`. */
 export type FireCancelParams = {
@@ -312,6 +389,11 @@ export type FkprojParams = {
   text: string;
 };
 
+export type FkprojText = {
+  /** The project as `.fkproj` text. */
+  text: string;
+};
+
 export type FocusParams = {
   /** Element with the focus (`canvas`, `console`...), none when absent. */
   target?: string | null;
@@ -336,6 +418,14 @@ export type Grant = {
   name: string;
   /** Highest tier granted. */
   tier: Tier;
+};
+
+/** Grey conversion formula (`ImageTransform.Formula`). */
+export type GrayFormula = "simple_average" | "weight_average" | "optical_correct" | "custom";
+
+export type HistoryResult = {
+  /** Label of the step undone or redone; none when there was nothing to do. */
+  step?: string | null;
 };
 
 /** State of the host for front ends. */
@@ -411,10 +501,90 @@ export type IdsParams = {
   ids?: number[] | null;
 };
 
+/** The pixels of an image. */
+export type ImageData = {
+  /** The file bytes. */
+  bytes: Bytes;
+  kind: "encoded";
+  /** Media type (`image/png`...). */
+  media_type: string;
+} | {
+  /** Height in pixels. */
+  height: number;
+  kind: "rgba";
+  /** `width * height * 4` bytes. */
+  pixels: Bytes;
+  /** Width in pixels. */
+  width: number;
+};
+
+/**
+ * A non-destructive edit of the image, applied in order before processing.
+ * Coordinates refer to a preview of `reference` size (as in the raster dialog,
+ * where the user clicks on a scaled preview).
+ */
+export type ImageEdit = {
+  op: "crop";
+  /** Rectangle in preview coordinates. */
+  rect: [number, number, number, number];
+  /** Size of the preview. */
+  reference: [number, number];
+} | {
+  op: "auto_trim";
+} | {
+  op: "rotate_cw";
+} | {
+  op: "rotate_ccw";
+} | {
+  op: "invert";
+} | {
+  op: "flip_h";
+} | {
+  op: "flip_v";
+} | {
+  /** ARGB colour. */
+  argb: [number, number, number, number];
+  /** Seed point in preview coordinates. */
+  at: [number, number];
+  op: "fill";
+  /** Size of the preview. */
+  reference: [number, number];
+  /** Colour tolerance. */
+  tolerance: number;
+} | {
+  /** Seed point in preview coordinates. */
+  at: [number, number];
+  op: "outline";
+  /** Size of the preview. */
+  reference: [number, number];
+};
+
+/** An image placed on the bed. */
+export type ImageObject = {
+  /** Pixels. */
+  data: ImageData;
+  /** Edits applied before processing. */
+  edits?: ImageEdit[];
+  /** Lower-left corner on the bed, mm. */
+  position: Point;
+  /** How it becomes a job. */
+  settings: RasterSettings;
+  /** Size on the bed, mm `[width, height]`. */
+  size_mm: [number, number];
+};
+
+/** Layers of an imported drawing. */
+export type ImportColors = "keep" | "unify";
+
 /** File formats of `document.import_data`. */
 export type ImportFormat = "svg" | "dxf" | "image";
 
 export type ImportParams = {
+  /**
+   * Drawings: `keep` the colour layers (default), or `unify` everything on the
+   * current layer.
+   */
+  colors?: ImportColors;
   /** The file's bytes, base64 (or `text`). */
   data?: string | null;
   /** Images: resolution in dots per inch (default 96); position is the origin. */
@@ -434,11 +604,37 @@ export type ImportParams = {
   text?: string | null;
 };
 
+export type Imported = {
+  /** Ids of the layers the import created. */
+  layers: number[];
+  /** Ids of the new objects. */
+  objects: number[];
+  /** Elements kept but not converted (SVG text, images...). */
+  unsupported: number;
+};
+
+/** What `document.import` added. */
+export type ImportedFile = {
+  /** Ids of the new objects. */
+  objects: number[];
+};
+
+/** Resampling filter for resizing. */
+export type Interpolation = "nearest_neighbor" | "bilinear" | "bicubic" | "high_quality_bilinear" | "high_quality_bicubic";
+
 /**
  * Why a job stopped before its end (`DetectedIssue`). Negative codes are caused by
  * the user and are not reported as problems.
  */
 export type Issue = "Unknown" | "ManualReset" | "ManualDisconnect" | "ManualAbort" | "StopResponding" | "UnexpectedReset" | "UnexpectedDisconnect" | "MachineAlarm";
+
+/** How many of an item. */
+export type ItemCount = {
+  /** How many (settings, counters, buttons, materials files). */
+  count: number;
+  /** The item. */
+  kind: MigrationItem;
+};
 
 /** Code around jobs. */
 export type JobSettings = {
@@ -508,6 +704,31 @@ export type LaserLifeCounter = {
   run_ms: number;
 };
 
+/** A colour layer: the objects of one colour and how to engrave or cut them. */
+export type Layer = {
+  /** Colour that groups the objects. */
+  color: Color;
+  /** Filling (used by `fill` and `fill_and_line`). */
+  fill?: FillSettings;
+  /** Identifier. */
+  id: LayerId;
+  /** Processing mode. */
+  mode?: LayerMode;
+  /** Display name (the colour when empty). */
+  name?: string;
+  /** Number of passes (at least 1). */
+  passes?: number;
+  /** Laser power as the `S` value sent to the machine. */
+  power: number;
+  /** Feed rate while the laser is on, mm/min. */
+  speed_mm_min: number;
+  /** Shown in the editor (hidden layers are still planned unless `ignore`). */
+  visible?: boolean;
+};
+
+/** Identifier of a layer inside a document. */
+export type LayerId = number;
+
 export type LayerIdParams = {
   /** Layer id. */
   id: number;
@@ -515,6 +736,40 @@ export type LayerIdParams = {
 
 /** How the objects of a layer are processed (LaserGRBL's `SvgLayerMode`). */
 export type LayerMode = "line" | "fill" | "fill_and_line" | "cut" | "ignore";
+
+export type LayerRef = {
+  /** Whether the layer was created. */
+  created: boolean;
+  /** Layer id. */
+  layer: number;
+};
+
+/** A layer without its objects. */
+export type LayerSummary = {
+  /** `#RRGGBB`. */
+  color: string;
+  /** Hatch filling (fill modes). */
+  fill: FillSettings;
+  /** Id. */
+  id: number;
+  /** Mode (`line`, `fill`, `fill_and_line`, `cut`, `ignore`). */
+  mode: LayerMode;
+  /** Name. */
+  name: string;
+  /** Objects on it. */
+  objects: number;
+  /** Passes. */
+  passes: number;
+  /** `S` power. */
+  power: number;
+  /** Speed, mm/min. */
+  speed_mm_min: number;
+  /** Shown and planned. */
+  visible: boolean;
+};
+
+/** Direction of raster lines (`ImageProcessor.Direction` for Line2Line). */
+export type LineDirection = "horizontal" | "vertical" | "diagonal";
 
 /** `job.load`. */
 export type LoadParams = {
@@ -579,6 +834,22 @@ export type MachineSettings = {
 /** State of the machine as the host sees it (`MacStatus`). */
 export type MachineStatus = "Disconnected" | "Connecting" | "Idle" | "Run" | "Hold" | "Door" | "Home" | "Alarm" | "Check" | "Jog" | "Queue" | "Cooling" | "AutoHold" | "Tool";
 
+/** An affine transform `x' = x·m11 + y·m21 + offset_x`, `y' = x·m12 + y·m22 + offset_y`. */
+export type Matrix = {
+  /** Row 1, column 1. */
+  m11: number;
+  /** Row 1, column 2. */
+  m12: number;
+  /** Row 2, column 1. */
+  m21: number;
+  /** Row 2, column 2. */
+  m22: number;
+  /** Translation X. */
+  offset_x: number;
+  /** Translation Y. */
+  offset_y: number;
+};
+
 /**
  * MCP server settings (§9 of the plan). Changed only by the user, never by
  * actions, scripts or agents.
@@ -592,6 +863,41 @@ export type McpSettings = {
 
 /** Kind of a received message (`GrblMessage.MessageType`). */
 export type MessageKind = "Startup" | "Config" | "Alarm" | "Feedback" | "Position" | "Other" | "Warning" | "Diagnostic";
+
+/** `migrate.detect`. */
+export type MigrateDetectParams = {
+  /** LaserGRBL's data folder (default: its folder on this computer). */
+  path?: string | null;
+};
+
+/** `migrate.run`. */
+export type MigrateRunParams = {
+  /** What to import. */
+  items: MigrationItem[];
+  /** LaserGRBL's data folder (default: its folder on this computer). */
+  path?: string | null;
+};
+
+/** What the welcome flow can take from LaserGRBL. */
+export type MigrationItem = "connection" | "preferences" | "counters" | "buttons" | "materials";
+
+/** What `migrate.run` imported. */
+export type MigrationResult = {
+  /** What was imported. */
+  imported: ItemCount[];
+  /** Files that could not be read, and items found but not imported. */
+  warnings: string[];
+};
+
+/** What a LaserGRBL data folder holds (`migrate.detect`). */
+export type MigrationScan = {
+  /** Whether a LaserGRBL data folder was found. */
+  found: boolean;
+  /** What can be imported (items with nothing are left out). */
+  items: ItemCount[];
+  /** The folder. */
+  path?: string | null;
+};
 
 /** Workspace mode (`design/ux.md`: one workspace, two modes). */
 export type Mode = "design" | "produce";
@@ -615,8 +921,55 @@ export type MoveToLayerParams = {
   layer: number;
 };
 
+export type NewId = {
+  /** Id of what was created. */
+  id: number;
+};
+
+export type NewIds = {
+  /** Ids of what was created. */
+  ids: number[];
+};
+
 /** Parameters of actions that take none. */
 export type NoParams = Record<string, never>;
+
+/** An object on a layer. */
+export type Object = {
+  kind: "shape";
+  /** Paths. */
+  paths: Path[];
+} | ImageObject | {
+  /** Element name (`text`, `image`, `polygon`...). */
+  element: string;
+  kind: "unsupported";
+  /** Reason. */
+  reason: UnsupportedReason;
+};
+
+/** Identifier of an object inside a document (never reused). */
+export type ObjectId = number;
+
+/** An object without its geometry. */
+export type ObjectSummary = {
+  /** `[min_x, min_y, max_x, max_y]` in mm, none for unsupported elements. */
+  bounds?: [number, number, number, number] | null;
+  /** Id. */
+  id: number;
+  /** `shape`, `text`, `image` or `unsupported`. */
+  kind: string;
+  /** Layer id. */
+  layer: number;
+  /** Name. */
+  name: string;
+  /** The text of a text object. */
+  text?: TextSpec | null;
+  /**
+   * Every transform applied since the object was made, `[a, b, c, d, e, f]`:
+   * `x' = a·x + c·y + e`, `y' = b·x + d·y + f` (the geometry already includes it).
+   */
+  transform: [number, number, number, number, number, number];
+};
 
 export type OptionalDialogParams = {
   /** The dialog (default: the one on top). */
@@ -639,6 +992,29 @@ export type Panel = "layers" | "object" | "machine" | "console";
 export type PanelParams = {
   /** `layers`, `object`, `machine` or `console`. */
   name: Panel;
+};
+
+/** A connected sequence of segments. */
+export type Path = {
+  /** The last segment ends on `start` and the shape is meant to be closed. */
+  closed?: boolean;
+  /**
+   * Drawn from where the previous path ended, without a travel move (SVG path
+   * data that does not begin with a moveto).
+   */
+  from_current?: boolean;
+  /** Segments, each from the end of the previous one. */
+  segments: Segment[];
+  /** First point. */
+  start: Point;
+};
+
+/** A point (or a vector) with `f64` coordinates. */
+export type Point = {
+  /** X. */
+  x: number;
+  /** Y. */
+  y: number;
 };
 
 /** A position (machine or work), in mm, as `float` like LaserGRBL (`GPoint`). */
@@ -664,6 +1040,41 @@ export type ProgramInfo = {
   /** Quadrant of the drawing. */
   quadrant: string;
 };
+
+/** How an image becomes a job (the raster dialog values). */
+export type RasterSettings = {
+  /** Grey adjustments. */
+  adjustments: Adjustments;
+  /** Feed rate of borders (vectorize, centerline), mm/min. */
+  border_speed_mm_min: number;
+  /** Centerline options. */
+  centerline: CenterlineSettings;
+  /** Line direction for line-by-line tools. */
+  direction: LineDirection;
+  /** Dithering algorithm (`dithering` tool). */
+  dithering: DitherMode;
+  /** Resampling filter. */
+  interpolation: Interpolation;
+  /** Laser off command. */
+  laser_off: string;
+  /** Laser on command (`M3` constant power, `M4` dynamic). */
+  laser_on: string;
+  /** Lines per millimetre. */
+  lines_per_mm: number;
+  /** Feed rate of raster lines, mm/min. */
+  mark_speed_mm_min: number;
+  /** `S` for black. */
+  max_power: number;
+  /** `S` for white (raster) / unused below. */
+  min_power: number;
+  /** Processing tool. */
+  tool: RasterTool;
+  /** Vectorize options. */
+  vectorize: VectorizeSettings;
+};
+
+/** What the raster dialog does with the image (`ImageProcessor.Tool`). */
+export type RasterTool = "line_to_line" | "dithering" | "vectorize" | "centerline" | "passthrough";
 
 export type Result_of_null_or_string = {
   Ok: null;
@@ -714,6 +1125,29 @@ export type SafetySettings = {
   fire_countdown_s?: number;
 };
 
+/** One piece of a path, from the end of the previous one. */
+export type Segment = {
+  /** End point. */
+  end: Point;
+  kind: "line";
+} | {
+  /** Counterclockwise (`G3`); clockwise (`G2`) otherwise. Y points up. */
+  ccw: boolean;
+  /** Centre. */
+  center: Point;
+  /** End point. */
+  end: Point;
+  kind: "arc";
+} | {
+  /** First control point. */
+  c1: Point;
+  /** Second control point. */
+  c2: Point;
+  /** End point. */
+  end: Point;
+  kind: "cubic";
+};
+
 /** `machine.select_laser`. */
 export type SelectLaserParams = {
   /** Id of the laser life counter. */
@@ -762,6 +1196,43 @@ export type SettingsSetParams = {
 /** Shapes of `document.add_shape`. */
 export type ShapeKind = "rect" | "ellipse";
 
+/** The state as a front end or an agent reads it (`session.snapshot`). */
+export type Snapshot = {
+  /** The layer new objects go to (see [`Session::current_layer`]). */
+  current_layer?: number | null;
+  /** Unsaved changes. */
+  dirty: boolean;
+  /** Layers and objects, without geometry. */
+  document: DocumentSummary;
+  /** Revision of the last document change (the geometry is the same while it is). */
+  document_revision: number;
+  /** Labels of the steps that can be redone, next first. */
+  redo: string[];
+  /** Revision (grows with every change). */
+  revision: number;
+  /** Selected object ids. */
+  selection: number[];
+  /** Labels of the steps that can be undone, oldest first. */
+  undo: string[];
+  /** View. */
+  view: ViewState;
+};
+
+/** Where an object came from. */
+export type Source = {
+  /** File name (no directory), empty when unknown. */
+  file?: string;
+  /** Format. */
+  format: SourceFormat;
+};
+
+/**
+ * The file format an object was imported from: how LaserGRBL wrote its G-code
+ * differs per source (pen comments in SVG, none in DXF), and the planner keeps
+ * that when asked for LaserGRBL-compatible output.
+ */
+export type SourceFormat = "svg" | "dxf" | "image" | "native";
+
 /** Result of `state.get`. */
 export type State = {
   /** Firmware version as text (`1.1f`). */
@@ -790,6 +1261,18 @@ export type SystemCommandParams = {
 
 /** The kind of a system operation. */
 export type SystemOpKind = "ReadSettings" | "ReadInfo" | "WriteSettings" | "WriteWifi";
+
+/**
+ * The text an object was made from (editable: the editor writes the strokes again
+ * when the text or its height change, at the origin, then applies the object's
+ * `transform`). Single-stroke Hershey font of the test generators.
+ */
+export type TextSpec = {
+  /** Height of the font, mm. */
+  height_mm: number;
+  /** The text (printable ASCII is drawn; other characters are skipped). */
+  text: string;
+};
 
 /** Colour theme of the app. */
 export type Theme = "dark" | "light";
@@ -886,6 +1369,9 @@ export type UiSettings = {
 /** Length units shown in the app (the machine always works in mm). */
 export type Units = "mm" | "in";
 
+/** Why an element of an imported file was not converted. */
+export type UnsupportedReason = "not_converted" | "missing_comma" | "missing_argument";
+
 export type UpdateLayerParams = {
   /** Filling pattern. */
   fill_pattern?: FillPattern | null;
@@ -905,6 +1391,35 @@ export type UpdateLayerParams = {
   speed_mm_min?: number | null;
   /** Shown and planned. */
   visible?: boolean | null;
+};
+
+/** Filling of vectorized shapes. */
+export type VectorFill = {
+  direction: LineDirection;
+  kind: "raster";
+} | {
+  direction: FillPattern;
+  kind: "hatch";
+};
+
+/** Vectorize (Potrace) options; `None` disables an option. */
+export type VectorizeSettings = {
+  /** Lower the resolution where detail allows ("adaptive quality"). */
+  adaptive_quality: boolean;
+  /** Down-sampling factor before tracing. */
+  down_sampling?: number | null;
+  /** Filling of the traced shapes. */
+  fill?: VectorFill | null;
+  /** Filling quality, lines per mm. */
+  fill_lines_per_mm: number;
+  /** Curve optimization tolerance. */
+  optimize?: number | null;
+  /** Reorder the traced paths to reduce travel. */
+  optimize_fast: boolean;
+  /** Corner smoothing (`alphamax`). */
+  smoothing?: number | null;
+  /** Drop shapes up to this many pixels ("turd size"). */
+  spot_removal?: number | null;
 };
 
 /** The whole view state. */
@@ -986,8 +1501,9 @@ export type ActionSpec = {
   /** JSON schema of the parameters. */
   params: unknown;
   /**
-   * JSON schema of the result, when the registrant described it
-   * ([`Registry::describe_result`]); front ends type the result as unknown otherwise.
+   * JSON schema of the result: the handler's result type, or what the registrant
+   * described ([`Registry::describe_result`]) for handlers that return any JSON;
+   * front ends type the result as unknown when there is none.
    */
   result?: unknown;
   /** Tier. */
@@ -1050,157 +1566,157 @@ export interface Actions {
   /** Adds a layer of a colour (line, 1000 mm/min, power 1000, 1 pass unless given). One undo step. */
   "document.add_layer": {
     params: AddLayerParams;
-    result: unknown;
+    result: NewId;
     tier: "edit";
   };
   /** Draws a rectangle or an ellipse on a layer (default: the current layer) and selects it. One undo step. */
   "document.add_shape": {
     params: AddShapeParams;
-    result: unknown;
+    result: NewId;
     tier: "edit";
   };
   /** Writes text in the single-stroke font on a layer (default: the current layer) and selects it; the text stays editable (`document.set_text`). One undo step. */
   "document.add_text": {
     params: AddTextParams;
-    result: unknown;
+    result: NewId;
     tier: "edit";
   };
   /** Lines up objects (default: the selection, at least two) on the box around them: left, center_h, right, top, middle_v or bottom. One undo step. */
   "document.align": {
     params: AlignParams;
-    result: unknown;
+    result: Changed;
     tier: "edit";
   };
   /** Selects nothing. */
   "document.clear_selection": {
     params: NoParams;
-    result: unknown;
+    result: Changed;
     tier: "ui";
   };
   /** Deletes objects (default: the selection). One undo step. */
   "document.delete": {
     params: IdsParams;
-    result: unknown;
+    result: Changed;
     tier: "edit";
   };
   /** Copies objects (default: the selection), offset by `offset_mm`, and selects the copies. One undo step. */
   "document.duplicate": {
     params: DuplicateParams;
-    result: unknown;
+    result: NewIds;
     tier: "edit";
   };
   /** Replaces the document with a `.fkproj` text (the undo history starts again). */
   "document.from_fkproj": {
     params: FkprojParams;
-    result: unknown;
+    result: Changed;
     tier: "edit";
   };
   /** The whole document (layers, objects with geometry and images), as in a `.fkproj` file. */
   "document.get": {
     params: NoParams;
-    result: unknown;
+    result: Document;
     tier: "read";
   };
   /** Imports an SVG, DXF or image file into the document (format from the extension). One undo step. */
   "document.import": {
     params: LoadParams;
-    result: unknown;
+    result: ImportedFile;
     tier: "edit";
   };
-  /** Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step. */
+  /** Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, into the document: SVG and DXF by colour layer (or all on the current layer), images on a layer of their own. Returns the new objects and layers. One undo step. */
   "document.import_data": {
     params: ImportParams;
-    result: unknown;
+    result: Imported;
     tier: "edit";
   };
   /** The layer of a colour, created (line, 1000 mm/min, power 1000) when missing; it becomes the current layer. Creating it is one undo step. */
   "document.layer_for_color": {
     params: ColorParams;
-    result: unknown;
+    result: LayerRef;
     tier: "edit";
   };
   /** Moves a layer in the layer list (the order of layers of the same mode is the order they run). One undo step. */
   "document.move_layer": {
     params: MoveLayerParams;
-    result: unknown;
+    result: Changed;
     tier: "edit";
   };
   /** Moves objects (default: the selection) to another layer. One undo step. */
   "document.move_to_layer": {
     params: MoveToLayerParams;
-    result: unknown;
+    result: Changed;
     tier: "edit";
   };
   /** Starts an empty document (the undo history starts again). */
   "document.new": {
     params: NoParams;
-    result: unknown;
+    result: Changed;
     tier: "edit";
   };
   /** Opens a `.fkproj` project file (the undo history starts again). */
   "document.open": {
     params: LoadParams;
-    result: unknown;
+    result: FilePath;
     tier: "edit";
   };
   /** Removes a layer and its objects. One undo step. */
   "document.remove_layer": {
     params: LayerIdParams;
-    result: unknown;
+    result: Changed;
     tier: "edit";
   };
   /** Saves the document as a `.fkproj` project file (written atomically). */
   "document.save": {
     params: LoadParams;
-    result: unknown;
+    result: FilePath;
     tier: "edit";
   };
   /** Selects objects (replace, add to or remove from the selection). Unknown ids are ignored. */
   "document.select": {
     params: SelectParams;
-    result: unknown;
+    result: number[];
     tier: "ui";
   };
   /** Selects every object. */
   "document.select_all": {
     params: NoParams;
-    result: unknown;
+    result: number;
     tier: "ui";
   };
   /** Chooses the layer new shapes and text go to. */
   "document.set_current_layer": {
     params: LayerIdParams;
-    result: unknown;
+    result: Changed;
     tier: "ui";
   };
   /** Changes a text object's text or font height (its position, rotation and scale stay). One undo step. */
   "document.set_text": {
     params: SetTextParams;
-    result: unknown;
+    result: Changed;
     tier: "edit";
   };
   /** The document as `.fkproj` text. */
   "document.to_fkproj": {
     params: NoParams;
-    result: unknown;
+    result: FkprojText;
     tier: "read";
   };
   /** Moves, scales, mirrors or rotates objects (default: the selection): `{translate}`, `{scale, pivot}`, `{rotate_deg, pivot}` or `{matrix}`. Images only move and scale. One undo step. */
   "document.transform": {
     params: TransformParams;
-    result: unknown;
+    result: Changed;
     tier: "edit";
   };
   /** Moves objects (default: the selection) by `dx`, `dy` mm. One undo step. */
   "document.translate": {
     params: TranslateParams;
-    result: unknown;
+    result: Changed;
     tier: "edit";
   };
   /** Changes a layer's name, mode, speed, power, passes, visibility or filling. One undo step. */
   "document.update_layer": {
     params: UpdateLayerParams;
-    result: unknown;
+    result: Changed;
     tier: "edit";
   };
   /** Cancels the pending laser request (the one given, or any). Always allowed. */
@@ -1218,13 +1734,13 @@ export interface Actions {
   /** Redoes the last undone change. */
   "history.redo": {
     params: NoParams;
-    result: unknown;
+    result: HistoryResult;
     tier: "edit";
   };
   /** Undoes the last document change. */
   "history.undo": {
     params: NoParams;
-    result: unknown;
+    result: HistoryResult;
     tier: "edit";
   };
   /** Stops streaming the job and sends `M5` (lines already in the board still run; use machine.stop to stop at once). Always allowed. */
@@ -1242,7 +1758,7 @@ export interface Actions {
   /** Plans the document (vectors, then images; centerline uses the `autotrace` program) and loads it as the job. */
   "job.from_document": {
     params: NoParams;
-    result: unknown;
+    result: ProgramInfo;
     tier: "edit";
   };
   /** The loaded program (name, lines, estimated time, range). */
@@ -1401,10 +1917,22 @@ export interface Actions {
     result: null;
     tier: "machine";
   };
+  /** What can be imported from LaserGRBL's data folder (`path`, default: LaserGRBL's folder on this computer): connection, preferences, laser counters, custom buttons, materials. Nothing is written. */
+  "migrate.detect": {
+    params: MigrateDetectParams;
+    result: MigrationScan;
+    tier: "read";
+  };
+  /** Imports the chosen items from LaserGRBL's data folder into FreeKerf's settings, machine cache and macro folder. LaserGRBL's files are only read. */
+  "migrate.run": {
+    params: MigrateRunParams;
+    result: MigrationResult;
+    tier: "edit";
+  };
   /** The session as front ends and agents read it: revision, selection, view, undo/redo labels, layers and objects without geometry. */
   "session.snapshot": {
     params: NoParams;
-    result: unknown;
+    result: Snapshot;
     tier: "read";
   };
   /** Reads the settings (all, or one dotted key). */
@@ -1428,31 +1956,31 @@ export interface Actions {
   /** Closes a dialog (default: the top one). Closing the fire confirmation drops its laser request. */
   "view.close_dialog": {
     params: OptionalDialogParams;
-    result: unknown;
+    result: Changed;
     tier: "ui";
   };
   /** Closes the drawer when it shows this panel. */
   "view.close_panel": {
     params: PanelParams;
-    result: unknown;
+    result: Changed;
     tier: "ui";
   };
   /** Removes a toast. */
   "view.dismiss_toast": {
     params: ToastIdParams;
-    result: unknown;
+    result: Changed;
     tier: "ui";
   };
   /** Fits the work area in the canvas. */
   "view.fit": {
     params: NoParams;
-    result: unknown;
+    result: Changed;
     tier: "ui";
   };
   /** Records which element has the keyboard focus. */
   "view.focus": {
     params: FocusParams;
-    result: unknown;
+    result: Changed;
     tier: "ui";
   };
   /** The view: mode, tool, panel, dialogs, toasts, viewport, focus, the pending laser request. */
@@ -1464,31 +1992,31 @@ export interface Actions {
   /** Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable). */
   "view.open_dialog": {
     params: DialogParams;
-    result: unknown;
+    result: Changed;
     tier: "ui";
   };
   /** Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the drawer in the medium layout). */
   "view.open_panel": {
     params: PanelParams;
-    result: unknown;
+    result: Changed;
     tier: "ui";
   };
   /** Switches between design and produce (produce shows the machine panel). */
   "view.set_mode": {
     params: ModeParams;
-    result: unknown;
+    result: Changed;
     tier: "ui";
   };
   /** Chooses the Design mode tool (select, rectangle, ellipse, text). */
   "view.set_tool": {
     params: ToolParams;
-    result: unknown;
+    result: Changed;
     tier: "ui";
   };
   /** Centres the view on a point (mm) at a zoom (CSS pixels per mm). */
   "view.set_viewport": {
     params: Viewport;
-    result: unknown;
+    result: Changed;
     tier: "ui";
   };
   /** Shows a short message (at most 3 at once); returns its id. */
@@ -1564,6 +2092,8 @@ export const ACTION_TIERS = {
   "machine.system_command": "machine",
   "machine.unlock": "machine",
   "machine.write_settings": "machine",
+  "migrate.detect": "read",
+  "migrate.run": "edit",
   "session.snapshot": "read",
   "settings.get": "read",
   "settings.set": "edit",

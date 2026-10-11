@@ -67,6 +67,7 @@ pub struct Session {
     revision: u64,
     dirty: bool,
     current_layer: Option<LayerId>,
+    document_revision: u64,
 }
 
 /// The state as a front end or an agent reads it (`session.snapshot`).
@@ -74,6 +75,8 @@ pub struct Session {
 pub struct Snapshot {
     /// Revision (grows with every change).
     pub revision: u64,
+    /// Revision of the last document change (the geometry is the same while it is).
+    pub document_revision: u64,
     /// Unsaved changes.
     pub dirty: bool,
     /// Selected object ids.
@@ -109,6 +112,8 @@ pub struct LayerSummary {
     pub passes: u32,
     /// Shown and planned.
     pub visible: bool,
+    /// Hatch filling (fill modes).
+    pub fill: freekerf_document::FillSettings,
     /// Objects on it.
     pub objects: usize,
 }
@@ -166,6 +171,7 @@ pub fn summary(doc: &Document) -> DocumentSummary {
                 power: l.power,
                 passes: l.passes,
                 visible: l.visible,
+                fill: l.fill,
                 objects: doc.objects_on(l.id).count(),
             })
             .collect(),
@@ -244,6 +250,9 @@ impl Session {
 
     fn emit(&mut self, change: Change) {
         self.revision += 1;
+        if change == Change::Document {
+            self.document_revision = self.revision;
+        }
         self.events.push(SessionEvent {
             revision: self.revision,
             change,
@@ -470,6 +479,7 @@ impl Session {
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             revision: self.revision,
+            document_revision: self.document_revision,
             dirty: self.dirty,
             selection: self.selection.iter().map(|id| id.0).collect(),
             current_layer: self.current_layer().map(|l| l.0),

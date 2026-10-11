@@ -38,6 +38,11 @@ Format "FKTP" v1: `crates/runtime/freekerf-service/src/preview.rs` (encoder, the
 reference) and `ui/web/src/canvas/toolpath.ts` (decoder). Both are tested against
 the same file, `ui/web/tests/fixtures/toolpath-v1.bin`.
 
+The Design mode's document geometry uses the same format (Tauri command
+`document_geometry`, `preview::encode_document`): `power` is the layer's index in
+the layer list, the command index is the object's index in drawing order; hidden
+layers are left out and images are drawn as their frame.
+
 ## Head
 
 `subscribe_head` streams 24-byte frames on a raw Tauri channel, at most 60 per

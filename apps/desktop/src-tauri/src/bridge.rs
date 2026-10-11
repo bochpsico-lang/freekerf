@@ -65,6 +65,12 @@ impl Bridge {
         self.service.preview()
     }
 
+    /// The document's drawable geometry (binary, `freekerf_service::preview::encode_document`).
+    #[must_use]
+    pub fn document_geometry(&self) -> Vec<u8> {
+        self.service.document_geometry()
+    }
+
     /// The current head frame (`freekerf_service::preview::head_frame`).
     #[must_use]
     pub fn head(&self) -> [u8; HEAD_FRAME_BYTES] {
@@ -161,6 +167,14 @@ mod tests {
         let p = b.preview().unwrap();
         assert_eq!(&p[0..4], b"FKTP");
         assert_eq!(b.head().len(), HEAD_FRAME_BYTES);
+        // the document's geometry, after a shape is drawn from the window
+        assert_eq!(b.document_geometry()[8..12], [0, 0, 0, 0]);
+        b.dispatch(
+            "document.add_shape",
+            serde_json::json!({"shape": "rect", "x": 0, "y": 0, "width": 5, "height": 5}),
+        )
+        .unwrap();
+        assert_eq!(b.document_geometry()[8..12], [4, 0, 0, 0]);
     }
 
     #[test]

@@ -178,8 +178,9 @@ pub struct ActionSpec {
     pub tier: Tier,
     /// JSON schema of the parameters.
     pub params: Value,
-    /// JSON schema of the result, when the registrant described it
-    /// ([`Registry::describe_result`]); front ends type the result as unknown otherwise.
+    /// JSON schema of the result: the handler's result type, or what the registrant
+    /// described ([`Registry::describe_result`]) for handlers that return any JSON;
+    /// front ends type the result as unknown when there is none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result: Option<Value>,
 }
@@ -244,7 +245,7 @@ impl<C> Registry<C> {
     ) -> Result<(), RegistryError>
     where
         P: DeserializeOwned + JsonSchema,
-        R: Serialize,
+        R: Serialize + JsonSchema,
         F: Fn(&C, P) -> Result<R, ActionError> + Send + Sync + 'static,
     {
         if !valid_name(name) {
@@ -274,7 +275,9 @@ impl<C> Registry<C> {
             description: description.trim().into(),
             tier,
             params,
-            result: None,
+            // a handler that returns any JSON is described by its registrant
+            result: (std::any::type_name::<R>() != std::any::type_name::<Value>())
+                .then(|| serde_json::to_value(schemars::schema_for!(R)).unwrap_or(Value::Null)),
         };
         self.actions.insert(name.into(), Entry { spec, handler });
         Ok(())
@@ -414,7 +417,16 @@ mod tests {
     #[test]
     fn results_can_be_described() {
         let mut r = registry();
-        assert_eq!(r.spec("test.echo").unwrap().result, None);
+        // typed handlers describe themselves; any JSON needs a description
+        assert_eq!(
+            r.spec("test.echo").unwrap().result.as_ref().unwrap()["type"],
+            "string"
+        );
+        r.register("test.any", "Any JSON.", Tier::Read, |_: &(), _: NoParams| {
+            Ok(Value::Null)
+        })
+        .unwrap();
+        assert_eq!(r.spec("test.any").unwrap().result, None);
         r.describe_result::<String>("test.echo").unwrap();
         assert_eq!(
             r.spec("test.echo").unwrap().result.as_ref().unwrap()["type"],
@@ -425,7 +437,7 @@ mod tests {
             Err(RegistryError::NotRegistered("test.nope".into()))
         );
         // not serialized when absent (older catalogues stay the same)
-        let v = serde_json::to_value(r.spec("machine.stop").unwrap()).unwrap();
+        let v = serde_json::to_value(r.spec("test.any").unwrap()).unwrap();
         assert!(v.get("result").is_none());
     }
 

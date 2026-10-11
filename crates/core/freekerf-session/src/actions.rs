@@ -111,12 +111,52 @@ struct ImportParams {
     /// Power of new layers, `S` (default 1000).
     #[serde(default)]
     power: Option<u32>,
+    /// Drawings: `keep` the colour layers (default), or `unify` everything on the
+    /// current layer.
+    #[serde(default)]
+    colors: ImportColors,
+}
+
+/// Layers of an imported drawing.
+#[derive(Debug, Clone, Copy, Default, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum ImportColors {
+    /// One layer per colour (an existing layer of the same colour is reused).
+    #[default]
+    Keep,
+    /// Everything on the current layer.
+    Unify,
 }
 
 #[derive(Serialize, JsonSchema)]
 struct Imported {
     /// Ids of the new objects.
     objects: Vec<u64>,
+    /// Ids of the layers the import created.
+    layers: Vec<u32>,
+    /// Elements kept but not converted (SVG text, images...).
+    unsupported: usize,
+}
+
+impl Imported {
+    fn new(doc: &Document, before: &[LayerId], ids: Vec<ObjectId>) -> Self {
+        Self {
+            unsupported: ids
+                .iter()
+                .filter(|id| {
+                    doc.object(**id)
+                        .is_some_and(|o| matches!(o.kind, ObjectKind::Unsupported { .. }))
+                })
+                .count(),
+            layers: doc
+                .layers
+                .iter()
+                .filter(|l| !before.contains(&l.id))
+                .map(|l| l.id.0)
+                .collect(),
+            objects: ids.into_iter().map(|i| i.0).collect(),
+        }
+    }
 }
 
 /// How `document.select` combines the ids with the current selection.
@@ -641,12 +681,18 @@ fn bounds_of<'a>(objects: impl Iterator<Item = &'a Object>) -> Rect {
 }
 
 /// Imports a file's bytes into `doc`: drawings by colour layer (an existing layer of
-/// the same colour is reused), images on a layer of their own at the origin.
+/// the same colour is reused) or all on `current` when unified, images on a layer
+/// of their own at the origin.
 ///
 /// # Errors
 /// The file cannot be read as `format`.
 #[allow(clippy::cast_precision_loss)]
-fn import_into(doc: &mut Document, p: &ImportParams, bytes: &[u8]) -> Result<Vec<ObjectId>, ActionError> {
+fn import_into(
+    doc: &mut Document,
+    p: &ImportParams,
+    bytes: &[u8],
+    current: Option<LayerId>,
+) -> Result<Vec<ObjectId>, ActionError> {
     let (speed, power) = (p.speed_mm_min.unwrap_or(1000), p.power.unwrap_or(1000));
     let (format, imported) = match p.format {
         ImportFormat::Svg => (
@@ -691,9 +737,13 @@ fn import_into(doc: &mut Document, p: &ImportParams, bytes: &[u8]) -> Result<Vec
         format,
         file: p.name.clone(),
     };
+    let unified = match p.colors {
+        ImportColors::Keep => None,
+        ImportColors::Unify => Some(layer_for_new(doc, None, current)?),
+    };
     let mut ids = Vec::new();
     for o in imported.objects {
-        let layer = doc.layer_for_color(o.color, speed, power);
+        let layer = unified.unwrap_or_else(|| doc.layer_for_color(o.color, speed, power));
         ids.push(
             doc.add_object_with(layer, o.kind, String::new(), Some(source.clone()))
                 .map_err(failed)?,
@@ -731,10 +781,11 @@ pub fn import_file(session: &mut Session, name: &str, bytes: &[u8]) -> Result<Ve
         dpi: None,
         speed_mm_min: None,
         power: None,
+        colors: ImportColors::Keep,
     };
     let mut ids = Vec::new();
     session.edit("import", |d, _| {
-        ids = import_into(d, &p, bytes)?;
+        ids = import_into(d, &p, bytes, None)?;
         Ok::<_, ActionError>(!ids.is_empty())
     })?;
     Ok(ids.into_iter().map(|i| i.0).collect())
@@ -792,7 +843,7 @@ pub fn register_session_actions<C: SessionHost>(r: &mut Registry<C>) -> Result<(
     )?;
     r.register(
         "document.import_data",
-        "Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step.",
+        "Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, into the document: SVG and DXF by colour layer (or all on the current layer), images on a layer of their own. Returns the new objects and layers. One undo step.",
         Tier::Edit,
         |c: &C, p: ImportParams| {
             let bytes = match (&p.data, &p.text) {
@@ -805,14 +856,15 @@ pub fn register_session_actions<C: SessionHost>(r: &mut Registry<C>) -> Result<(
                 }
                 _ => return Err(ActionError::InvalidParams("give exactly one of `data` and `text`".into())),
             };
+            let mut s = lock(c);
+            let current = s.current_layer();
+            let before: Vec<LayerId> = s.document().layers.iter().map(|l| l.id).collect();
             let mut ids = Vec::new();
-            lock(c).edit("import", |d, _| {
-                ids = import_into(d, &p, &bytes)?;
+            s.edit("import", |d, _| {
+                ids = import_into(d, &p, &bytes, current)?;
                 Ok::<_, ActionError>(!ids.is_empty())
             })?;
-            Ok(Imported {
-                objects: ids.into_iter().map(|i| i.0).collect(),
-            })
+            Ok(Imported::new(s.document(), &before, ids))
         },
     )?;
     r.register(
@@ -1530,6 +1582,33 @@ mod tests {
         );
         assert!(d("document.move_layer", json!({"id": 99, "to": 0})).is_err());
 
+        // an import on the current layer, and the geometry revision
+        let rev = d("session.snapshot", Value::Null).unwrap()["document_revision"].clone();
+        d("document.select", json!({"ids": []})).unwrap();
+        assert_eq!(
+            d("session.snapshot", Value::Null).unwrap()["document_revision"],
+            rev
+        );
+        let imported = d(
+            "document.import_data",
+            json!({"format": "svg", "text": SVG, "colors": "unify"}),
+        )
+        .unwrap();
+        assert_eq!(imported["layers"], json!([]));
+        let snap = d("session.snapshot", Value::Null).unwrap();
+        assert_ne!(snap["document_revision"], rev);
+        let on_current = snap["document"]["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|o| o["layer"] == first)
+            .count();
+        assert_eq!(
+            on_current, 5,
+            "rectangle, ellipse and its copy, and the two imported paths"
+        );
+        assert!(snap["document"]["layers"][0]["fill"]["lines_per_mm"].is_number());
+
         // toggle selection
         d("document.select", json!({"ids": [rect]})).unwrap();
         assert_eq!(
@@ -1548,6 +1627,8 @@ mod tests {
             json!({"format": "svg", "data": b64(SVG.as_bytes()), "name": "a.svg"}),
         )
         .unwrap();
+        assert_eq!(ids["layers"].as_array().unwrap().len(), 2);
+        assert_eq!(ids["unsupported"], 0);
         let ids: Vec<u64> = serde_json::from_value(ids["objects"].clone()).unwrap();
         assert_eq!(ids.len(), 2);
         let snap = d("session.snapshot", Value::Null).unwrap();
