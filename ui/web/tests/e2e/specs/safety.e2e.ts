@@ -48,8 +48,14 @@ describe('Safety in the real app', () => {
     await byTestId('console-input').click();
     await browser.action('key').down('\uE008').down('\uE00C').up('\uE00C').up('\uE008').perform();
     // the soft reset: the controller starts again and the console shows its banner only
-    await browser.waitUntil(async () => !(await consoleText()).includes('[VER:'), { timeout: 10_000 });
-    expect(await consoleText()).toContain('Grbl');
+    // (the console is cleared first and the banner arrives after, so wait for both)
+    await browser.waitUntil(
+      async () => {
+        const text = await consoleText();
+        return !text.includes('[VER:') && text.includes('Grbl');
+      },
+      { timeout: 10_000 },
+    );
     await $('.dock-tabs [data-panel="machine"]').click();
   });
 
