@@ -246,10 +246,9 @@ settings-countdown = Countdown vor „Laser auslösen“
 settings-userOnly = Nur Sie können das ändern, mit `freekerf config set` (Skripte und Agenten nicht).
 settings-mcp = KI-Agenten (MCP-Server)
 settings-mcpMachine = Agenten dürfen die Maschine bewegen
-settings-mcpLaser = Agenten dürfen das Auslösen des Lasers anfordern
 settings-on = Ein
 settings-off = Aus
-settings-automationNote = Standardmäßig aus. Auch wenn erlaubt, feuert der Laser erst, nachdem Sie auf diesem Bildschirm bestätigt haben.
+settings-automationNote = Standardmäßig aus. Agenten feuern den Laser nie: weder mit einer Berechtigung noch nach einer Bestätigung.
 settings-title = Darstellung und Eingabe
 settings-theme = Farbschema
 

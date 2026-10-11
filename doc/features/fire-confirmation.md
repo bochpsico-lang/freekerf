@@ -19,7 +19,8 @@ confirms it on screen after a countdown; only then does it run.
    `Service::confirm_fire`). The service checks that `id` is the pending request
    and that the countdown is over **on its own clock**, then runs the action as the
    user. A request runs once.
-4. Cancel, Esc, `fire.cancel` (tier `safety`) or closing the dialog drops the
+4. Cancel, Esc, `fire.cancel` (tier `safety`) or closing the dialog (`view.close_dialog`,
+   also from a script) drops the
    request. Clicking the backdrop does not close this dialog (no cancel by an
    accidental touch); STOP stays clickable over it.
 
@@ -28,7 +29,8 @@ confirms it on screen after a countdown; only then does it run.
 | Caller | Dispatch a laser action | Ask (`fire.request`) | Confirm |
 | --- | --- | --- | --- |
 | desktop window (`max_tier: machine`) | refused | yes | yes, the Fire laser button (`confirm_fire`) |
-| scripts, agents (M2) | refused unless granted | yes (when they have `machine`) | **never**: confirming is not an action of the registry |
+| scripts | refused unless a person confirms (`Prompter::confirm_laser`; headless: refused) | yes (when they have `machine`) | **never**: confirming is not an action of the registry |
+| agents (MCP) | **never** (no setting or grant) | **never** (refused, `check_agent_laser`) | never |
 | CLI, `host --stdio` (the user, all tiers) | yes (headless, no screen) | — | — |
 
 ## Settings

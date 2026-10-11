@@ -81,7 +81,7 @@ export class FakeService implements AppService {
   /** Clock of the fake fire gate, ms (tests move it). */
   now = 0;
   view: ViewState = {
-    mode: 'produce',
+    mode: 'design',
     tool: 'select',
     panel: 'machine',
     drawer_open: false,
@@ -97,6 +97,7 @@ export class FakeService implements AppService {
     ui: { language: 'en', theme: 'dark', high_contrast: false, density: 'auto', units: 'mm' },
   };
   private nextToast = 1;
+  private revision = 0;
   /** Tool path returned by `toolpath()` (set by `job.load_text`, or by tests). */
   toolpathSegments: SegmentRecord[] = [];
   private handlers: Partial<Record<ActionName, Handler>> = {
@@ -136,23 +137,23 @@ export class FakeService implements AppService {
       this.changeView((v) => {
         v.tool = (p as Params<'view.set_tool'>).tool;
       }),
-    'view.show_panel': (p) =>
+    'view.open_panel': (p) =>
       this.changeView((v) => {
-        v.panel = (p as Params<'view.show_panel'>).panel;
+        v.panel = (p as Params<'view.open_panel'>).name;
         v.drawer_open = true;
       }),
-    'view.set_drawer': (p) =>
+    'view.close_panel': (p) =>
       this.changeView((v) => {
-        v.drawer_open = (p as Params<'view.set_drawer'>).open;
+        if (v.panel === (p as Params<'view.close_panel'>).name) v.drawer_open = false;
       }),
     'view.open_dialog': (p) =>
       this.changeView((v) => {
-        const d = (p as Params<'view.open_dialog'>).dialog;
+        const d = (p as Params<'view.open_dialog'>).name;
         v.dialogs = [...v.dialogs.filter((x) => x !== d), d];
       }),
     'view.close_dialog': (p) =>
       this.changeView((v) => {
-        const d = (p as Params<'view.close_dialog'>).dialog;
+        const d = (p as Params<'view.close_dialog'>).name ?? v.dialogs.at(-1);
         if ((d ?? v.dialogs.at(-1)) === 'fire_confirmation') v.fire_request = null;
         v.dialogs = d ? v.dialogs.filter((x) => x !== d) : v.dialogs.slice(0, -1);
       }),
@@ -328,7 +329,10 @@ export class FakeService implements AppService {
   private changeView(f: (v: ViewState) => void): null {
     const before = JSON.stringify(this.view);
     f(this.view);
-    if (JSON.stringify(this.view) !== before) this.emit({ event: 'view', view: structuredClone(this.view) });
+    if (JSON.stringify(this.view) !== before) {
+      this.revision += 1;
+      this.emit({ event: 'session', revision: this.revision, change: 'view' });
+    }
     return null;
   }
 

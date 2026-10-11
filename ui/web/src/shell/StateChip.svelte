@@ -22,7 +22,7 @@
   data-state={machine.visual}
   data-testid="state-chip"
   aria-live="polite"
-  onclick={() => void service.dispatch('view.show_panel', { panel: 'machine' })}
+  onclick={() => void service.dispatch('view.open_panel', { name: 'machine' })}
 >
   <span class="state-ico"><Icon name={icons[machine.visual] ?? 'dot'} /></span>
   <span class="state-label">{t(`state-${machine.visual}`)}</span>

@@ -275,3 +275,257 @@ fn host_stdio_drives_the_emulator_on_a_pty() {
     drop(emu.stdin.take());
     assert!(emu.wait().unwrap().success());
 }
+
+#[test]
+fn import_case_runs_conformance_cases() {
+    let home = tempfile::tempdir().unwrap();
+    let kinds = freekerf(home.path())
+        .args(["import-case", "--kinds"])
+        .output()
+        .unwrap();
+    assert!(kinds.status.success());
+    let kinds = String::from_utf8(kinds.stdout).unwrap();
+    assert!(kinds.lines().any(|k| k == "hershey"));
+
+    let case = json!({"kind": "hershey", "text": "Hi", "x": 10.0, "y": 5.0, "speed": 1000, "power": 300,
+                      "horizontal": true, "ton": "M4"});
+    let out = freekerf(home.path())
+        .args(["import-case", "-"])
+        .write_stdin(case.to_string())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let got: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(got["gcode"][0], "M5 S300 F1000");
+
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("case.json");
+    std::fs::write(&file, json!({"kind": "nope"}).to_string()).unwrap();
+    freekerf(home.path())
+        .args(["import-case"])
+        .arg(&file)
+        .assert()
+        .failure();
+    freekerf(home.path()).args(["import-case"]).assert().failure();
+    std::fs::write(&file, "not json").unwrap();
+    freekerf(home.path())
+        .args(["import-case"])
+        .arg(&file)
+        .assert()
+        .failure();
+}
+
+#[test]
+fn migrate_lasergrbl() {
+    let home = tempfile::tempdir().unwrap();
+    let lg = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../crates/config/freekerf-migrate/tests/fixtures");
+    freekerf(home.path())
+        .args(["migrate", "lasergrbl"])
+        .arg(&lg)
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("Serial Speed -> machine.baud")
+                .and(predicate::str::contains("nothing written")),
+        );
+    freekerf(home.path())
+        .args(["config", "get", "machine.baud"])
+        .assert()
+        .success()
+        .stdout("115200\n");
+    let out = freekerf(home.path())
+        .args(["migrate", "lasergrbl", "--apply", "--json"])
+        .arg(&lg)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let report: Value = serde_json::from_slice(&out).unwrap();
+    assert_eq!(report["applied"], json!(true));
+    assert_eq!(report["laser_counters"], json!(["Default", "Diode 10 W"]));
+    freekerf(home.path())
+        .args(["config", "get", "machine.baud"])
+        .assert()
+        .success()
+        .stdout("250000\n");
+    freekerf(home.path())
+        .args(["migrate", "lasergrbl", "/no/such/folder"])
+        .assert()
+        .failure();
+    // custom buttons became scripts; a dry run shows what one would do
+    assert_eq!(report["buttons"][0], "Frame");
+    let frame = home.path().join("macros").join("frame.js");
+    assert!(frame.exists());
+    let out = freekerf(home.path())
+        .args(["run", "--dry-run", "--tier", "laser"])
+        .arg(&frame)
+        .output()
+        .unwrap();
+    let r: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(r["simulated"], json!(["machine.custom_code"]), "{r}");
+    assert!(
+        r["actions"][0]["params"]["code"]
+            .as_str()
+            .unwrap()
+            .starts_with("G0 X[left] Y[bottom]\n")
+    );
+    // a .zbn export
+    freekerf(home.path())
+        .args(["migrate", "lasergrbl-buttons"])
+        .arg(lg.join("StandardButtons.zbn"))
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("Center, Corner, Frame")
+                .and(predicate::str::contains("nothing written")),
+        );
+    freekerf(home.path())
+        .args(["migrate", "lasergrbl-buttons", "--apply"])
+        .arg(lg.join("StandardButtons.zbn"))
+        .assert()
+        .success();
+    assert!(home.path().join("macros").join("center.js").exists());
+    freekerf(home.path())
+        .args(["migrate", "lasergrbl-buttons"])
+        .arg(lg.join("LaserLifeCounter.bin"))
+        .assert()
+        .code(2);
+}
+
+#[test]
+fn run_a_script() {
+    let home = tempfile::tempdir().unwrap();
+    let out_file = home.path().join("out.fkproj");
+    let script = home.path().join("make.js");
+    std::fs::write(
+        &script,
+        format!(
+            r#"const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="20mm"><rect x="1" y="1" width="5" height="5" stroke="red" fill="none"/></svg>';
+app.document.importData({{format: "svg", text: svg}});
+app.document.save({{path: {:?}}});
+console.log("saved");
+app.session.snapshot().document.objects.length"#,
+            out_file.display().to_string()
+        ),
+    )
+    .unwrap();
+    // a dry run simulates the save
+    let out = freekerf(home.path())
+        .args(["run", "--dry-run"])
+        .arg(&script)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let report: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(report["value"], json!(1));
+    assert_eq!(report["simulated"], json!(["document.save"]));
+    assert!(!out_file.exists());
+    // a real run writes the project
+    let out = freekerf(home.path()).arg("run").arg(&script).output().unwrap();
+    assert!(out.status.success());
+    let report: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(report["log"], json!(["saved"]));
+    assert!(out_file.exists());
+    // below `edit` the import is denied
+    freekerf(home.path())
+        .args(["run", "--tier", "read"])
+        .arg(&script)
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("permission denied"));
+    // laser actions are refused from the command line (the tier stops below them)
+    let laser = home.path().join("laser.js");
+    std::fs::write(&laser, "app.job.run({})").unwrap();
+    freekerf(home.path())
+        .arg("run")
+        .arg(&laser)
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("needs tier `laser`"));
+    freekerf(home.path())
+        .args(["run", "--tier", "laser"])
+        .arg(&laser)
+        .assert()
+        .code(2);
+    freekerf(home.path())
+        .args(["run", "--tier", "bogus"])
+        .arg(&laser)
+        .assert()
+        .code(2);
+    freekerf(home.path())
+        .args(["run", "missing.js"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("reading missing.js"));
+}
+
+#[test]
+fn mcp_is_off_by_default_then_attaches_or_launches() {
+    let home = tempfile::tempdir().unwrap();
+    freekerf(home.path())
+        .arg("mcp")
+        .write_stdin("")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("MCP is disabled"));
+    freekerf(home.path())
+        .args(["serve"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("--headless"));
+    freekerf(home.path())
+        .args(["config", "set", "automation.mcp.enabled", "true"])
+        .assert()
+        .success();
+    // nothing runs: `freekerf mcp` starts a headless instance and attaches
+    let bin = assert_cmd::cargo::cargo_bin("freekerf");
+    let mut mcp = StdCommand::new(&bin)
+        .arg("--home")
+        .arg(home.path())
+        .args(["mcp", "--idle-exit", "1"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = mcp.stdin.take().unwrap();
+    let mut stdout = BufReader::new(mcp.stdout.take().unwrap());
+    let mut ask = |msg: Value| -> Value {
+        writeln!(stdin, "{msg}").unwrap();
+        let mut line = String::new();
+        stdout.read_line(&mut line).unwrap();
+        serde_json::from_str(&line).unwrap()
+    };
+    let init = ask(
+        json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "cli-test", "version": "1"}}}),
+    );
+    assert_eq!(init["result"]["serverInfo"]["name"], "freekerf", "{init}");
+    let state = ask(
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+        "name": "get_state", "arguments": {"path": "session.view.mode"}}}),
+    );
+    assert_eq!(state["result"]["content"][0]["text"], "design", "{state}");
+    // a second agent attaches to the same instance
+    let r = freekerf(home.path())
+        .args(["mcp"])
+        .write_stdin(
+            json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "second"}}})
+            .to_string()
+                + "\n",
+        )
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&r.stdout).contains("\"freekerf\""));
+    drop(stdin);
+    assert!(mcp.wait().unwrap().success());
+    // the started instance leaves once idle
+    let token = home.path().join("ipc").join("ipc.token");
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while token.exists() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(!token.exists(), "the headless instance did not exit");
+}

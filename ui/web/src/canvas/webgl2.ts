@@ -1,4 +1,4 @@
-// WebGL2 renderer of the canvas (ADR 0012). It draws what is heavy: line segments
+// WebGL2 renderer of the canvas (ADR 0014). It draws what is heavy: line segments
 // (tool path, design paths) as one instanced draw per batch, and large raster
 // images as tiled single-channel textures. Light, frequently changing things
 // (grid, rulers, head, selection) are drawn by the Canvas2D overlay.

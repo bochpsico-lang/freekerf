@@ -35,7 +35,7 @@
         <button
           class="btn primary"
           data-testid="banner-recover"
-          onclick={() => run(() => service.dispatch('view.open_dialog', { dialog: 'recover' }))}
+          onclick={() => run(() => service.dispatch('view.open_dialog', { name: 'recover' }))}
         >
           <Icon name="repeat" /><span>{t('recover-open')}</span>
         </button>

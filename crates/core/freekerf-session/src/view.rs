@@ -21,9 +21,9 @@ pub const MAX_TOASTS: usize = 3;
 #[serde(rename_all = "snake_case")]
 pub enum Mode {
     /// Editing tools, palette, inspector.
+    #[default]
     Design,
     /// Machine control; the canvas is a preview.
-    #[default]
     Produce,
 }
 
@@ -73,6 +73,8 @@ pub enum Dialog {
     Welcome,
     /// Import (Design mode).
     Import,
+    /// Image settings before an image is added (Design mode, raster pipeline).
+    Raster,
     /// About FreeKerf.
     About,
 }
@@ -109,13 +111,12 @@ pub struct Toast {
 
 /// What part of the table is shown: the world point at the centre and the zoom.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Viewport {
-    /// Centre X, mm.
-    pub cx: f64,
-    /// Centre Y, mm.
-    pub cy: f64,
+    /// Centre `[x, y]`, mm.
+    pub center: [f64; 2],
     /// Zoom, CSS pixels per mm.
-    pub scale: f64,
+    pub zoom: f64,
 }
 
 /// The whole view state.
@@ -150,7 +151,7 @@ pub struct ViewState {
 impl Default for ViewState {
     fn default() -> Self {
         Self {
-            mode: Mode::Produce,
+            mode: Mode::Design,
             tool: Tool::Select,
             panel: Panel::Machine,
             drawer_open: false,
@@ -173,12 +174,13 @@ pub enum ViewCommand {
     /// Chooses the Design mode tool.
     SetTool(Tool),
     /// Shows a panel (and opens the drawer).
-    ShowPanel(Panel),
-    /// Opens or closes the drawer.
-    SetDrawer(bool),
+    OpenPanel(Panel),
+    /// Closes the drawer when it shows this panel.
+    ClosePanel(Panel),
     /// Opens a dialog on top (moves it up if already open).
     OpenDialog(Dialog),
-    /// Closes a dialog (the top one when `None`).
+    /// Closes a dialog (the top one when `None`). Closing the fire confirmation
+    /// drops its request: it can no longer be confirmed.
     CloseDialog(Option<Dialog>),
     /// Adds a toast.
     Toast {
@@ -227,18 +229,27 @@ impl ViewState {
                 }
             }
             ViewCommand::SetTool(t) => self.tool = t,
-            ViewCommand::ShowPanel(p) => {
+            ViewCommand::OpenPanel(p) => {
                 self.panel = p;
                 self.drawer_open = true;
             }
-            ViewCommand::SetDrawer(open) => self.drawer_open = open,
+            ViewCommand::ClosePanel(p) => {
+                if self.panel == p {
+                    self.drawer_open = false;
+                }
+            }
             ViewCommand::OpenDialog(d) => {
                 self.dialogs.retain(|x| *x != d);
                 self.dialogs.push(d);
             }
-            ViewCommand::CloseDialog(Some(d)) => self.dialogs.retain(|x| *x != d),
-            ViewCommand::CloseDialog(None) => {
-                self.dialogs.pop();
+            ViewCommand::CloseDialog(d) => {
+                let Some(d) = d.or_else(|| self.top_dialog()) else {
+                    return Ok(None);
+                };
+                self.dialogs.retain(|x| *x != d);
+                if d == Dialog::FireConfirmation {
+                    self.fire_request = None;
+                }
             }
             ViewCommand::Toast { level, message, args } => {
                 if message.trim().is_empty() {
@@ -258,7 +269,7 @@ impl ViewState {
             }
             ViewCommand::DismissToast(id) => self.toasts.retain(|t| t.id != id),
             ViewCommand::SetViewport(v) => {
-                if !(v.cx.is_finite() && v.cy.is_finite() && v.scale.is_finite() && v.scale > 0.0) {
+                if !(v.center.iter().all(|c| c.is_finite()) && v.zoom.is_finite() && v.zoom > 0.0) {
                     return Err(ViewError::BadViewport);
                 }
                 self.viewport = Some(v);
@@ -290,14 +301,16 @@ mod tests {
     #[test]
     fn modes_and_panels() {
         let mut v = ViewState::default();
-        assert_eq!((v.mode, v.panel), (Mode::Produce, Panel::Machine));
-        v.apply(ViewCommand::SetMode(Mode::Design)).unwrap();
-        v.apply(ViewCommand::ShowPanel(Panel::Layers)).unwrap();
+        assert_eq!((v.mode, v.panel), (Mode::Design, Panel::Machine));
+        v.apply(ViewCommand::OpenPanel(Panel::Layers)).unwrap();
         assert_eq!(
             (v.mode, v.panel, v.drawer_open),
             (Mode::Design, Panel::Layers, true)
         );
-        v.apply(ViewCommand::SetDrawer(false)).unwrap();
+        // closing another panel leaves the drawer open
+        v.apply(ViewCommand::ClosePanel(Panel::Console)).unwrap();
+        assert!(v.drawer_open);
+        v.apply(ViewCommand::ClosePanel(Panel::Layers)).unwrap();
         assert!(!v.drawer_open);
         assert_eq!(v.tool, Tool::Select);
         v.apply(ViewCommand::SetTool(Tool::Ellipse)).unwrap();
@@ -352,17 +365,19 @@ mod tests {
     fn viewport_fit_and_focus() {
         let mut v = ViewState::default();
         let good = Viewport {
-            cx: 10.0,
-            cy: 20.0,
-            scale: 2.0,
+            center: [10.0, 20.0],
+            zoom: 2.0,
         };
         v.apply(ViewCommand::SetViewport(good)).unwrap();
         assert_eq!(v.viewport, Some(good));
         for bad in [
-            Viewport { scale: 0.0, ..good },
-            Viewport { cx: f64::NAN, ..good },
+            Viewport { zoom: 0.0, ..good },
             Viewport {
-                scale: f64::INFINITY,
+                center: [f64::NAN, 0.0],
+                ..good
+            },
+            Viewport {
+                zoom: f64::INFINITY,
                 ..good
             },
         ] {
@@ -396,12 +411,25 @@ mod tests {
         v.apply(ViewCommand::SetFireRequest(None)).unwrap();
         assert_eq!(v.dialogs, [Dialog::Settings]);
         assert!(v.fire_request.is_none());
+        // closing the dialog (Esc, a script) drops the request too
+        let r = crate::fire::FireGate::default().request(
+            "job.run",
+            serde_json::Value::Null,
+            "desktop",
+            crate::fire::FireSummary::default(),
+            3000,
+            0,
+        );
+        v.apply(ViewCommand::SetFireRequest(Some(r))).unwrap();
+        v.apply(ViewCommand::CloseDialog(None)).unwrap();
+        assert!(v.fire_request.is_none());
+        assert_eq!(v.dialogs, [Dialog::Settings]);
     }
 
     #[test]
     fn serializes_for_the_ui() {
         let v = serde_json::to_value(ViewState::default()).unwrap();
-        assert_eq!(v["mode"], "produce");
+        assert_eq!(v["mode"], "design");
         assert_eq!(v["panel"], "machine");
         assert!(v["viewport"].is_null());
     }

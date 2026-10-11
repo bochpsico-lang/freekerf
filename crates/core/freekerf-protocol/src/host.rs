@@ -100,6 +100,9 @@ pub struct HostOptions {
     pub jog_step_mm: f64,
     /// Jog speed of the jog panel, mm/min (`[jogspeed]` in custom code).
     pub jog_speed_mm_min: f64,
+    /// Count a garbled line that contains `ok` as an `ok` (LaserGRBL's "broken ok",
+    /// DIV-051): a noisy link can merge an `ok` into another line.
+    pub accept_broken_ok: bool,
     /// Version of the last board seen (used until the banner arrives).
     pub last_known_version: Option<FirmwareVersion>,
     /// Settings table of the last board seen.
@@ -121,6 +124,7 @@ impl Default for HostOptions {
             auto_cooling: None,
             jog_step_mm: 1.0,
             jog_speed_mm_min: 1000.0,
+            accept_broken_ok: true,
             last_known_version: None,
             last_known_settings: None,
         }
@@ -1018,7 +1022,7 @@ impl Host {
         } else if let Some((fw, maj, min, build)) = self.unknown_welcome(line) {
             self.core.vendor_info_seen = Some(fw);
             self.welcome(line, 0, Some((maj, min, build)), false);
-        } else if lower.contains("ok") {
+        } else if self.is_broken_ok(line, &lower) {
             self.core.log(MessageKind::Warning, "Handle broken ok!", None);
             self.command_response("ok");
         } else if lower.starts_with("alarm:") {
@@ -1033,6 +1037,16 @@ impl Host {
         } else {
             self.core.generic_message(line);
         }
+    }
+
+    /// A line that is not a response but contains `ok`, garbled by noise (DIV-051).
+    /// Never a startup block report (`>G54G20:ok`: the Grbl interface says it is not
+    /// counted) or a well-formed `[...]` message (`[MSG:Look up]`).
+    fn is_broken_ok(&self, line: &str, lower: &str) -> bool {
+        self.core.opts.accept_broken_ok
+            && lower.contains("ok")
+            && !line.starts_with('>')
+            && !(line.starts_with('[') && line.ends_with(']'))
     }
 
     fn longer_version(&self) -> FirmwareVersion {

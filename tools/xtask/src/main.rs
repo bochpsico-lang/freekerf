@@ -3,7 +3,8 @@
 //! * `check-layers`: fails when a dependency between workspace crates (or a
 //!   forbidden third-party crate in the core) breaks the layer rules of
 //!   `PLAN.md` §3 / `AGENTS.md`;
-//! * `gen-docs`: regenerates the generated documentation;
+//! * `gen-docs`: regenerates the generated documentation (action catalogue,
+//!   schemas, the script API's `api.d.ts`, the UI's TypeScript types);
 //! * `check-docs`: fails when the committed generated documentation (and the
 //!   generated TypeScript types) are stale;
 //! * `sync-tokens [--design <dir>] [--check]`: tokens, icons, fonts and app icons
@@ -87,9 +88,14 @@ fn generated() -> Result<Vec<(PathBuf, String)>> {
             root().join("doc/features/actions.md"),
             service.registry().to_markdown(),
         ),
+        (root().join("doc/scripting/api.d.ts"), service.api_dts()),
         (
             root().join("doc/schema/settings.schema.json"),
             freekerf_settings::json_schema(),
+        ),
+        (
+            root().join("doc/schema/fkproj.schema.json"),
+            freekerf_document::json_schema(),
         ),
         (root().join("ui/web/src/gen/api.ts"), typescript(&service)?),
     ])

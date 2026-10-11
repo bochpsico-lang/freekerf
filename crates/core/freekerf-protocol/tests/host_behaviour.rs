@@ -581,6 +581,47 @@ fn ip_messages_alarms_and_broken_oks() {
     b.host.receive(b"ok\n", b.now);
 }
 
+/// Sends a line the device does not answer and returns how many lines stay pending
+/// after `reply` arrives.
+fn pending_after(b: &mut Bench, reply: &[u8]) -> usize {
+    b.device.set_auto_ack(false);
+    b.host.send_command("G0 X1", b.now).unwrap();
+    b.exchange();
+    assert_eq!(b.host.snapshot().pending, 1);
+    b.host.receive(reply, b.now);
+    let pending = b.host.snapshot().pending;
+    b.host.receive(b"ok\n", b.now);
+    pending
+}
+
+#[test]
+fn broken_oks_skip_startup_reports_and_messages() {
+    // DIV-051: LaserGRBL counts any line containing "ok"; startup block reports
+    // (">G54G20:ok", not counted per the Grbl interface) and well-formed [...]
+    // messages are not counted here
+    let mut b = connected();
+    assert_eq!(
+        pending_after(&mut b, b"<Idle|MPos:0.000,0.000,0.000|FS:0,0ok\n"),
+        0
+    );
+    assert_eq!(pending_after(&mut b, b">G54G20:ok\n"), 1);
+    assert_eq!(pending_after(&mut b, b"[MSG:Look up]\n"), 1);
+    assert_eq!(pending_after(&mut b, b"[MSG:Look up\n"), 0);
+}
+
+#[test]
+fn broken_oks_can_be_turned_off() {
+    let opts = HostOptions {
+        accept_broken_ok: false,
+        ..HostOptions::default()
+    };
+    let mut b = Bench::with(opts, DeviceConfig::default());
+    b.connect();
+    assert_eq!(pending_after(&mut b, b"xxokxx\n"), 1);
+    assert_eq!(pending_after(&mut b, b"ok\n"), 0);
+    assert_eq!(pending_after(&mut b, b"error:20\n"), 0);
+}
+
 #[test]
 fn eeprom_writes_go_one_at_a_time_and_update_the_table() {
     let mut b = connected();

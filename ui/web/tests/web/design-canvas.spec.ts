@@ -34,9 +34,9 @@ test('draw, select, move, resize and undo on the canvas', async ({ page }) => {
   expect(b0[2] - b0[0]).toBeCloseTo(40);
   // screen pixels per mm, from the view state (committed after the gesture)
   await expect
-    .poll(() => page.evaluate(() => (window as unknown as Win).fkFake.view.viewport?.scale ?? 0))
+    .poll(() => page.evaluate(() => (window as unknown as Win).fkFake.view.viewport?.zoom ?? 0))
     .toBeGreaterThan(0);
-  const scale = await page.evaluate(() => (window as unknown as Win).fkFake.view.viewport!.scale);
+  const scale = await page.evaluate(() => (window as unknown as Win).fkFake.view.viewport!.zoom);
 
   // drag the object: one translate on release
   await page.mouse.move(cx, cy);

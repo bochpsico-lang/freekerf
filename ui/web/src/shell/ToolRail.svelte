@@ -31,7 +31,7 @@
   function pick(target: Tool | 'import') {
     return run(() =>
       target === 'import'
-        ? service.dispatch('view.open_dialog', { dialog: 'import' })
+        ? service.dispatch('view.open_dialog', { name: 'import' })
         : service.dispatch('view.set_tool', { tool: target }),
     );
   }

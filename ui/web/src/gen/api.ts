@@ -2,6 +2,27 @@
 // Changing a Rust type? Run `cargo xtask gen-ts` (CI checks committed == generated).
 /* eslint-disable */
 
+export type AddLayerParams = {
+  /** Colour, `#RRGGBB`. */
+  color: Color;
+  /** Filling pattern. */
+  fill_pattern?: FillPattern | null;
+  /** Filling lines per mm. */
+  lines_per_mm?: number | null;
+  /** `line`, `fill`, `fill_and_line`, `cut` or `ignore`. */
+  mode?: LayerMode | null;
+  /** Name. */
+  name?: string | null;
+  /** Passes (at least 1). */
+  passes?: number | null;
+  /** `S` power. */
+  power?: number | null;
+  /** Speed, mm/min. */
+  speed_mm_min?: number | null;
+  /** Shown and planned. */
+  visible?: boolean | null;
+};
+
 /** Automatic cooling: hold the job `off_s` every `on_s` seconds of work. */
 export type AutoCoolingSettings = {
   /** Enabled. */
@@ -14,15 +35,20 @@ export type AutoCoolingSettings = {
 
 /** Automation (scripts and agents). */
 export type AutomationSettings = {
+  /** Permissions granted "always" (revoked by removing them). */
+  grants?: Grant[];
   /** MCP. */
   mcp?: McpSettings;
 };
 
-/** `view.close_dialog`. */
-export type CloseDialogParams = {
-  /** The dialog; the one on top when absent. */
-  dialog?: Dialog | null;
-};
+/** Who calls an action. */
+export type CallerKind = "user" | "macro" | "agent" | "test";
+
+/** What changed (events for the front ends, carried with the revision). */
+export type Change = "document" | "selection" | "view" | "history";
+
+/** sRGB colour `#RRGGBB` */
+export type Color = string;
 
 /** Status of a sent command (`CommandStatus`). */
 export type CommandStatus = "Queued" | "WaitingResponse" | "ResponseGood" | "ResponseBad" | "InvalidResponse";
@@ -100,12 +126,11 @@ export type Density = "auto" | "compact" | "comfortable";
  * Dialogs. Dialogs are not modal (STOP stays reachable); several can be open,
  * the last one is on top.
  */
-export type Dialog = "settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "about";
+export type Dialog = "settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "about";
 
-/** `view.dismiss_toast`. */
-export type DismissToastParams = {
-  /** Id returned by `view.toast`. */
-  id: number;
+export type DialogParams = {
+  /** The dialog (`settings`, `shortcuts`, `recover`, `welcome`, `import`, `raster`, `about`...). */
+  name: Dialog;
 };
 
 /** What happened, for the front ends. */
@@ -162,6 +187,9 @@ export type Event = {
 } | {
   LoopCountChanged: number;
 };
+
+/** The filling patterns (LaserGRBL's `Direction.New*` values). */
+export type FillPattern = "horizontal" | "vertical" | "diagonal" | "reverse_diagonal" | "grid" | "diagonal_grid" | "cross" | "diagonal_cross" | "squares" | "zig_zag" | "hilbert" | "inset";
 
 /** `fire.cancel`. */
 export type FireCancelParams = {
@@ -229,7 +257,11 @@ export type FirmwareVersion = {
   vendor_version?: string | null;
 };
 
-/** `view.focus`. */
+export type FkprojParams = {
+  /** The project file's text (`.fkproj`, JSON). */
+  text: string;
+};
+
 export type FocusParams = {
   /** Element with the focus (`canvas`, `console`...), none when absent. */
   target?: string | null;
@@ -239,6 +271,21 @@ export type FocusParams = {
 export type FrameParams = {
   /** Feed in mm/min (default: the jog setting). */
   feed_mm_min?: number | null;
+};
+
+/**
+ * A permission granted by the user with the scope "always" (PLAN §9.5): `caller`
+ * named `name` may use actions up to `tier` without asking.
+ */
+export type Grant = {
+  /** Kind of caller (`macro`, `agent`). */
+  caller: CallerKind;
+  /** Macros: hash of the code; editing the macro invalidates the grant. */
+  code_hash?: string | null;
+  /** Caller name (macro name, MCP client name). */
+  name: string;
+  /** Highest tier granted. */
+  tier: Tier;
 };
 
 /** State of the host for front ends. */
@@ -307,6 +354,34 @@ export type HostSnapshot = {
   work_offset: Point3;
   /** Work position. */
   work_position: Point3;
+};
+
+export type IdsParams = {
+  /** Object ids (default: the selection). */
+  ids?: number[] | null;
+};
+
+/** File formats of `document.import_data`. */
+export type ImportFormat = "svg" | "dxf" | "image";
+
+export type ImportParams = {
+  /** The file's bytes, base64 (or `text`). */
+  data?: string | null;
+  /** Images: resolution in dots per inch (default 96); position is the origin. */
+  dpi?: number | null;
+  /** File format. */
+  format: ImportFormat;
+  /** Name of the file (kept as the objects' source). */
+  name?: string;
+  /** Power of new layers, `S` (default 1000). */
+  power?: number | null;
+  /** Speed of new layers, mm/min (default 1000). */
+  speed_mm_min?: number | null;
+  /**
+   * SVG or DXF: the file as text instead of `data` (for scripts that build a
+   * drawing).
+   */
+  text?: string | null;
 };
 
 /**
@@ -383,6 +458,14 @@ export type LaserLifeCounter = {
   run_ms: number;
 };
 
+export type LayerIdParams = {
+  /** Layer id. */
+  id: number;
+};
+
+/** How the objects of a layer are processed (LaserGRBL's `SvgLayerMode`). */
+export type LayerMode = "line" | "fill" | "fill_and_line" | "cut" | "ignore";
+
 /** `job.load`. */
 export type LoadParams = {
   /** Path of a G-code file. */
@@ -419,6 +502,8 @@ export type MachineInfo = {
 
 /** How to reach the machine and how to talk to it. */
 export type MachineSettings = {
+  /** Count a garbled line that contains `ok` as an `ok` (tolerates a noisy link). */
+  accept_broken_ok?: boolean;
   /** Automatic cooling cycles. */
   auto_cooling?: AutoCoolingSettings;
   /** Baud rate. */
@@ -449,9 +534,7 @@ export type MachineStatus = "Disconnected" | "Connecting" | "Idle" | "Run" | "Ho
  * actions, scripts or agents.
  */
 export type McpSettings = {
-  /** Agents may request `laser` actions (always confirmed by a human on screen). */
-  allow_laser?: boolean;
-  /** Agents may use `machine` actions. */
+  /** Agents may use `machine` actions. Agents never get `laser` actions. */
   allow_machine?: boolean;
   /** MCP server enabled (off by default). */
   enabled?: boolean;
@@ -463,13 +546,24 @@ export type MessageKind = "Startup" | "Config" | "Alarm" | "Feedback" | "Positio
 /** Workspace mode (`design/ux.md`: one workspace, two modes). */
 export type Mode = "design" | "produce";
 
+export type ModeParams = {
+  /** `design` or `produce`. */
+  mode: Mode;
+};
+
+export type MoveToLayerParams = {
+  /** Object ids (default: the selection). */
+  ids?: number[] | null;
+  /** Layer id. */
+  layer: number;
+};
+
 /** Parameters of actions that take none. */
 export type NoParams = Record<string, never>;
 
-/** `view.open_dialog`. */
-export type OpenDialogParams = {
-  /** The dialog. */
-  dialog: Dialog;
+export type OptionalDialogParams = {
+  /** The dialog (default: the one on top). */
+  name?: Dialog | null;
 };
 
 /** `machine.overrides`. */
@@ -484,6 +578,11 @@ export type OverrideParams = {
 
 /** Panels of the dock (wide layout) or the drawers (medium layout). */
 export type Panel = "layers" | "object" | "machine" | "console";
+
+export type PanelParams = {
+  /** `layers`, `object`, `machine` or `console`. */
+  name: Panel;
+};
 
 /** A position (machine or work), in mm, as `float` like LaserGRBL (`GPoint`). */
 export type Point3 = {
@@ -564,28 +663,20 @@ export type SelectLaserParams = {
   id: string;
 };
 
+/** How `document.select` combines the ids with the current selection. */
+export type SelectMode = "replace" | "add" | "remove";
+
+export type SelectParams = {
+  /** Object ids. */
+  ids: number[];
+  /** Replace (default), add or remove. */
+  mode?: SelectMode;
+};
+
 /** `machine.send`. */
 export type SendParams = {
   /** One line of G-code or a `$` command. */
   line: string;
-};
-
-/** `view.set_drawer`. */
-export type SetDrawerParams = {
-  /** Open or closed. */
-  open: boolean;
-};
-
-/** `view.set_mode`. */
-export type SetModeParams = {
-  /** `design` or `produce`. */
-  mode: Mode;
-};
-
-/** `view.set_tool`. */
-export type SetToolParams = {
-  /** `select`, `rect`, `ellipse` or `text`. */
-  tool: Tool;
 };
 
 /** `settings.get`. */
@@ -600,12 +691,6 @@ export type SettingsSetParams = {
   key: string;
   /** New value (JSON). */
   value: unknown;
-};
-
-/** `view.show_panel`. */
-export type ShowPanelParams = {
-  /** `layers`, `object`, `machine` or `console`. */
-  panel: Panel;
 };
 
 /** Result of `state.get`. */
@@ -655,10 +740,14 @@ export type Toast = {
   message: string;
 };
 
+export type ToastIdParams = {
+  /** Id returned by `view.toast`. */
+  id: number;
+};
+
 /** Kind of a toast. */
 export type ToastLevel = "info" | "ok" | "warning" | "error";
 
-/** `view.toast`. */
 export type ToastParams = {
   /** Placeholders of the message. */
   args?: Record<string, string>;
@@ -670,6 +759,20 @@ export type ToastParams = {
 
 /** Active tool of the Design mode (`design/interaction.md` §2). */
 export type Tool = "select" | "rect" | "ellipse" | "text";
+
+export type ToolParams = {
+  /** `select`, `rect`, `ellipse` or `text`. */
+  tool: Tool;
+};
+
+export type TranslateParams = {
+  /** Distance along X, mm. */
+  dx: number;
+  /** Distance along Y, mm. */
+  dy: number;
+  /** Object ids (default: the selection). */
+  ids?: number[] | null;
+};
 
 /** Appearance of the desktop app. */
 export type UiSettings = {
@@ -687,6 +790,27 @@ export type UiSettings = {
 
 /** Length units shown in the app (the machine always works in mm). */
 export type Units = "mm" | "in";
+
+export type UpdateLayerParams = {
+  /** Filling pattern. */
+  fill_pattern?: FillPattern | null;
+  /** Layer id. */
+  id: number;
+  /** Filling lines per mm. */
+  lines_per_mm?: number | null;
+  /** `line`, `fill`, `fill_and_line`, `cut` or `ignore`. */
+  mode?: LayerMode | null;
+  /** Name. */
+  name?: string | null;
+  /** Passes (at least 1). */
+  passes?: number | null;
+  /** `S` power. */
+  power?: number | null;
+  /** Speed, mm/min. */
+  speed_mm_min?: number | null;
+  /** Shown and planned. */
+  visible?: boolean | null;
+};
 
 /** The whole view state. */
 export type ViewState = {
@@ -717,12 +841,10 @@ export type ViewState = {
 
 /** What part of the table is shown: the world point at the centre and the zoom. */
 export type Viewport = {
-  /** Centre X, mm. */
-  cx: number;
-  /** Centre Y, mm. */
-  cy: number;
+  /** Centre `[x, y]`, mm. */
+  center: [number, number];
   /** Zoom, CSS pixels per mm. */
-  scale: number;
+  zoom: number;
 };
 
 /** `machine.write_settings`. */
@@ -795,9 +917,11 @@ export type EventMessage = {
 } | {
   event: "program_loaded";
 } | {
-  event: "view";
-  /** The new view state. */
-  view: ViewState;
+  /** What changed. */
+  change: Change;
+  event: "session";
+  /** Revision after the change. */
+  revision: number;
 };
 
 /** The whole settings file. */
@@ -828,6 +952,108 @@ export interface Actions {
     result: ConsoleRow[];
     tier: "read";
   };
+  /** Adds a layer of a colour (line, 1000 mm/min, power 1000, 1 pass unless given). One undo step. */
+  "document.add_layer": {
+    params: AddLayerParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Selects nothing. */
+  "document.clear_selection": {
+    params: NoParams;
+    result: unknown;
+    tier: "ui";
+  };
+  /** Deletes objects (default: the selection). One undo step. */
+  "document.delete": {
+    params: IdsParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Replaces the document with a `.fkproj` text (the undo history starts again). */
+  "document.from_fkproj": {
+    params: FkprojParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** The whole document (layers, objects with geometry and images), as in a `.fkproj` file. */
+  "document.get": {
+    params: NoParams;
+    result: unknown;
+    tier: "read";
+  };
+  /** Imports an SVG, DXF or image file into the document (format from the extension). One undo step. */
+  "document.import": {
+    params: LoadParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step. */
+  "document.import_data": {
+    params: ImportParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Moves objects (default: the selection) to another layer. One undo step. */
+  "document.move_to_layer": {
+    params: MoveToLayerParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Starts an empty document (the undo history starts again). */
+  "document.new": {
+    params: NoParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Opens a `.fkproj` project file (the undo history starts again). */
+  "document.open": {
+    params: LoadParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Removes a layer and its objects. One undo step. */
+  "document.remove_layer": {
+    params: LayerIdParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Saves the document as a `.fkproj` project file (written atomically). */
+  "document.save": {
+    params: LoadParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Selects objects (replace, add to or remove from the selection). Unknown ids are ignored. */
+  "document.select": {
+    params: SelectParams;
+    result: unknown;
+    tier: "ui";
+  };
+  /** Selects every object. */
+  "document.select_all": {
+    params: NoParams;
+    result: unknown;
+    tier: "ui";
+  };
+  /** The document as `.fkproj` text. */
+  "document.to_fkproj": {
+    params: NoParams;
+    result: unknown;
+    tier: "read";
+  };
+  /** Moves objects (default: the selection) by `dx`, `dy` mm. One undo step. */
+  "document.translate": {
+    params: TranslateParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Changes a layer's name, mode, speed, power, passes, visibility or filling. One undo step. */
+  "document.update_layer": {
+    params: UpdateLayerParams;
+    result: unknown;
+    tier: "edit";
+  };
   /** Cancels the pending laser request (the one given, or any). Always allowed. */
   "fire.cancel": {
     params: FireCancelParams;
@@ -840,6 +1066,18 @@ export interface Actions {
     result: FireRequest;
     tier: "machine";
   };
+  /** Redoes the last undone change. */
+  "history.redo": {
+    params: NoParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Undoes the last document change. */
+  "history.undo": {
+    params: NoParams;
+    result: unknown;
+    tier: "edit";
+  };
   /** Stops streaming the job and sends `M5` (lines already in the board still run; use machine.stop to stop at once). Always allowed. */
   "job.abort": {
     params: NoParams;
@@ -851,6 +1089,12 @@ export interface Actions {
     params: FrameParams;
     result: null;
     tier: "machine";
+  };
+  /** Plans the document (vectors, then images; centerline uses the `autotrace` program) and loads it as the job. */
+  "job.from_document": {
+    params: NoParams;
+    result: unknown;
+    tier: "edit";
   };
   /** The loaded program (name, lines, estimated time, range). */
   "job.info": {
@@ -984,7 +1228,7 @@ export interface Actions {
     result: null;
     tier: "machine";
   };
-  /** STOP: soft reset of the board (laser off, queues flushed). Always allowed. */
+  /** STOP: cancels running scripts, then soft resets the board (laser off, queues flushed). Always allowed. */
   "machine.stop": {
     params: NoParams;
     result: null;
@@ -1008,6 +1252,12 @@ export interface Actions {
     result: null;
     tier: "machine";
   };
+  /** The session as front ends and agents read it: revision, selection, view, undo/redo labels, layers and objects without geometry. */
+  "session.snapshot": {
+    params: NoParams;
+    result: unknown;
+    tier: "read";
+  };
   /** Reads the settings (all, or one dotted key). */
   "settings.get": {
     params: SettingsGetParams;
@@ -1026,31 +1276,37 @@ export interface Actions {
     result: State;
     tier: "read";
   };
-  /** Closes a dialog (the one on top when none is given). */
+  /** Closes a dialog (default: the top one). Closing the fire confirmation drops its laser request. */
   "view.close_dialog": {
-    params: CloseDialogParams;
-    result: null;
+    params: OptionalDialogParams;
+    result: unknown;
+    tier: "ui";
+  };
+  /** Closes the drawer when it shows this panel. */
+  "view.close_panel": {
+    params: PanelParams;
+    result: unknown;
     tier: "ui";
   };
   /** Removes a toast. */
   "view.dismiss_toast": {
-    params: DismissToastParams;
-    result: null;
+    params: ToastIdParams;
+    result: unknown;
     tier: "ui";
   };
   /** Fits the work area in the canvas. */
   "view.fit": {
     params: NoParams;
-    result: null;
+    result: unknown;
     tier: "ui";
   };
   /** Records which element has the keyboard focus. */
   "view.focus": {
     params: FocusParams;
-    result: null;
+    result: unknown;
     tier: "ui";
   };
-  /** The view state: mode, panel, dialogs, toasts, viewport, focus. */
+  /** The view: mode, tool, panel, dialogs, toasts, viewport, focus, the pending laser request. */
   "view.get": {
     params: NoParams;
     result: ViewState;
@@ -1058,38 +1314,32 @@ export interface Actions {
   };
   /** Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable). */
   "view.open_dialog": {
-    params: OpenDialogParams;
-    result: null;
+    params: DialogParams;
+    result: unknown;
     tier: "ui";
   };
-  /** Opens or closes the panel drawer (medium layout). */
-  "view.set_drawer": {
-    params: SetDrawerParams;
-    result: null;
+  /** Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the drawer in the medium layout). */
+  "view.open_panel": {
+    params: PanelParams;
+    result: unknown;
     tier: "ui";
   };
-  /** Switches between the Design and Produce modes. */
+  /** Switches between design and produce (produce shows the machine panel). */
   "view.set_mode": {
-    params: SetModeParams;
-    result: null;
+    params: ModeParams;
+    result: unknown;
     tier: "ui";
   };
   /** Chooses the Design mode tool (select, rectangle, ellipse, text). */
   "view.set_tool": {
-    params: SetToolParams;
-    result: null;
+    params: ToolParams;
+    result: unknown;
     tier: "ui";
   };
-  /** Shows the table around a point at a zoom (CSS pixels per mm). */
+  /** Centres the view on a point (mm) at a zoom (CSS pixels per mm). */
   "view.set_viewport": {
     params: Viewport;
-    result: null;
-    tier: "ui";
-  };
-  /** Shows a panel of the dock (opens the drawer in the medium layout). */
-  "view.show_panel": {
-    params: ShowPanelParams;
-    result: null;
+    result: unknown;
     tier: "ui";
   };
   /** Shows a short message (at most 3 at once); returns its id. */
@@ -1106,10 +1356,30 @@ export type ActionName = keyof Actions;
 /** Tier of each action, for the front end (the Rust side checks it again). */
 export const ACTION_TIERS = {
   "console.get": "read",
+  "document.add_layer": "edit",
+  "document.clear_selection": "ui",
+  "document.delete": "edit",
+  "document.from_fkproj": "edit",
+  "document.get": "read",
+  "document.import": "edit",
+  "document.import_data": "edit",
+  "document.move_to_layer": "edit",
+  "document.new": "edit",
+  "document.open": "edit",
+  "document.remove_layer": "edit",
+  "document.save": "edit",
+  "document.select": "ui",
+  "document.select_all": "ui",
+  "document.to_fkproj": "read",
+  "document.translate": "edit",
+  "document.update_layer": "edit",
   "fire.cancel": "safety",
   "fire.request": "machine",
+  "history.redo": "edit",
+  "history.undo": "edit",
   "job.abort": "safety",
   "job.frame": "machine",
+  "job.from_document": "edit",
   "job.info": "read",
   "job.load": "edit",
   "job.load_text": "edit",
@@ -1136,19 +1406,20 @@ export const ACTION_TIERS = {
   "machine.system_command": "machine",
   "machine.unlock": "machine",
   "machine.write_settings": "machine",
+  "session.snapshot": "read",
   "settings.get": "read",
   "settings.set": "edit",
   "state.get": "read",
   "view.close_dialog": "ui",
+  "view.close_panel": "ui",
   "view.dismiss_toast": "ui",
   "view.fit": "ui",
   "view.focus": "ui",
   "view.get": "read",
   "view.open_dialog": "ui",
-  "view.set_drawer": "ui",
+  "view.open_panel": "ui",
   "view.set_mode": "ui",
   "view.set_tool": "ui",
   "view.set_viewport": "ui",
-  "view.show_panel": "ui",
   "view.toast": "ui",
 } as const satisfies Record<ActionName, Tier>;

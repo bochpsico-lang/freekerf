@@ -1,4 +1,4 @@
-# 0011. Front-end framework: Svelte 5 + TypeScript + Vite
+# 0013. Front-end framework: Svelte 5 + TypeScript + Vite
 
 - Status: accepted (M4a)
 - Date: 2026-10-08
@@ -48,7 +48,7 @@ gzipped) and 7 kB of CSS.
 - App state is never owned by components: it comes from the service (snapshots and
   events) into `src/state/`, and changes only through `dispatch` (PLAN §9,
   principle 7; lint in `eslint.config.js`).
-- The canvas renderer is framework-independent TypeScript (ADR 0012); Svelte only
+- The canvas renderer is framework-independent TypeScript (ADR 0014); Svelte only
   hosts its `<canvas>` element.
 - Node is needed to build the app (CI uses the current LTS). The Rust workspace
   still builds and tests without Node; only `freekerf-desktop` release builds embed

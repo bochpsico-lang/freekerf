@@ -20,8 +20,10 @@ use freekerf_protocol::host::decimal;
 use freekerf_protocol::{
     ConsoleRow, Event, FirmwareKind, Host, HostError, HostSnapshot, Issue, JogDirection, ResumeSuggestion,
 };
+use freekerf_session::actions::SessionHost;
 use freekerf_session::fire::{FireGate, FireRequest, FireSummary};
-use freekerf_session::view::{Dialog, Mode, Panel, ToastLevel, Tool, ViewCommand, ViewState, Viewport};
+use freekerf_session::session::{Change, Session, SessionEvent};
+use freekerf_session::view::ViewCommand;
 use freekerf_session::{NoParams, Registry};
 use freekerf_settings::{MachineCache, Settings, SettingsStore};
 use freekerf_transport::{EmulatorTransport, SerialTransport, Transport};
@@ -30,7 +32,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub mod analysis;
+pub mod autotrace;
+pub mod import_case;
+pub mod migrate;
+pub mod permissions;
 pub mod preview;
+pub mod remote;
+pub mod script;
 
 pub use freekerf_session::{ActionError, ActionSpec, Caller, CallerKind, Tier};
 
@@ -47,8 +55,8 @@ pub enum ServiceEvent {
     SettingsChanged,
     /// A program was loaded.
     ProgramLoaded,
-    /// The view state changed (`view.*` actions).
-    ViewChanged(Box<ViewState>),
+    /// The session (document, selection, view, history) changed.
+    Session(SessionEvent),
 }
 
 /// A [`ServiceEvent`] as front ends receive it (JSON, tagged by `event`).
@@ -74,10 +82,13 @@ pub enum EventMessage {
     SettingsChanged,
     /// A program was loaded.
     ProgramLoaded,
-    /// The view state changed.
-    View {
-        /// The new view state.
-        view: Box<ViewState>,
+    /// The session changed: read what changed again (`view.get`, `document.get`,
+    /// `session.snapshot`).
+    Session {
+        /// Revision after the change.
+        revision: u64,
+        /// What changed.
+        change: Change,
     },
 }
 
@@ -99,7 +110,10 @@ impl ServiceEvent {
             },
             Self::Machine(MachineEvent::Disconnected { user }) => EventMessage::Disconnected { user: *user },
             Self::Machine(MachineEvent::Host(e)) => EventMessage::Host { data: e.clone() },
-            Self::ViewChanged(v) => EventMessage::View { view: v.clone() },
+            Self::Session(e) => EventMessage::Session {
+                revision: e.revision,
+                change: e.change,
+            },
         }
     }
 
@@ -234,12 +248,22 @@ pub struct Inner {
     settings: Mutex<Settings>,
     stores: Stores,
     loaded: Mutex<Option<Loaded>>,
-    view: Mutex<ViewState>,
     fire: Mutex<FireGate>,
     fire_clock: Mutex<Arc<dyn Clock>>,
     console: Arc<Mutex<VecDeque<ConsoleRow>>>,
     issues: Arc<Mutex<Vec<Issue>>>,
     subscribers: Arc<Mutex<Vec<Sender<ServiceEvent>>>>,
+    session: Mutex<Session>,
+    /// Cancel flags of the running scripts.
+    scripts: Mutex<Vec<Arc<std::sync::atomic::AtomicBool>>>,
+    /// Who answers permission requests, and the session grants.
+    permissions: permissions::Permissions,
+}
+
+impl SessionHost for Inner {
+    fn session(&self) -> &Mutex<Session> {
+        &self.session
+    }
 }
 
 impl std::fmt::Debug for Inner {
@@ -255,6 +279,7 @@ impl std::fmt::Debug for Inner {
 pub struct Service {
     inner: Arc<Inner>,
     registry: Arc<Registry<Inner>>,
+    dry: Arc<Registry<script::DryContext>>,
 }
 
 impl std::fmt::Debug for Service {
@@ -306,17 +331,20 @@ impl Service {
             settings: Mutex::new(settings),
             stores,
             loaded: Mutex::new(None),
-            view: Mutex::new(ViewState::default()),
             fire: Mutex::new(FireGate::default()),
             fire_clock: Mutex::new(Arc::new(SystemClock::default())),
             console: Arc::new(Mutex::new(VecDeque::new())),
             issues: Arc::new(Mutex::new(Vec::new())),
             subscribers: Arc::new(Mutex::new(Vec::new())),
+            session: Mutex::new(Session::new()),
+            scripts: Mutex::new(Vec::new()),
+            permissions: permissions::Permissions::default(),
         });
         start_collector(&inner);
         Ok(Self {
             inner,
             registry: Arc::new(build_registry()),
+            dry: Arc::new(script::dry_registry()),
         })
     }
 
@@ -334,7 +362,11 @@ impl Service {
     /// See [`ActionError`].
     pub fn dispatch(&self, caller: &Caller, action: &str, params: Value) -> Result<Value, ActionError> {
         tracing::debug!(caller = %caller.name, action, "dispatch");
-        self.registry.dispatch(&self.inner, caller, action, params)
+        permissions::check_agent_files(caller, action, &params)?;
+        permissions::check_agent_laser(caller, action)?;
+        let r = self.registry.dispatch(&self.inner, caller, action, params);
+        self.inner.publish_session_events();
+        r
     }
 
     /// The registry (specs, docs).
@@ -385,6 +417,18 @@ impl Service {
     /// # Errors
     /// No such request, countdown not over, or the action's own error.
     pub fn confirm_fire(&self, id: u64) -> Result<Value, ActionError> {
+        // the request must still be on screen: closing the dialog drops it
+        let shown = lock(&self.inner.session)
+            .view()
+            .fire_request
+            .as_ref()
+            .map(|r| r.id);
+        if shown != Some(id) {
+            lock(&self.inner.fire).cancel(Some(id));
+            return Err(ActionError::Refused(
+                "no pending laser request with this id".into(),
+            ));
+        }
         let now = lock(&self.inner.fire_clock).now_ms();
         let request = lock(&self.inner.fire)
             .confirm(id, now)
@@ -401,8 +445,10 @@ impl Service {
         *lock(&self.inner.fire_clock) = clock;
     }
 
-    /// STOP without going through the registry (also bound to Ctrl-C by the CLI).
+    /// STOP without going through the registry (also bound to Ctrl-C by the CLI):
+    /// cancels the running scripts, then stops the machine.
     pub fn stop(&self) {
+        self.inner.cancel_scripts();
         self.inner.machine.stop();
     }
 }
@@ -450,6 +496,41 @@ impl Inner {
         lock(&self.subscribers).retain(|s| s.send(e.clone()).is_ok());
     }
 
+    /// Sends the session's changes to the subscribers.
+    fn publish_session_events(&self) {
+        let events = lock(&self.session).drain_events();
+        for e in events {
+            self.publish(&ServiceEvent::Session(e));
+        }
+    }
+
+    /// The planner's machine options from the settings and the board's `$30`.
+    fn planner_options(&self) -> freekerf_planner::PlanOptions {
+        let st = lock(&self.settings);
+        let max_pwm = self
+            .machine
+            .call(|h, _| h.settings().max_pwm())
+            .ok()
+            .and_then(|d| d.to_string().parse::<f64>().ok())
+            .filter(|v| *v > 0.0 && *v < f64::from(u32::MAX));
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let machine = freekerf_planner::MachineOptions {
+            firmware: match st.machine.firmware {
+                freekerf_settings::Firmware::Grbl => freekerf_planner::Firmware::Grbl,
+                freekerf_settings::Firmware::Smoothie => freekerf_planner::Firmware::Smoothie,
+                freekerf_settings::Firmware::Marlin => freekerf_planner::Firmware::Marlin,
+                freekerf_settings::Firmware::VigoWork => freekerf_planner::Firmware::VigoWork,
+            },
+            support_pwm: st.machine.support_pwm,
+            max_pwm: max_pwm.map_or(1000, |v| v as u32),
+            ..freekerf_planner::MachineOptions::default()
+        };
+        freekerf_planner::PlanOptions {
+            machine,
+            ..freekerf_planner::PlanOptions::default()
+        }
+    }
+
     /// What the fire confirmation shows for a request.
     fn fire_summary(&self, action: &str, params: &Value) -> FireSummary {
         let code = params
@@ -470,20 +551,11 @@ impl Inner {
         }
     }
 
-    /// Applies a view command and publishes the new view state when it changed.
+    /// Applies a view command to the session's view and publishes the change.
     fn view(&self, cmd: ViewCommand) -> Result<Option<u64>, ActionError> {
-        let (result, changed) = {
-            let mut v = lock(&self.view);
-            let before = v.clone();
-            let r = v
-                .apply(cmd)
-                .map_err(|e| ActionError::InvalidParams(e.to_string()))?;
-            (r, (*v != before).then(|| v.clone()))
-        };
-        if let Some(v) = changed {
-            self.publish(&ServiceEvent::ViewChanged(Box::new(v)));
-        }
-        Ok(result)
+        let r = freekerf_session::actions::view_cmd(self, cmd);
+        self.publish_session_events();
+        r
     }
 
     fn save_cache(&self) {
@@ -782,84 +854,6 @@ pub struct FireCancelParams {
     pub id: Option<u64>,
 }
 
-/// `view.set_mode`.
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct SetModeParams {
-    /// `design` or `produce`.
-    pub mode: Mode,
-}
-
-/// `view.set_tool`.
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct SetToolParams {
-    /// `select`, `rect`, `ellipse` or `text`.
-    pub tool: Tool,
-}
-
-/// `view.show_panel`.
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ShowPanelParams {
-    /// `layers`, `object`, `machine` or `console`.
-    pub panel: Panel,
-}
-
-/// `view.set_drawer`.
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct SetDrawerParams {
-    /// Open or closed.
-    pub open: bool,
-}
-
-/// `view.open_dialog`.
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct OpenDialogParams {
-    /// The dialog.
-    pub dialog: Dialog,
-}
-
-/// `view.close_dialog`.
-#[derive(Debug, Default, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct CloseDialogParams {
-    /// The dialog; the one on top when absent.
-    pub dialog: Option<Dialog>,
-}
-
-/// `view.toast`.
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ToastParams {
-    /// `info` (default), `ok`, `warning` or `error`.
-    #[serde(default)]
-    pub level: ToastLevel,
-    /// i18n key (or plain text).
-    pub message: String,
-    /// Placeholders of the message.
-    #[serde(default)]
-    pub args: BTreeMap<String, String>,
-}
-
-/// `view.dismiss_toast`.
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct DismissToastParams {
-    /// Id returned by `view.toast`.
-    pub id: u64,
-}
-
-/// `view.focus`.
-#[derive(Debug, Default, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct FocusParams {
-    /// Element with the focus (`canvas`, `console`...), none when absent.
-    pub target: Option<String>,
-}
-
 // ====================================================================== results
 
 /// Summary of the loaded program.
@@ -1037,9 +1031,10 @@ fn build_registry() -> Registry<Inner> {
     // ---- machine: safety
     add(r.register(
         "machine.stop",
-        "STOP: soft reset of the board (laser off, queues flushed). Always allowed.",
+        "STOP: cancels running scripts, then soft resets the board (laser off, queues flushed). Always allowed.",
         Tier::Safety,
         |s: &Inner, _: NoParams| {
+            s.cancel_scripts();
             s.machine.stop();
             Ok(())
         },
@@ -1202,6 +1197,55 @@ fn build_registry() -> Registry<Inner> {
     ));
 
     // ---- job
+    // ---- document files (the session actions are registered below)
+    add(r.register(
+        "document.open",
+        "Opens a `.fkproj` project file (the undo history starts again).",
+        Tier::Edit,
+        |s: &Inner, p: LoadParams| {
+            let bytes = freekerf_platform::read(Path::new(&p.path))
+                .map_err(|e| ActionError::Failed(e.to_string()))?;
+            let doc = freekerf_document::Document::from_fkproj(&bytes)
+                .map_err(|e| ActionError::Failed(e.to_string()))?;
+            lock(&s.session).replace_document(doc);
+            Ok(serde_json::json!({"path": p.path}))
+        },
+    ));
+    add(r.register(
+        "document.save",
+        "Saves the document as a `.fkproj` project file (written atomically).",
+        Tier::Edit,
+        |s: &Inner, p: LoadParams| {
+            let text = lock(&s.session).document().to_fkproj();
+            freekerf_platform::write_atomic(Path::new(&p.path), text.as_bytes())
+                .map_err(|e| ActionError::Failed(e.to_string()))?;
+            lock(&s.session).mark_saved();
+            Ok(serde_json::json!({"path": p.path}))
+        },
+    ));
+    add(r.register(
+        "document.import",
+        "Imports an SVG, DXF or image file into the document (format from the extension). One undo step.",
+        Tier::Edit,
+        |s: &Inner, p: LoadParams| {
+            let bytes = freekerf_platform::read(Path::new(&p.path))
+                .map_err(|e| ActionError::Failed(e.to_string()))?;
+            let ids = freekerf_session::actions::import_file(&mut lock(&s.session), &p.path, &bytes)?;
+            Ok(serde_json::json!({"objects": ids}))
+        },
+    ));
+    add(r.register(
+        "job.from_document",
+        "Plans the document (vectors, then images; centerline uses the `autotrace` program) and loads it as the job.",
+        Tier::Edit,
+        |s: &Inner, _: NoParams| {
+            let doc = lock(&s.session).document().clone();
+            let tracer = autotrace::ExternalAutotrace::default();
+            let job = freekerf_planner::plan_with(&doc, &s.planner_options(), Some(&tracer))
+                .map_err(|e| ActionError::Failed(e.to_string()))?;
+            load_program(s, "document".into(), job.lines.join("\n").as_bytes())
+        },
+    ));
     add(r.register(
         "job.load",
         "Loads and analyzes a G-code file.",
@@ -1279,7 +1323,7 @@ fn build_registry() -> Registry<Inner> {
         Tier::Safety,
         |s: &Inner, _: NoParams| s.host_result(Host::abort_program),
     ));
-    register_view(&mut r);
+    add(freekerf_session::actions::register_session_actions(&mut r));
     register_fire(&mut r);
     describe_results(&mut r);
     r
@@ -1331,103 +1375,6 @@ fn register_fire(r: &mut Registry<Inner>) {
     ));
 }
 
-/// The `view.*` actions (tier `ui`): what the app shows, as data.
-fn register_view(r: &mut Registry<Inner>) {
-    let add = |result: Result<(), freekerf_session::RegistryError>| {
-        if let Err(e) = result {
-            tracing::error!("action registration: {e}");
-        }
-    };
-    let unit = |s: &Inner, c: ViewCommand| s.view(c).map(|_| ());
-    add(r.register(
-        "view.get",
-        "The view state: mode, panel, dialogs, toasts, viewport, focus.",
-        Tier::Read,
-        |s: &Inner, _: NoParams| Ok(lock(&s.view).clone()),
-    ));
-    add(r.register(
-        "view.set_mode",
-        "Switches between the Design and Produce modes.",
-        Tier::Ui,
-        move |s: &Inner, p: SetModeParams| unit(s, ViewCommand::SetMode(p.mode)),
-    ));
-    add(r.register(
-        "view.set_tool",
-        "Chooses the Design mode tool (select, rectangle, ellipse, text).",
-        Tier::Ui,
-        move |s: &Inner, p: SetToolParams| unit(s, ViewCommand::SetTool(p.tool)),
-    ));
-    add(r.register(
-        "view.show_panel",
-        "Shows a panel of the dock (opens the drawer in the medium layout).",
-        Tier::Ui,
-        move |s: &Inner, p: ShowPanelParams| unit(s, ViewCommand::ShowPanel(p.panel)),
-    ));
-    add(r.register(
-        "view.set_drawer",
-        "Opens or closes the panel drawer (medium layout).",
-        Tier::Ui,
-        move |s: &Inner, p: SetDrawerParams| unit(s, ViewCommand::SetDrawer(p.open)),
-    ));
-    add(r.register(
-        "view.open_dialog",
-        "Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable).",
-        Tier::Ui,
-        move |s: &Inner, p: OpenDialogParams| unit(s, ViewCommand::OpenDialog(p.dialog)),
-    ));
-    add(r.register(
-        "view.close_dialog",
-        "Closes a dialog (the one on top when none is given).",
-        Tier::Ui,
-        move |s: &Inner, p: CloseDialogParams| {
-            let target = p.dialog.or_else(|| lock(&s.view).top_dialog());
-            if target == Some(Dialog::FireConfirmation) {
-                // closing the fire confirmation cancels its request
-                lock(&s.fire).cancel(None);
-                return unit(s, ViewCommand::SetFireRequest(None));
-            }
-            unit(s, ViewCommand::CloseDialog(p.dialog))
-        },
-    ));
-    add(r.register(
-        "view.toast",
-        "Shows a short message (at most 3 at once); returns its id.",
-        Tier::Ui,
-        |s: &Inner, p: ToastParams| {
-            s.view(ViewCommand::Toast {
-                level: p.level,
-                message: p.message,
-                args: p.args,
-            })
-            .map(|id| id.unwrap_or(0))
-        },
-    ));
-    add(r.register(
-        "view.dismiss_toast",
-        "Removes a toast.",
-        Tier::Ui,
-        move |s: &Inner, p: DismissToastParams| unit(s, ViewCommand::DismissToast(p.id)),
-    ));
-    add(r.register(
-        "view.set_viewport",
-        "Shows the table around a point at a zoom (CSS pixels per mm).",
-        Tier::Ui,
-        move |s: &Inner, p: Viewport| unit(s, ViewCommand::SetViewport(p)),
-    ));
-    add(r.register(
-        "view.fit",
-        "Fits the work area in the canvas.",
-        Tier::Ui,
-        move |s: &Inner, _: NoParams| unit(s, ViewCommand::Fit),
-    ));
-    add(r.register(
-        "view.focus",
-        "Records which element has the keyboard focus.",
-        Tier::Ui,
-        move |s: &Inner, p: FocusParams| unit(s, ViewCommand::Focus(p.target)),
-    ));
-}
-
 /// Result schemas, used to generate the front-end types (`cargo xtask gen-ts`).
 /// Actions not listed here (`settings.get`, and new actions until they are added)
 /// are typed as unknown.
@@ -1443,10 +1390,8 @@ fn describe_results(r: &mut Registry<Inner>) {
     add(r.describe_result::<ProgramInfo>("job.load"));
     add(r.describe_result::<ProgramInfo>("job.load_text"));
     add(r.describe_result::<Option<ProgramInfo>>("job.info"));
-    add(r.describe_result::<ViewState>("view.get"));
     add(r.describe_result::<MachineInfo>("machine.info"));
     add(r.describe_result::<FireRequest>("fire.request"));
-    add(r.describe_result::<u64>("view.toast"));
     for name in [
         "settings.set",
         "machine.connect",
@@ -1473,16 +1418,6 @@ fn describe_results(r: &mut Registry<Inner>) {
         "job.run",
         "job.resume",
         "job.abort",
-        "view.set_mode",
-        "view.set_tool",
-        "view.show_panel",
-        "view.set_drawer",
-        "view.open_dialog",
-        "view.close_dialog",
-        "view.dismiss_toast",
-        "view.set_viewport",
-        "view.fit",
-        "view.focus",
     ] {
         add(r.describe_result::<()>(name));
     }

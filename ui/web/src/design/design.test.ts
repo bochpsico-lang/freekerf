@@ -137,7 +137,7 @@ describe('Design mode', () => {
 
   it('inspector: position, size with proportions, rotation, text, align, duplicate, delete', async () => {
     const { service, doc, summary } = await mountDesign();
-    await service.dispatch('view.show_panel', { panel: 'object' });
+    await service.dispatch('view.open_panel', { name: 'object' });
     const inspector = await screen.findByTestId('inspector');
     expect(inspector.textContent).toContain('Nothing selected');
     await doc.dispatch('document.add_shape', { shape: 'rect', x: 0, y: 0, width: 20, height: 10 });
@@ -189,7 +189,7 @@ describe('Design mode', () => {
 
   it('import dialog: a file, keep or unify colours, a toast with the report', async () => {
     const { service, summary } = await mountDesign();
-    await service.dispatch('view.open_dialog', { dialog: 'import' });
+    await service.dispatch('view.open_dialog', { name: 'import' });
     const dialog = await screen.findByTestId('dialog-import');
     const go = within(dialog).getByTestId('import-go') as HTMLButtonElement;
     expect(go.disabled).toBe(true);
@@ -213,7 +213,7 @@ describe('Design mode', () => {
 
   it('welcome: migration from LaserGRBL, read-only, with a report', async () => {
     const { service } = await mountDesign();
-    await service.dispatch('view.open_dialog', { dialog: 'settings' });
+    await service.dispatch('view.open_dialog', { name: 'settings' });
     await fireEvent.click(await screen.findByText('Show the welcome again'));
     const dialog = await screen.findByTestId('dialog-welcome');
     await fireEvent.click(within(dialog).getByTestId('welcome-migrate'));
@@ -234,7 +234,7 @@ describe('Design mode', () => {
   it('welcome: nothing to migrate, and explore connects the emulator', async () => {
     const { service } = await mountDesign();
     service.document!.migration.found = false;
-    await service.dispatch('view.open_dialog', { dialog: 'welcome' });
+    await service.dispatch('view.open_dialog', { name: 'welcome' });
     const dialog = await screen.findByTestId('dialog-welcome');
     await fireEvent.click(within(dialog).getByTestId('welcome-migrate'));
     await within(dialog).findByTestId('migrate-none');

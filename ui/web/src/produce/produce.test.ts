@@ -86,7 +86,7 @@ describe('Produce mode', () => {
 
   it('console: $ commands go to the machine, G-code asks for the confirmation', async () => {
     const { service } = await mountConnected();
-    await service.dispatch('view.show_panel', { panel: 'console' });
+    await service.dispatch('view.open_panel', { name: 'console' });
     const input = screen.getByTestId('console-input') as HTMLInputElement;
     await fireEvent.input(input, { target: { value: '$$' } });
     await fireEvent.submit(input.form!);

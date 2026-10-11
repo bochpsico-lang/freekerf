@@ -19,16 +19,23 @@ flowchart TB
   end
   subgraph native
     transport[freekerf-transport<br/>serial, emulator, PTY]
-    platform[freekerf-platform<br/>dirs, atomic writes]
+    platform[freekerf-platform<br/>dirs, atomic writes, programs]
   end
   subgraph config
     settings[freekerf-settings<br/>settings.toml, schema, migrations]
+    materials[freekerf-materials<br/>library packages, recipes]
+    migrate[freekerf-migrate<br/>LaserGRBL import, read only]
   end
   subgraph core
-    session[freekerf-session<br/>registry, tiers]
+    session[freekerf-session<br/>registry, tiers, session]
     protocol[freekerf-protocol<br/>sans-IO host + firmware variants]
     gcode[freekerf-gcode<br/>parser, state, analysis]
     emulator[freekerf-emulator<br/>sans-IO Grbl 1.1 device]
+    geometry[freekerf-geometry<br/>paths, booleans, hatch fillings]
+    document[freekerf-document<br/>layers, objects, .fkproj]
+    planner[freekerf-planner<br/>document to G-code]
+    import[freekerf-import<br/>SVG, DXF to document]
+    raster[freekerf-raster<br/>image ops, dithering, Line2Line,<br/>Potrace, centerline request]
   end
   cli --> service
   cli --> settings
@@ -38,6 +45,8 @@ flowchart TB
   service --> platform
   service --> settings
   service --> session
+  session --> import
+  session --> raster
   service --> protocol
   machine --> protocol
   machine --> transport
@@ -45,12 +54,26 @@ flowchart TB
   settings --> protocol
   protocol --> gcode
   emulator --> gcode
+  document --> geometry
+  planner --> document
+  planner --> gcode
+  planner --> raster
+  planner --> import
+  service --> planner
+  service --> import
+  import --> document
+  raster --> gcode
+  raster --> geometry
+  service --> raster
+  service --> migrate
+  migrate --> settings
+  materials --> document
 ```
 
 | Layer | Crates | Rule |
 | --- | --- | --- |
-| core | gcode, protocol, emulator, session | no I/O, no threads of their own, no clock; builds for `wasm32-unknown-unknown` |
-| config | settings | core only; files through the `SettingsStore` trait |
+| core | gcode, protocol, emulator, session, geometry, document, planner, import, raster | no I/O, no threads of their own, no clock; builds for `wasm32-unknown-unknown` |
+| config | settings, materials, migrate | core and config; settings files through the `SettingsStore` trait (materials reads package files with `freekerf-library`) |
 | native | transport, platform | core only |
 | runtime | machine, service | core, config, native |
 | apps | cli, desktop | the service (and config for `freekerf config`) |
@@ -81,7 +104,7 @@ flowchart LR
   service of `src/dev/` (browser development, component tests) never reaches a
   production build (lint + `npm run check:bundle`).
 - Types crossing the boundary are generated from the Rust schemas into
-  `ui/web/src/gen/api.ts` (ADR 0013). Bulk data uses raw binary payloads (ADR 0006).
+  `ui/web/src/gen/api.ts` (ADR 0015). Bulk data uses raw binary payloads (ADR 0006).
 - Tokens, icons, fonts and app icons come from `freekerf/design` at the commit
   pinned in `ui/tokens/design.lock` (`cargo xtask sync-tokens`).
 
@@ -121,6 +144,14 @@ sequenceDiagram
 - **One registry** (ADR 0004): every operation is an action with a name, a JSON
   schema, a description and a tier. `host --stdio`, the CLI and the tests all go
   through `Service::dispatch`; the tier of the caller is checked on every call.
+- **Scripts** (ADR 0011): `freekerf-script` embeds QuickJS with an `app` object
+  generated from the registry; `Service::run_script` runs one in a session
+  transaction (one undo step, rollback on error) or as a dry run on a copy of the
+  session. STOP cancels running scripts first.
+- **Agents and clients** (ADR 0012): `freekerf serve` listens on the local
+  endpoint (`freekerf-ipc`); `freekerf mcp` attaches to it.
+  The caller's tier comes from the settings; grants above it need the person
+  (`permissions`); agents never run laser actions, and only save new `.fkproj` files.
 
 ## Extension points
 
@@ -132,6 +163,7 @@ sequenceDiagram
 | add a setting | a field in `freekerf-settings` (with default), `host_options` if it reaches the protocol, a migration if a key moved, `cargo xtask gen-docs` |
 | change what the analysis computes | `freekerf-gcode` (`MachineState`, `Program::analyze`), check the conformance goldens |
 | add a front end | depend on `freekerf-service` only; dispatch actions, subscribe to events |
+| import a new file format | a module in `freekerf-import` returning an `Import` (colours + objects) from bytes; a feature page |
 
 ## Key decisions
 
@@ -140,6 +172,7 @@ sequenceDiagram
 - Injected clock, sans-IO protocol: [ADR 0003](adr/0003-injectable-clock.md).
 - One action registry with tiers: [ADR 0004](adr/0004-action-registry.md).
 - Settings in TOML with a generated schema: [ADR 0005](adr/0005-settings-toml.md).
+- Polygon clipping is a port of Clipper 6.4.2, for LaserGRBL-identical fillings: [ADR 0007](adr/0007-clipping-library.md).
 
 ## Generated files
 
@@ -147,3 +180,4 @@ sequenceDiagram
 | --- | --- | --- |
 | `doc/features/actions.md` | the service registry | `cargo xtask check-docs` |
 | `doc/schema/settings.schema.json` | `freekerf_settings::Settings` | `cargo xtask check-docs` |
+| `doc/schema/fkproj.schema.json` | `freekerf_document::Document` | `cargo xtask check-docs` |

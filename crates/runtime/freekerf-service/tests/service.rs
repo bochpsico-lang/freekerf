@@ -294,7 +294,7 @@ fn settings_are_saved_and_automation_is_user_only() {
         call(&s, "settings.get", json!({"key": "machine.streaming_mode"})),
         "Synchronous"
     );
-    assert_eq!(call(&s, "settings.get", Value::Null)["version"], 1);
+    assert_eq!(call(&s, "settings.get", Value::Null)["version"], 2);
     let end = Instant::now() + Duration::from_secs(5);
     while !dir.path().join("cache.json").exists() && Instant::now() < end {
         std::thread::sleep(Duration::from_millis(10));
@@ -316,15 +316,94 @@ fn load_from_a_file() {
 }
 
 #[test]
+fn document_session_actions_and_events() {
+    use freekerf_service::ServiceEvent;
+    let s = Service::in_memory().unwrap();
+    let user = Caller::user();
+    let dir = tempfile::tempdir().unwrap();
+    let svg = dir.path().join("a.svg");
+    std::fs::write(
+        &svg,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="20mm" viewBox="0 0 20 20">
+           <rect x="1" y="1" width="5" height="5" stroke="red" fill="none"/></svg>"##,
+    )
+    .unwrap();
+    let events = s.subscribe();
+    let out = s
+        .dispatch(&user, "document.import", json!({"path": svg.to_string_lossy()}))
+        .unwrap();
+    let id = out["objects"][0].as_u64().unwrap();
+    let ev: Vec<Value> = events.try_iter().map(|e: ServiceEvent| e.to_json()).collect();
+    assert!(
+        ev.iter()
+            .any(|e| e["event"] == "session" && e["change"] == "document"),
+        "{ev:?}"
+    );
+    s.dispatch(&user, "document.select", json!({"ids": [id]}))
+        .unwrap();
+    s.dispatch(&user, "document.translate", json!({"dx": 5.0, "dy": 5.0}))
+        .unwrap();
+    let snap = s.dispatch(&user, "session.snapshot", Value::Null).unwrap();
+    assert_eq!(snap["selection"], json!([id]));
+    assert_eq!(snap["undo"], json!(["import", "move"]));
+    assert!(snap["dirty"].as_bool().unwrap());
+    // save, change, open again
+    let proj = dir.path().join("p.fkproj");
+    s.dispatch(&user, "document.save", json!({"path": proj.to_string_lossy()}))
+        .unwrap();
+    assert_eq!(
+        s.dispatch(&user, "session.snapshot", Value::Null).unwrap()["dirty"],
+        json!(false)
+    );
+    s.dispatch(&user, "document.delete", Value::Null).unwrap();
+    s.dispatch(&user, "document.open", json!({"path": proj.to_string_lossy()}))
+        .unwrap();
+    let snap = s.dispatch(&user, "session.snapshot", Value::Null).unwrap();
+    assert_eq!(snap["document"]["objects"].as_array().unwrap().len(), 1);
+    assert_eq!(snap["undo"], json!([]));
+    // plan the document into the job
+    let info = s.dispatch(&user, "job.from_document", Value::Null).unwrap();
+    assert!(info["lines"].as_u64().unwrap() > 3);
+    assert_eq!(
+        s.dispatch(&user, "job.info", Value::Null).unwrap()["name"],
+        "document"
+    );
+    // errors
+    assert!(
+        s.dispatch(&user, "document.open", json!({"path": "/no/such.fkproj"}))
+            .is_err()
+    );
+    assert!(
+        s.dispatch(&user, "document.import", json!({"path": proj.to_string_lossy()}))
+            .is_err()
+    );
+    assert!(
+        s.dispatch(&user, "document.import", json!({"path": "/no/such.svg"}))
+            .is_err()
+    );
+    assert!(
+        s.dispatch(&user, "document.save", json!({"path": "/proc/nope/x.fkproj"}))
+            .is_err()
+    );
+}
+
+#[test]
 fn results_are_described_for_the_front_ends() {
     let service = Service::in_memory().unwrap();
+    // the machine, job, fire and view-reading actions the desktop app uses are typed
     let untyped: Vec<String> = service
         .specs()
         .into_iter()
         .filter(|s| s.result.is_none())
         .map(|s| s.name)
+        .filter(|n| {
+            ["machine.", "job.", "fire.", "state.", "console."]
+                .iter()
+                .any(|p| n.starts_with(p))
+                || n == "view.get"
+        })
         .collect();
-    assert_eq!(untyped, ["settings.get"]);
+    assert_eq!(untyped, ["job.from_document"]);
     let state = service.registry().spec("state.get").unwrap();
     let schema = state.result.as_ref().unwrap();
     assert!(schema["properties"]["machine"].is_object(), "{schema}");
@@ -336,7 +415,10 @@ fn view_actions_change_the_view_and_publish_it() {
     let events = service.subscribe();
     let ui = Caller::new(CallerKind::Agent, "agent", Tier::Ui);
     let v = service.dispatch(&ui, "view.get", json!({})).unwrap();
-    assert_eq!(v["mode"], "produce");
+    assert_eq!(v["mode"], "design");
+    service
+        .dispatch(&ui, "view.set_mode", json!({"mode": "produce"}))
+        .unwrap();
     service
         .dispatch(&ui, "view.set_mode", json!({"mode": "design"}))
         .unwrap();
@@ -348,10 +430,10 @@ fn view_actions_change_the_view_and_publish_it() {
         "rect"
     );
     service
-        .dispatch(&ui, "view.show_panel", json!({"panel": "layers"}))
+        .dispatch(&ui, "view.open_panel", json!({"name": "layers"}))
         .unwrap();
     service
-        .dispatch(&ui, "view.open_dialog", json!({"dialog": "settings"}))
+        .dispatch(&ui, "view.open_dialog", json!({"name": "settings"}))
         .unwrap();
     let id = service
         .dispatch(
@@ -364,7 +446,7 @@ fn view_actions_change_the_view_and_publish_it() {
         .dispatch(
             &ui,
             "view.set_viewport",
-            json!({"cx": 10.0, "cy": 5.0, "scale": 3.0}),
+            json!({"center": [10.0, 5.0], "zoom": 3.0}),
         )
         .unwrap();
     service.dispatch(&ui, "view.fit", json!({})).unwrap();
@@ -374,7 +456,7 @@ fn view_actions_change_the_view_and_publish_it() {
     assert_eq!(v["drawer_open"], true);
     assert_eq!(v["dialogs"], json!(["settings"]));
     assert_eq!(v["toasts"][0]["id"], id);
-    assert_eq!(v["viewport"]["scale"], 3.0);
+    assert_eq!(v["viewport"]["zoom"], 3.0);
     assert_eq!(v["fit_request"], 1);
     service
         .dispatch(&ui, "view.dismiss_toast", json!({"id": id}))
@@ -383,17 +465,20 @@ fn view_actions_change_the_view_and_publish_it() {
     // each change was published
     let mut views = 0;
     while let Ok(e) = events.recv_timeout(Duration::from_millis(100)) {
-        if let ServiceEvent::ViewChanged(_) = e {
+        if let ServiceEvent::Session(s) = &e
+            && s.change == freekerf_session::session::Change::View
+        {
             views += 1;
-            assert_eq!(e.to_json()["event"], "view");
+            assert_eq!(e.to_json()["event"], "session");
+            assert_eq!(e.to_json()["change"], "view");
         }
     }
-    assert_eq!(views, 9);
+    assert_eq!(views, 10);
     // invalid values are refused, and a read-only caller cannot change the view
     let bad = service.dispatch(
         &ui,
         "view.set_viewport",
-        json!({"cx": 0.0, "cy": 0.0, "scale": 0.0}),
+        json!({"center": [0.0, 0.0], "zoom": 0.0}),
     );
     assert!(matches!(bad, Err(ActionError::InvalidParams(_))));
     let reader = Caller::new(CallerKind::Agent, "reader", Tier::Read);
@@ -467,7 +552,16 @@ fn laser_actions_run_only_after_a_confirmed_countdown() {
         let e = s.dispatch(&window, a, json!({})).unwrap_err();
         assert!(matches!(e, ActionError::PermissionDenied { .. }), "{a}: {e:?}");
     }
-    // it can ask; only laser actions can be asked for
+    // agents never run laser actions: they cannot even ask
+    let agent = Caller::new(CallerKind::Agent, "claude-code", Tier::Machine);
+    let e = s
+        .dispatch(&agent, "fire.request", json!({"action": "job.run", "params": {}}))
+        .unwrap_err();
+    assert!(
+        matches!(e, ActionError::Refused(_) | ActionError::PermissionDenied { .. }),
+        "{e:?}"
+    );
+    // the window can ask; only laser actions can be asked for
     let bad = s
         .dispatch(&window, "fire.request", json!({"action": "machine.home"}))
         .unwrap_err();

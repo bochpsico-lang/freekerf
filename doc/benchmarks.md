@@ -51,7 +51,7 @@ button through the canvas' own pointer handlers (synthetic `PointerEvent`s),
 back and forth over 120 % of the view width, for 6 s at the "fit" zoom and at 4×.
 The drag leaves the cached area, so whole-scene redraws are part of the numbers
 (`scene_redraws`). Frame times are `requestAnimationFrame` intervals. Renderer:
-[ADR 0012](adr/0012-canvas-renderer.md).
+[ADR 0014](adr/0014-canvas-renderer.md).
 
 | Date | Machine | Case | Mean fps (1× / 4×) | 1 % low | Worst frame | CPU/frame | Peak RSS (app) |
 | --- | --- | --- | --- | --- | --- | --- | --- |

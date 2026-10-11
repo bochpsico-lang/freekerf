@@ -48,7 +48,7 @@ describe('App shell', () => {
 
   it('keeps STOP clickable with a dialog open and Shift+Esc stops from a text field', async () => {
     const { service } = await mountApp();
-    await service.dispatch('view.open_dialog', { dialog: 'settings' });
+    await service.dispatch('view.open_dialog', { name: 'settings' });
     await screen.findByTestId('dialog-settings');
     await fireEvent.click(screen.getByTestId('estop'));
     expect(service.calls.filter((c) => c.action === 'machine.stop')).toHaveLength(1);
@@ -62,8 +62,8 @@ describe('App shell', () => {
 
   it('Esc closes the dialog on top; the backdrop too', async () => {
     const { service } = await mountApp();
-    await service.dispatch('view.open_dialog', { dialog: 'settings' });
-    await service.dispatch('view.open_dialog', { dialog: 'shortcuts' });
+    await service.dispatch('view.open_dialog', { name: 'settings' });
+    await service.dispatch('view.open_dialog', { name: 'shortcuts' });
     await screen.findByTestId('dialog-shortcuts');
     await fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => expect(service.view.dialogs).toEqual(['settings']));
@@ -73,7 +73,7 @@ describe('App shell', () => {
 
   it('the fire confirmation is not closed by the backdrop', async () => {
     const { service } = await mountApp();
-    await service.dispatch('view.open_dialog', { dialog: 'fire_confirmation' });
+    await service.dispatch('view.open_dialog', { name: 'fire_confirmation' });
     await screen.findByTestId('dialog-fire_confirmation');
     await fireEvent.click(screen.getByTestId('dialog-backdrop'));
     expect(service.view.dialogs).toEqual(['fire_confirmation']);
@@ -116,7 +116,7 @@ describe('layouts', () => {
 describe('settings dialog', () => {
   it('changes the language through settings.set and shows user-only settings read-only', async () => {
     const { service } = await mountApp();
-    await service.dispatch('view.open_dialog', { dialog: 'settings' });
+    await service.dispatch('view.open_dialog', { name: 'settings' });
     await screen.findByTestId('dialog-settings');
     await fireEvent.change(screen.getByTestId('language'), { target: { value: 'pt-BR' } });
     await waitFor(() => expect(document.documentElement.lang).toBe('pt-BR'));

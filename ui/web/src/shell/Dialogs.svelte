@@ -13,7 +13,7 @@
   /** Dialogs provided by other parts of the app (Produce mode, fire confirmation...). */
   let { extra = {} }: { extra?: Partial<Record<Dialog, Snippet<[() => void]>>> } = $props();
   const { view, service, run } = app();
-  const close = (dialog: Dialog) => () => run(() => service.dispatch('view.close_dialog', { dialog }));
+  const close = (dialog: Dialog) => () => run(() => service.dispatch('view.close_dialog', { name: dialog }));
 </script>
 
 {#if view.dialogs.length}

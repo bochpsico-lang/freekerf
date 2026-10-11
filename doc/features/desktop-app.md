@@ -3,7 +3,7 @@
 The FreeKerf desktop app is a [Tauri 2](https://v2.tauri.app/) window
 (`apps/desktop/src-tauri`, crate `freekerf-desktop`) around the same
 `freekerf-service` the CLI uses, with a web front end in `ui/web` (Svelte 5,
-[ADR 0011](../adr/0011-ui-framework.md)). Decision: [ADR 0006](../adr/0006-ui-toolkit.md).
+[ADR 0013](../adr/0013-ui-framework.md)). Decision: [ADR 0006](../adr/0006-ui-toolkit.md).
 
 ## Running it
 
@@ -43,7 +43,7 @@ for the Design mode screens until M2 lands.
 
 The TypeScript types of actions (parameters, results, tiers), events and settings
 are generated from the Rust schemas into `ui/web/src/gen/api.ts`
-([ADR 0013](../adr/0013-generated-ui-types.md)); `cargo xtask check-docs` fails in CI
+([ADR 0015](../adr/0015-generated-ui-types.md)); `cargo xtask check-docs` fails in CI
 when they are stale.
 
 ## Design system
@@ -56,7 +56,7 @@ Tokens (`ui/tokens/fk-tokens.css`), UI icons, fonts and app icons come from
 
 Linux (WebKitGTK 4.1) is the first target and runs the CI smoke test (the app
 starts on Xvfb and stays up). Windows (WebView2) and macOS (WKWebView) compile in
-CI on native runners (`desktop-platforms`); installers come with M5.
+CI on native runners (`native-check`, which checks the whole workspace); installers come with M5.
 
 ## Tests
 
@@ -87,4 +87,4 @@ CI on native runners (`desktop-platforms`); installers come with M5.
   WebKitWebDriver cannot type into file inputs: the tests set the program with a
   `DataTransfer` on the panel's own input (the native picker is not driven).
 - CI jobs `ui` (with coverage in the job summary), `desktop` (smoke run and the
-  end-to-end tests), `desktop-platforms`.
+  end-to-end tests), `native-check` (Windows, macOS).

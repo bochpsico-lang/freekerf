@@ -8,8 +8,8 @@
       "description": "Automation (user-only).",
       "$ref": "#/$defs/AutomationSettings",
       "default": {
+        "grants": [],
         "mcp": {
-          "allow_laser": false,
           "allow_machine": false,
           "enabled": false
         }
@@ -44,6 +44,7 @@
       "description": "Machine connection.",
       "$ref": "#/$defs/MachineSettings",
       "default": {
+        "accept_broken_ok": true,
         "auto_cooling": {
           "enabled": false,
           "off_s": 60,
@@ -82,7 +83,7 @@
       "description": "Format version.",
       "type": "integer",
       "format": "uint32",
-      "default": 1,
+      "default": 2,
       "minimum": 0
     }
   },
@@ -118,17 +119,49 @@
       "description": "Automation (scripts and agents).",
       "type": "object",
       "properties": {
+        "grants": {
+          "description": "Permissions granted \"always\" (revoked by removing them).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Grant"
+          }
+        },
         "mcp": {
           "description": "MCP.",
           "$ref": "#/$defs/McpSettings",
           "default": {
-            "allow_laser": false,
             "allow_machine": false,
             "enabled": false
           }
         }
       },
       "additionalProperties": false
+    },
+    "CallerKind": {
+      "description": "Who calls an action.",
+      "oneOf": [
+        {
+          "description": "A person, through the UI or the CLI.",
+          "type": "string",
+          "const": "user"
+        },
+        {
+          "description": "A user macro (script).",
+          "type": "string",
+          "const": "macro"
+        },
+        {
+          "description": "An AI agent through MCP.",
+          "type": "string",
+          "const": "agent"
+        },
+        {
+          "description": "A test harness (`host --stdio`).",
+          "type": "string",
+          "const": "test"
+        }
+      ]
     },
     "CustomButton": {
       "description": "A custom button of the machine panel: G-code (custom code with `[expr]`) run on\na click. Running it can turn the laser on, so it goes through the fire\nconfirmation (`machine.custom_code`, tier `laser`).",
@@ -200,6 +233,37 @@
         }
       ]
     },
+    "Grant": {
+      "description": "A permission granted by the user with the scope \"always\" (PLAN §9.5): `caller`\nnamed `name` may use actions up to `tier` without asking.",
+      "type": "object",
+      "properties": {
+        "caller": {
+          "description": "Kind of caller (`macro`, `agent`).",
+          "$ref": "#/$defs/CallerKind"
+        },
+        "code_hash": {
+          "description": "Macros: hash of the code; editing the macro invalidates the grant.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Caller name (macro name, MCP client name).",
+          "type": "string"
+        },
+        "tier": {
+          "description": "Highest tier granted.",
+          "$ref": "#/$defs/Tier"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "caller",
+        "name",
+        "tier"
+      ]
+    },
     "JobSettings": {
       "description": "Code around jobs.",
       "type": "object",
@@ -245,6 +309,11 @@
       "description": "How to reach the machine and how to talk to it.",
       "type": "object",
       "properties": {
+        "accept_broken_ok": {
+          "description": "Count a garbled line that contains `ok` as an `ok` (tolerates a noisy link).",
+          "type": "boolean",
+          "default": true
+        },
         "auto_cooling": {
           "description": "Automatic cooling cycles.",
           "$ref": "#/$defs/AutoCoolingSettings",
@@ -313,13 +382,8 @@
       "description": "MCP server settings (§9 of the plan). Changed only by the user, never by\nactions, scripts or agents.",
       "type": "object",
       "properties": {
-        "allow_laser": {
-          "description": "Agents may request `laser` actions (always confirmed by a human on screen).",
-          "type": "boolean",
-          "default": false
-        },
         "allow_machine": {
-          "description": "Agents may use `machine` actions.",
+          "description": "Agents may use `machine` actions. Agents never get `laser` actions.",
           "type": "boolean",
           "default": false
         },
@@ -377,6 +441,41 @@
           "description": "Light.",
           "type": "string",
           "const": "light"
+        }
+      ]
+    },
+    "Tier": {
+      "description": "Permission tier of an action, from least to most powerful (`Safety` is special:\nalways allowed, because it only makes the machine safer).",
+      "oneOf": [
+        {
+          "description": "STOP, feed hold, abort: always allowed.",
+          "type": "string",
+          "const": "safety"
+        },
+        {
+          "description": "Reading state.",
+          "type": "string",
+          "const": "read"
+        },
+        {
+          "description": "Selection, panels, view.",
+          "type": "string",
+          "const": "ui"
+        },
+        {
+          "description": "Changing the document or settings.",
+          "type": "string",
+          "const": "edit"
+        },
+        {
+          "description": "Moving the machine, changing its settings.",
+          "type": "string",
+          "const": "machine"
+        },
+        {
+          "description": "Anything that can turn the laser on.",
+          "type": "string",
+          "const": "laser"
         }
       ]
     },

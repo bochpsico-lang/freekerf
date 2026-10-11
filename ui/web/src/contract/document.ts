@@ -1,6 +1,6 @@
 // The Design mode contract (doc/features/ui-contract.md): what the UI needs from the
 // M2 crates. Hand-written ONLY until M2 implements it in Rust (M4b); then this file
-// is deleted and the same names come from the generated ../gen/api.ts (ADR 0013).
+// is deleted and the same names come from the generated ../gen/api.ts (ADR 0015).
 // Implemented today by the fake of ../dev/fake-document.ts.
 
 /** `#RRGGBB`. */

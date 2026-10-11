@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc af601c097fdff492706c9ed19bdcd4eacd4c32b8e2b07f23a06f02285cb444ca # shrinks to p = Point { x: 0.0, y: 0.0 }, q = Point { x: 0.0, y: 10.867211525249221 }, c = Point { x: 0.0, y: 0.0 }, ccw = false
+cc 01d97f73a4564f246d392d8648b4eb8366a395a5c214dd0ab0e30b78247410bf # shrinks to a = [Point { x: 0.0, y: 0.0 }, Point { x: 29.153903898136623, y: 0.0 }, Point { x: 29.153903898136623, y: 16.590858842228002 }, Point { x: 0.0, y: 16.590858842228002 }], b = [Point { x: 0.0, y: 0.0 }, Point { x: 1.0, y: 0.0 }, Point { x: 1.0, y: 1.0 }, Point { x: 0.0, y: 1.0 }]
+cc 77a41f1eed7dc430e96e16fd9407742db1eab9ca1ef17d2f827943d9a0d41ba4 # shrinks to a = [Point { x: 18.875860105877305, y: 0.0 }, Point { x: 51.47723093581894, y: 0.0 }, Point { x: 51.47723093581894, y: 48.270291739913574 }, Point { x: 18.875860105877305, y: 48.270291739913574 }], b = [Point { x: 1.8555664393398799, y: -74.53584418156103 }, Point { x: 46.69154424773926, y: -74.53584418156103 }, Point { x: 46.69154424773926, y: -29.611165099197535 }, Point { x: 1.8555664393398799, y: -29.611165099197535 }]

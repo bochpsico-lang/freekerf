@@ -192,23 +192,18 @@
       <b>{t(s.automation?.mcp?.enabled ? 'settings-on' : 'settings-off')}</b>
       <span>{t('settings-mcpMachine')}</span>
       <b>{t(s.automation?.mcp?.allow_machine ? 'settings-on' : 'settings-off')}</b>
-      <span>{t('settings-mcpLaser')}</span>
-      <b>{t(s.automation?.mcp?.allow_laser ? 'settings-on' : 'settings-off')}</b>
     </div>
     <p class="hint">{t('settings-automationNote')}</p>
     <p class="hint">{t('settings-userOnly')}</p>
   {/if}
 
   {#snippet footer()}
-    <button
-      class="btn"
-      onclick={() => run(() => service.dispatch('view.open_dialog', { dialog: 'welcome' }))}
-    >
+    <button class="btn" onclick={() => run(() => service.dispatch('view.open_dialog', { name: 'welcome' }))}>
       <Icon name="sparkle" /><span>{t('settings-welcome')}</span>
     </button>
     <button
       class="btn"
-      onclick={() => run(() => service.dispatch('view.open_dialog', { dialog: 'shortcuts' }))}
+      onclick={() => run(() => service.dispatch('view.open_dialog', { name: 'shortcuts' }))}
     >
       <Icon name="info" /><span>{t('settings-shortcuts')}</span>
     </button>

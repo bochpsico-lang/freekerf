@@ -34,7 +34,7 @@
         service: doc.service,
         run,
         selectTool: () => void run(() => service.dispatch('view.set_tool', { tool: 'select' })),
-        textPlaced: () => void run(() => service.dispatch('view.show_panel', { panel: 'object' })),
+        textPlaced: () => void run(() => service.dispatch('view.open_panel', { name: 'object' })),
         changed: () => tick++,
       })
     : null;
@@ -55,7 +55,7 @@
   const COMMIT_MS = 250;
 
   let canvas: CanvasView | null = $state(null);
-  let sent: { cx: number; cy: number; scale: number } | null = null;
+  let sent: { center: [number, number]; zoom: number } | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let lastFit = -1;
 
@@ -64,7 +64,7 @@
     onzoom?.(c.scale / REAL_SIZE);
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
-      sent = { cx: c.cx, cy: c.cy, scale: c.scale };
+      sent = { center: [c.cx, c.cy], zoom: c.scale };
       void service.dispatch('view.set_viewport', sent);
     }, COMMIT_MS);
   }
@@ -74,11 +74,12 @@
   $effect(() => {
     const v = view.state?.viewport;
     if (!canvas || !v) return;
-    if (sent && near(v.cx, sent.cx) && near(v.cy, sent.cy) && near(v.scale, sent.scale)) return;
+    const [cx, cy] = v.center;
+    if (sent && near(cx, sent.center[0]) && near(cy, sent.center[1]) && near(v.zoom, sent.zoom)) return;
     const c = canvas.camera;
-    if (near(v.cx, c.cx) && near(v.cy, c.cy) && near(v.scale, c.scale)) return;
-    sent = { ...v };
-    canvas.setCamera({ ...c, cx: v.cx, cy: v.cy, scale: v.scale });
+    if (near(cx, c.cx) && near(cy, c.cy) && near(v.zoom, c.scale)) return;
+    sent = { center: [cx, cy], zoom: v.zoom };
+    canvas.setCamera({ ...c, cx, cy, scale: v.zoom });
   });
 
   $effect(() => {

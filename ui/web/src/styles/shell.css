@@ -377,6 +377,8 @@ textarea {
   min-height: 0;
   min-width: 0;
   position: relative;
+  /* the closed drawer (medium layout) waits off screen: never scroll to it */
+  overflow: hidden;
 }
 [data-layout='wide'] .main {
   grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--dock-w);

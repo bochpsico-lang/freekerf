@@ -246,10 +246,9 @@ settings-countdown = Contagem antes de "Disparar laser"
 settings-userOnly = Só você pode mudar isso, com `freekerf config set` (scripts e agentes não podem).
 settings-mcp = Agentes de IA (servidor MCP)
 settings-mcpMachine = Agentes podem mover a máquina
-settings-mcpLaser = Agentes podem pedir para disparar o laser
 settings-on = Ligado
 settings-off = Desligado
-settings-automationNote = Desligado por padrão. Mesmo quando permitido, o laser só dispara depois que você confirma nesta tela.
+settings-automationNote = Desligado por padrão. Agentes nunca disparam o laser: nem com permissão, nem depois de uma confirmação.
 settings-title = Exibição e entrada
 settings-theme = Tema
 

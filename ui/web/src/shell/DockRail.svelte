@@ -18,8 +18,8 @@
     const open = view.state?.drawer_open && view.panel === p;
     return run(() =>
       open
-        ? service.dispatch('view.set_drawer', { open: false })
-        : service.dispatch('view.show_panel', { panel: p }),
+        ? service.dispatch('view.close_panel', { name: p })
+        : service.dispatch('view.open_panel', { name: p }),
     );
   }
 </script>

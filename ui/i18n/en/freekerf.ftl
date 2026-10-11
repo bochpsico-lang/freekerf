@@ -246,10 +246,9 @@ settings-countdown = Countdown before "Fire laser"
 settings-userOnly = Only you can change this, with `freekerf config set` (scripts and agents cannot).
 settings-mcp = AI agents (MCP server)
 settings-mcpMachine = Agents may move the machine
-settings-mcpLaser = Agents may ask to fire the laser
 settings-on = On
 settings-off = Off
-settings-automationNote = Off by default. Even when allowed, the laser only fires after you confirm on this screen.
+settings-automationNote = Off by default. Agents never fire the laser: not even with a grant, not even after a confirmation.
 settings-title = Display and input
 settings-theme = Theme
 

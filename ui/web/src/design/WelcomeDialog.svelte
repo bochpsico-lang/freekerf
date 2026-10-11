@@ -43,7 +43,7 @@
 
   function setup() {
     onclose();
-    void run(() => service.dispatch('view.open_dialog', { dialog: 'settings' }));
+    void run(() => service.dispatch('view.open_dialog', { name: 'settings' }));
   }
 </script>
 

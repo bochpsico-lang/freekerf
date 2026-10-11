@@ -1,0 +1,26 @@
+[package]
+name = "freekerf-raster"
+description = "Raster images: adjustments, dithering, resizing, line-to-line engraving, as LaserGRBL does them"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+freekerf-document.workspace = true
+freekerf-gcode.workspace = true
+freekerf-geometry.workspace = true
+image.workspace = true
+schemars.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tiny-skia.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

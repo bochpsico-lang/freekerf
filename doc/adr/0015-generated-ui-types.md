@@ -1,4 +1,4 @@
-# 0013. TypeScript types generated from the Rust JSON schemas
+# 0015. TypeScript types generated from the Rust JSON schemas
 
 - Status: accepted (M4a)
 - Date: 2026-10-08

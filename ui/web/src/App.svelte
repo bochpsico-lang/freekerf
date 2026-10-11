@@ -146,7 +146,7 @@
         );
         return;
       case 'shortcuts':
-        void run(() => service.dispatch('view.open_dialog', { dialog: 'shortcuts' }));
+        void run(() => service.dispatch('view.open_dialog', { name: 'shortcuts' }));
         return;
     }
     if (doc) editCommand(c, doc, e);
@@ -168,7 +168,7 @@
       case 'tool-text':
         return tool('text');
       case 'import':
-        void run(() => service.dispatch('view.open_dialog', { dialog: 'import' }));
+        void run(() => service.dispatch('view.open_dialog', { name: 'import' }));
         return;
       case 'undo':
         void run(() => d.service.dispatch('document.undo', {}));

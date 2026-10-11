@@ -1,4 +1,5 @@
 [workspace]
+exclude = ["fuzz"]
 resolver = "3"
 members = [
     "crates/core/*",
@@ -37,32 +38,56 @@ freekerf-gcode = { path = "crates/core/freekerf-gcode", default-features = false
 freekerf-protocol = { path = "crates/core/freekerf-protocol" }
 freekerf-emulator = { path = "crates/core/freekerf-emulator" }
 freekerf-session = { path = "crates/core/freekerf-session" }
+freekerf-geometry = { path = "crates/core/freekerf-geometry" }
+freekerf-materials = { path = "crates/config/freekerf-materials" }
+freekerf-migrate = { path = "crates/config/freekerf-migrate" }
+# the materials library, by git (no release yet; PLAN §2)
+freekerf-library = { git = "https://github.com/freekerf/library", rev = "e27f3c07001739d436d074b7871b0f475db82856" }
+freekerf-document = { path = "crates/core/freekerf-document" }
+freekerf-planner = { path = "crates/core/freekerf-planner" }
+freekerf-import = { path = "crates/core/freekerf-import" }
+freekerf-raster = { path = "crates/core/freekerf-raster" }
 freekerf-settings = { path = "crates/config/freekerf-settings" }
+freekerf-script = { path = "crates/runtime/freekerf-script" }
 freekerf-transport = { path = "crates/native/freekerf-transport" }
 freekerf-platform = { path = "crates/native/freekerf-platform" }
 freekerf-machine = { path = "crates/runtime/freekerf-machine" }
 freekerf-service = { path = "crates/runtime/freekerf-service" }
+freekerf-ipc = { path = "crates/native/freekerf-ipc" }
+freekerf-mcp = { path = "crates/runtime/freekerf-mcp" }
 freekerf-testkit = { path = "crates/testing/freekerf-testkit" }
 
 # third party
 anyhow = "1"
+base64 = "0.22"
 assert_cmd = "2"
 clap = { version = "4", features = ["derive"] }
 criterion = { version = "0.5", default-features = false }
 crossbeam-channel = "0.5"
 ctrlc = "3"
 directories = "6"
+getrandom = "0.3"
+# local sockets: Unix domain sockets and Windows named pipes (freekerf-ipc)
+interprocess = "2"
+# QuickJS (MIT), the script engine: ADR 0011
+rquickjs = { version = "0.14", default-features = false, features = ["std"] }
+tiny-skia = { version = "0.12", default-features = false, features = ["std"] }
+# raw deflate (LaserGRBL .zbn button exports)
+miniz_oxide = "0.8"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
 insta = { version = "1", features = ["json"] }
 nix = { version = "0.31", features = ["term", "fs", "poll"] }
 predicates = "3"
 proptest = "1"
 rayon = "1"
 regex = "1"
+roxmltree = "0.21"
 rust_decimal = { version = "1", default-features = false, features = ["std"] }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["float_roundtrip"] }
 serialport = { version = "4", default-features = false }
+sha2 = "0.11"
 tempfile = "3"
 thiserror = "2"
 toml = "0.9"

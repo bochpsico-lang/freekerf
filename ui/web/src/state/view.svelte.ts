@@ -8,8 +8,9 @@ export class ViewProjection {
   #state: ViewState | null = $state(null);
 
   constructor(private readonly service: AppService) {
+    // the view lives in the session: a session event says it changed, read it again
     service.subscribe((e: EventMessage) => {
-      if (e.event === 'view') this.#state = e.view;
+      if (e.event === 'session' && e.change === 'view') void this.refresh();
     });
   }
 
@@ -19,7 +20,7 @@ export class ViewProjection {
   }
 
   get mode(): ViewState['mode'] {
-    return this.#state?.mode ?? 'produce';
+    return this.#state?.mode ?? 'design';
   }
 
   get tool(): ViewState['tool'] {
@@ -39,7 +40,22 @@ export class ViewProjection {
     return this.dialogs.at(-1) ?? null;
   }
 
-  async refresh(): Promise<void> {
-    this.#state = await this.service.dispatch('view.get', {});
+  #reading: Promise<void> | null = null;
+  #again = false;
+
+  /** Reads the view again (coalesced: one read in flight, one more if asked meanwhile). */
+  refresh(): Promise<void> {
+    if (this.#reading) {
+      this.#again = true;
+      return this.#reading;
+    }
+    this.#reading = (async () => {
+      do {
+        this.#again = false;
+        this.#state = await this.service.dispatch('view.get', {});
+      } while (this.#again);
+      this.#reading = null;
+    })();
+    return this.#reading;
   }
 }

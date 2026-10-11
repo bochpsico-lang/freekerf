@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, Parser, Subcommand};
 use freekerf_service::analysis::{AnalyzeOptions, analyze};
-use freekerf_service::{Caller, Service, Stores};
+use freekerf_service::{Caller, CallerKind, Service, Stores, Tier};
 use serde_json::{Value, json};
 
 mod host;
@@ -82,6 +82,33 @@ enum Command {
         #[arg(long)]
         persistent: bool,
     },
+    /// Serves this instance on the local endpoint for `freekerf mcp` (one instance
+    /// per user). Ctrl-C sends STOP and exits.
+    Serve {
+        /// No user interface (the only mode until the desktop app): permission
+        /// requests and laser actions are refused.
+        #[arg(long)]
+        headless: bool,
+        /// Exit after this many seconds without clients (instances started by
+        /// `freekerf mcp`).
+        #[arg(long, value_name = "SECONDS")]
+        idle_exit: Option<u64>,
+    },
+    /// MCP server on stdin/stdout for AI agents: attaches to the running instance,
+    /// or starts a headless one. Needs `automation.mcp.enabled` (off by default).
+    Mcp {
+        /// Seconds to wait for a started instance to listen.
+        #[arg(long, default_value_t = 10)]
+        launch_timeout: u64,
+        /// Seconds a started instance stays up without clients.
+        #[arg(long, default_value_t = 60)]
+        idle_exit: u64,
+    },
+    /// Imports data from another program (read only on its side).
+    Migrate {
+        #[command(subcommand)]
+        from: MigrateFrom,
+    },
     /// Reads or changes the settings file.
     Config {
         #[command(subcommand)]
@@ -96,13 +123,63 @@ enum Command {
         #[arg(long)]
         markdown: bool,
     },
-    /// Runs one action and prints its JSON result.
+    /// Runs a conformance importer golden case and prints its JSON result
+    /// (`conformance` compares it with LaserGRBL's golden file).
+    ImportCase {
+        /// Case file (`fixtures/importers/cases/*.json`), `-` for stdin.
+        case: Option<PathBuf>,
+        /// Directory of the cases' input files (default: `../inputs` next to the case).
+        #[arg(long)]
+        inputs: Option<PathBuf>,
+        /// Print the case kinds this build runs, one per line, and exit.
+        #[arg(long)]
+        kinds: bool,
+    },
+    /// Runs one action, or a JavaScript file (`*.js`), and prints its JSON result.
     Run {
-        /// Action name (`state.get`).
+        /// Action name (`state.get`) or script file (`macro.js`).
         action: String,
-        /// Parameters as JSON.
+        /// Parameters as JSON (actions only).
         #[arg(default_value = "{}")]
         params: String,
+        /// Scripts: run against a copy of the document and simulate machine,
+        /// laser and file actions; nothing is applied.
+        #[arg(long)]
+        dry_run: bool,
+        /// Scripts: highest tier the script may use (`read`, `ui`, `edit`,
+        /// `machine`; `laser` with `--dry-run` only). Laser actions never run from
+        /// the command line.
+        #[arg(long, default_value = "machine")]
+        tier: String,
+        /// Scripts: wall-clock limit in seconds.
+        #[arg(long, default_value_t = 30)]
+        timeout: u64,
+    },
+}
+
+#[derive(Subcommand)]
+enum MigrateFrom {
+    /// LaserGRBL: settings, laser module counters and custom buttons (as scripts)
+    /// from its data folder (`%APPDATA%\LaserGRBL` by default on Windows). Without
+    /// `--apply` nothing is written.
+    Lasergrbl {
+        /// LaserGRBL's data folder.
+        dir: Option<PathBuf>,
+        /// Write the result into FreeKerf's settings and machine cache.
+        #[arg(long)]
+        apply: bool,
+        /// Print the report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// LaserGRBL custom buttons from a `.zbn` export (or `CustomButtons.bin`), as
+    /// scripts in FreeKerf's macro folder. Without `--apply` nothing is written.
+    LasergrblButtons {
+        /// The button file.
+        file: PathBuf,
+        /// Write the scripts.
+        #[arg(long)]
+        apply: bool,
     },
 }
 
@@ -160,6 +237,9 @@ fn run(cli: Cli) -> Result<ExitCode> {
     let home = cli.home.clone();
     match cli.command {
         Command::Analyze { file, json, max_rate } => cmd_analyze(&file, json, max_rate),
+        Command::ImportCase { case, inputs, kinds } => {
+            cmd_import_case(case.as_deref(), inputs.as_deref(), kinds)
+        }
         Command::Send {
             file,
             target,
@@ -181,6 +261,12 @@ fn run(cli: Cli) -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Config { op } => cmd_config(home.as_deref(), op),
+        Command::Serve { headless, idle_exit } => cmd_serve(home.as_deref(), headless, idle_exit),
+        Command::Mcp {
+            launch_timeout,
+            idle_exit,
+        } => cmd_mcp(home, launch_timeout, idle_exit),
+        Command::Migrate { from } => cmd_migrate(home.as_deref(), from),
         Command::Actions { json, markdown } => {
             let service = Service::in_memory()?;
             let mut out = std::io::stdout().lock();
@@ -201,7 +287,14 @@ fn run(cli: Cli) -> Result<ExitCode> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Command::Run { action, params } => {
+        Command::Run {
+            action,
+            dry_run,
+            tier,
+            timeout,
+            ..
+        } if action.ends_with(".js") => cmd_run_script(home.as_deref(), &action, dry_run, &tier, timeout),
+        Command::Run { action, params, .. } => {
             let service = open_service(home.as_deref())?;
             let params: Value = serde_json::from_str(&params).context("parameters must be JSON")?;
             let result = service.dispatch(&Caller::user(), &action, params)?;
@@ -215,9 +308,150 @@ fn run(cli: Cli) -> Result<ExitCode> {
     }
 }
 
+/// `freekerf run <script.js>`: one transaction, laser refused (no one to confirm),
+/// Ctrl-C cancels the script and stops the machine.
+fn cmd_run_script(
+    home: Option<&std::path::Path>,
+    file: &str,
+    dry_run: bool,
+    tier: &str,
+    timeout: u64,
+) -> Result<ExitCode> {
+    use freekerf_service::script::ScriptRequest;
+    let max_tier: Tier = serde_json::from_value(Value::String(tier.to_owned()))
+        .map_err(|_| anyhow!("unknown tier `{tier}` (read, ui, edit, machine)"))?;
+    if max_tier == Tier::Laser && !dry_run {
+        // a dry run only simulates them
+        bail!(
+            "laser actions need a person to confirm each one; scripts cannot run them from the command line (use --dry-run to preview)"
+        );
+    }
+    let code = std::fs::read_to_string(file).with_context(|| format!("reading {file}"))?;
+    let name = std::path::Path::new(file)
+        .file_name()
+        .map_or_else(|| file.to_owned(), |n| n.to_string_lossy().into_owned());
+    let service = open_service(home)?;
+    install_stop_on_ctrl_c(&service);
+    let mut request = ScriptRequest::new(name.clone(), code);
+    request.dry_run = dry_run;
+    request.limits.timeout = Duration::from_secs(timeout);
+    let report = service.run_script(&Caller::new(CallerKind::Macro, name, max_tier), &request);
+    writeln!(
+        std::io::stdout().lock(),
+        "{}",
+        serde_json::to_string_pretty(&report)?
+    )?;
+    Ok(if report.outcome.error.is_some() {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
+fn cmd_serve(home: Option<&std::path::Path>, headless: bool, idle_exit: Option<u64>) -> Result<ExitCode> {
+    use freekerf_service::remote::{ServeOptions, endpoint, serve};
+    if !headless {
+        bail!("only `--headless` is available until the desktop app");
+    }
+    let service = open_service(home)?;
+    install_stop_on_ctrl_c(&service);
+    let endpoint = endpoint(home).map_err(|e| anyhow!(e))?;
+    tracing::info!(endpoint = %endpoint.name, "serving");
+    serve(
+        &service,
+        &endpoint,
+        ServeOptions {
+            idle_exit: idle_exit.map(Duration::from_secs),
+        },
+    )?;
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `freekerf mcp`: refuses at once while MCP is disabled; otherwise attaches to the
+/// running instance (or starts `freekerf serve --headless`) when the agent
+/// initializes, and proxies MCP on stdin/stdout.
+fn cmd_mcp(home: Option<PathBuf>, launch_timeout: u64, idle_exit: u64) -> Result<ExitCode> {
+    use freekerf_service::remote::{MCP_DISABLED, endpoint};
+    let settings = match Stores::settings_path(home.as_deref()) {
+        Some(path) => freekerf_settings::Settings::load(&freekerf_service::FileStore(path))?,
+        None => freekerf_settings::Settings::default(),
+    };
+    if !settings.automation.mcp.enabled {
+        bail!(MCP_DISABLED);
+    }
+    let endpoint = endpoint(home.as_deref()).map_err(|e| anyhow!(e))?;
+    let exe = std::env::current_exe().context("locating the freekerf binary")?;
+    let launch = move || {
+        let mut c = std::process::Command::new(exe);
+        if let Some(h) = &home {
+            c.arg("--home").arg(h);
+        }
+        c.args(["serve", "--headless", "--idle-exit", &idle_exit.to_string()])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        detach(&mut c);
+        c.spawn().map(|_| ())
+    };
+    let connect: freekerf_mcp::Connect = Box::new(move |name: &str| {
+        freekerf_mcp::attach_or_launch(&endpoint, name, launch, Duration::from_secs(launch_timeout))
+    });
+    freekerf_mcp::serve(connect, std::io::stdin().lock(), std::io::stdout())?;
+    Ok(ExitCode::SUCCESS)
+}
+
+/// The started instance outlives `freekerf mcp` (its own process group).
+fn detach(c: &mut std::process::Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        c.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        c.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+    }
+}
+
 fn open_service(home: Option<&std::path::Path>) -> Result<Service> {
     let stores = Stores::files(home).map_err(|e| anyhow!(e))?;
     Ok(Service::new(stores)?)
+}
+
+fn cmd_import_case(
+    case: Option<&std::path::Path>,
+    inputs: Option<&std::path::Path>,
+    kinds: bool,
+) -> Result<ExitCode> {
+    use freekerf_service::import_case;
+    let mut out = std::io::stdout().lock();
+    if kinds {
+        for k in import_case::SUPPORTED_KINDS {
+            writeln!(out, "{k}")?;
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+    let case = case.ok_or_else(|| anyhow!("a case file is needed (or --kinds)"))?;
+    let text = if case.as_os_str() == "-" {
+        std::io::read_to_string(std::io::stdin())?
+    } else {
+        std::fs::read_to_string(case).with_context(|| format!("cannot read {}", case.display()))?
+    };
+    let value: Value = serde_json::from_str(&text).context("the case is not JSON")?;
+    let dir = match inputs {
+        Some(d) => d.to_path_buf(),
+        None => case
+            .parent()
+            .and_then(std::path::Path::parent)
+            .map_or_else(|| PathBuf::from("inputs"), |p| p.join("inputs")),
+    };
+    let read = |name: &str| std::fs::read(dir.join(name)).map_err(|e| e.to_string());
+    let result = import_case::run(&value, &read)?;
+    writeln!(out, "{}", serde_json::to_string(&result)?)?;
+    Ok(ExitCode::SUCCESS)
 }
 
 fn cmd_analyze(file: &std::path::Path, json: bool, max_rate: i64) -> Result<ExitCode> {
@@ -480,6 +714,72 @@ fn cmd_emulate(pty: bool, timed: bool) -> Result<ExitCode> {
 #[cfg(not(unix))]
 fn cmd_emulate(_pty: bool, _timed: bool) -> Result<ExitCode> {
     bail!("`emulate --pty` needs a Unix system; use `--emulator` with send/console")
+}
+
+fn cmd_migrate(home: Option<&std::path::Path>, from: MigrateFrom) -> Result<ExitCode> {
+    let macros = freekerf_service::migrate::macros_dir(home).map_err(|e| anyhow!(e))?;
+    let (dir, apply, json) = match from {
+        MigrateFrom::Lasergrbl { dir, apply, json } => (dir, apply, json),
+        MigrateFrom::LasergrblButtons { file, apply } => {
+            let names = freekerf_service::migrate::lasergrbl_buttons(&file, &macros, apply)
+                .map_err(|e| anyhow!(e))?;
+            let mut out = std::io::stdout().lock();
+            writeln!(out, "buttons: {}", names.join(", "))?;
+            if apply {
+                writeln!(out, "scripts written to {}", macros.display())?;
+            } else {
+                writeln!(out, "nothing written (use --apply)")?;
+            }
+            return Ok(ExitCode::SUCCESS);
+        }
+    };
+    let dir = dir
+        .or_else(freekerf_service::migrate::default_lasergrbl_dir)
+        .ok_or_else(|| anyhow!("give LaserGRBL's data folder (no default on this system)"))?;
+    if !dir.is_dir() {
+        bail!("{}: not a folder", dir.display());
+    }
+    let stores = Stores::files(home).map_err(|e| anyhow!(e))?;
+    let r = freekerf_service::migrate::lasergrbl(&dir, &stores, &macros, apply).map_err(|e| anyhow!(e))?;
+    let mut out = std::io::stdout().lock();
+    if json {
+        writeln!(out, "{}", serde_json::to_string_pretty(&r)?)?;
+        return Ok(ExitCode::SUCCESS);
+    }
+    writeln!(out, "LaserGRBL data: {}", r.source)?;
+    writeln!(out, "settings taken: {}", r.settings_applied.len())?;
+    for (lg, fk) in &r.settings_applied {
+        writeln!(out, "  {lg} -> {fk}")?;
+    }
+    writeln!(out, "settings not taken: {}", r.settings_skipped.len())?;
+    writeln!(out, "laser counters: {}", r.laser_counters.join(", "))?;
+    if !r.buttons.is_empty() {
+        writeln!(
+            out,
+            "custom buttons (as scripts in {}): {}",
+            macros.display(),
+            r.buttons.join(", ")
+        )?;
+    }
+    if r.user_materials_found {
+        writeln!(
+            out,
+            "UserMaterials.psh found (imported with the material library, later)"
+        )?;
+    }
+    for (file, e) in &r.errors {
+        writeln!(out, "cannot read {file}: {e}")?;
+    }
+    writeln!(
+        out,
+        "{}",
+        if r.applied {
+            "written"
+        } else {
+            "nothing written (use --apply)"
+        }
+    )?;
+    Ok(ExitCode::SUCCESS)
 }
 
 fn cmd_config(home: Option<&std::path::Path>, op: ConfigOp) -> Result<ExitCode> {

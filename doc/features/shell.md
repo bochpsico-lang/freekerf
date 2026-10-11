@@ -8,21 +8,24 @@ and `ui/web/src/styles/shell.css` keep the prototype's class names. Code:
 
 ## View state
 
-What the app shows is data in Rust (`freekerf_session::view::ViewState`), changed
-only by `view.*` actions ([actions.md](actions.md)) and published as the
-`{"event": "view", "view": …}` event. The UI renders it; scripts, agents and tests
-read and drive the same screen.
+What the app shows is data in Rust (`freekerf_session::view::ViewState`), held by
+the session next to the document and the selection ([session.md](session.md)), so
+script transactions roll it back too. It changes only through `view.*` actions
+([actions.md](actions.md)); every change is a `{"event": "session", "revision": n,
+"change": "view"}` event and the UI reads `view.get` again. The UI renders it;
+scripts, agents and tests read and drive the same screen.
 
 | Field | Meaning | Actions |
 | --- | --- | --- |
-| `mode` | `design` or `produce` (Produce opens the Machine panel) | `view.set_mode` |
+| `mode` | `design` (default) or `produce` (Produce opens the Machine panel) | `view.set_mode` |
 | `tool` | Design mode tool: `select`, `rect`, `ellipse`, `text` | `view.set_tool` |
-| `panel`, `drawer_open` | active dock panel; drawer open in the medium layout | `view.show_panel`, `view.set_drawer` |
-| `dialogs` | open dialogs, bottom to top | `view.open_dialog`, `view.close_dialog` |
+| `panel`, `drawer_open` | active dock panel; drawer open in the medium layout | `view.open_panel {name}`, `view.close_panel {name}` |
+| `dialogs` | open dialogs, bottom to top (closing the fire confirmation drops its request) | `view.open_dialog {name}`, `view.close_dialog {name?}` |
 | `toasts` | at most 3 messages (i18n id + args) | `view.toast`, `view.dismiss_toast` |
-| `viewport` | centre (mm) and zoom (CSS px per mm) | `view.set_viewport` |
+| `viewport` | `center` `[x, y]` (mm) and `zoom` (CSS px per mm) | `view.set_viewport` |
 | `fit_request` | increases on each `view.fit` | `view.fit` |
 | `focus` | element with the keyboard focus | `view.focus` |
+| `fire_request` | the laser action waiting for the person's confirmation | `fire.request`, `fire.cancel` ([fire-confirmation.md](fire-confirmation.md)) |
 
 Local to the window (purely visual, PLAN §3): the layout (from the window width),
 the kind of the last pointer (for the automatic density), hover, a gesture in

@@ -10,14 +10,14 @@ User settings in a readable file, with a versioned format.
   (`freekerf config path`), or in `$FREEKERF_HOME` / `--home DIR`.
 - Schema: [`doc/schema/settings.schema.json`](../schema/settings.schema.json),
   generated from `freekerf_settings::Settings` (CI checks it is current).
-- `version = 1`. A file without `version` (drafts) is migrated (`[machine] streaming`
-  → `streaming_mode`); a newer version is refused with a clear error. Unknown keys
+- `version = 2`. Older files are migrated: without `version` (drafts), `[machine]
+  streaming` → `streaming_mode`; version 1 loses `automation.mcp.allow_laser`; a newer version is refused with a clear error. Unknown keys
   are refused. Missing keys take their defaults.
 - What FreeKerf learns about the machine (firmware version, `$$`, laser life
   counters) is kept in `machine-cache.json` in the data directory, not here.
 
 ```toml
-version = 1
+version = 2
 
 [machine]
 firmware = "Grbl"            # Grbl | Smoothie | Marlin | VigoWork
@@ -29,6 +29,7 @@ query_machine_info = true
 status_query_ms = 500
 support_pwm = true
 continuous_jog = false
+accept_broken_ok = true      # a garbled line containing "ok" counts as ok (DIV-051)
 
 [machine.auto_cooling]
 enabled = false
@@ -45,9 +46,14 @@ step_mm = 1.0
 speed_mm_min = 1000.0
 
 [automation.mcp]            # user-only (PLAN §9)
-enabled = false
-allow_machine = false
-allow_laser = false
+enabled = false             # agents may attach (freekerf mcp); baseline tier `edit`
+allow_machine = false       # agents' baseline is `machine` (agents never run `laser` actions)
+
+[[automation.grants]]       # permissions granted "always" (PLAN §9.5); none by default
+caller = "agent"            # macro, agent
+name = "claude-code"
+tier = "machine"
+# code_hash = "..."         # macros: editing the macro invalidates the grant
 
 [ui]                        # desktop app appearance (M4a)
 language = "auto"           # auto | a locale of ui/i18n (en, pt-BR, de, fr...)
@@ -64,6 +70,11 @@ label = "Air on"
 code = "M8"                 # custom code: [expr] allowed; runs through the fire confirmation
 icon = "air"                # optional, an icon name of the design system
 ```
+
+Grants are added when the person chooses "always" in the permission dialog
+(desktop app, M4b) and removed with `freekerf config set automation.grants '[]'`
+(or one by one in the app). See [mcp.md](mcp.md).
+
 
 `[ui]`, `[safety]` and `[[buttons]]` were added in M4a with defaults for every key, so older files load unchanged
 and no migration (or version bump) is needed; `ui_section_is_optional_and_settable`

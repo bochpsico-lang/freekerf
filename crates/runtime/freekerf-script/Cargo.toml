@@ -1,0 +1,20 @@
+[package]
+name = "freekerf-script"
+description = "Embedded JavaScript (QuickJS) for user macros and agents: the action registry as a sandboxed API, limits, api.d.ts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+freekerf-session.workspace = true
+rquickjs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

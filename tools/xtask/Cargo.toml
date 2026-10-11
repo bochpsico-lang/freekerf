@@ -11,6 +11,7 @@ publish.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+freekerf-document.workspace = true
 freekerf-service.workspace = true
 freekerf-settings.workspace = true
 roxmltree = "0.21"

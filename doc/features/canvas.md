@@ -2,7 +2,7 @@
 
 The canvas shows the machine table: work area with grid and rulers, the G-code
 preview (tool path, burned part, job frame), the head, and (with M2) the design.
-Renderer decision: [ADR 0012](../adr/0012-canvas-renderer.md). Code:
+Renderer decision: [ADR 0014](../adr/0014-canvas-renderer.md). Code:
 `ui/web/src/canvas/`.
 
 ## Behaviour

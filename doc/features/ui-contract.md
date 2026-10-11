@@ -10,7 +10,7 @@ UI to M2: types, actions, events and raw payloads.
 The TypeScript side of the proposal is `ui/web/src/contract/document.ts` (types, the
 action map and the `DocumentService` interface). Those types are hand-written only
 because the Rust ones do not exist yet: in M4b they are deleted and replaced by the
-generated `ui/web/src/gen/api.ts` (ADR 0013), with the same names.
+generated `ui/web/src/gen/api.ts` (ADR 0015), with the same names.
 
 It follows the model of `freekerf-document` (freekerf/freekerf#19): `Layer`
 (`id`, `color`, `name`, `mode`, `speed_mm_min`, `power`, `passes`, `fill`,

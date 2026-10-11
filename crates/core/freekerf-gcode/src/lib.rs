@@ -17,6 +17,7 @@
 
 pub mod arc;
 pub mod command;
+pub mod dotnet;
 pub mod number;
 pub mod program;
 pub mod range;

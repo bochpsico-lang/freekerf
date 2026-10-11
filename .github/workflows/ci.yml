@@ -11,6 +11,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   # keep in sync with rust-toolchain.toml and `rust-version` in Cargo.toml
+  # (not TOOLCHAIN: Windows env names ignore case and dtolnay/rust-toolchain uses `toolchain`)
   RUST_TOOLCHAIN: "1.97.0"
   MSRV: "1.88"
   NODE: "24"
@@ -89,36 +90,24 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session
+      - run: cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session -p freekerf-geometry -p freekerf-document -p freekerf-planner -p freekerf-import -p freekerf-raster
 
-  cross-check:
-    runs-on: ubuntu-latest
+  native-check:
+    # native runners: QuickJS (rquickjs) is C and needs the platform's compiler
+    runs-on: ${{ matrix.os }}
     strategy:
-      matrix:
-        target: [x86_64-pc-windows-gnu, aarch64-apple-darwin]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-      # the desktop app needs the native toolchains (resource compiler, Objective-C): job desktop-platforms
-      - run: cargo check --workspace --all-targets --exclude freekerf-desktop --target ${{ matrix.target }}
-
-  desktop-platforms:
-    # the Tauri app compiles on Windows (WebView2) and macOS (WKWebView)
-    strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check -p freekerf-desktop --all-targets
+      - run: cargo check --workspace --all-targets  # the desktop app too (WebView2, WKWebView)
+      # the local endpoint: Unix sockets on macOS, named pipes on Windows
+      - run: cargo test -p freekerf-ipc
 
   msrv:
     runs-on: ubuntu-latest

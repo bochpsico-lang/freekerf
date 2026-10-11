@@ -61,7 +61,7 @@
       run(() =>
         connected
           ? service.dispatch('machine.disconnect', {})
-          : service.dispatch('view.show_panel', { panel: 'machine' }),
+          : service.dispatch('view.open_panel', { name: 'machine' }),
       )}
   >
     <Icon name={connected ? 'plugOff' : 'plug'} />
@@ -73,7 +73,7 @@
     aria-label={t('settings-title')}
     aria-haspopup="dialog"
     data-testid="open-settings"
-    onclick={() => run(() => service.dispatch('view.open_dialog', { dialog: 'settings' }))}
+    onclick={() => run(() => service.dispatch('view.open_dialog', { name: 'settings' }))}
   >
     <Icon name="gear" />
   </button>

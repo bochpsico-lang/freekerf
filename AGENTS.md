@@ -12,24 +12,37 @@ M0 (workspace, CI, docs) and M1 (headless machine core and the `freekerf` CLI); 
 (desktop app shell in Tauri 2 + Svelte 5) is in progress.
 The behaviour of LaserGRBL's core is specified by
 [`freekerf/conformance`](https://github.com/freekerf/conformance); FreeKerf passes
-its protocol and golden (G-code) layers (`make test-rust` there).
+its protocol and golden (G-code) layers, and its importer goldens as the importers
+land (`make test-rust` there; `freekerf import-case`).
 
 ## Layout
 
 ```
 crates/core/       pure logic, no I/O, builds for wasm32
   freekerf-gcode       commands, modal state, arcs, analysis, time estimate
+  freekerf-geometry    paths, curves, transforms, Clipper 6.4.2 port, hatch fillings
+  freekerf-document    project model (layers, objects, cut/raster settings), .fkproj
+  freekerf-import      SVG / DXF bytes -> document (colour layers)
+  freekerf-raster      bitmaps: image operations, dithering, Line2Line, Potrace vectorize
+  freekerf-planner     document -> G-code (LaserGRBL writer, images), generators, Hershey
   freekerf-protocol    sans-IO host state machine (port of GrblCore) + firmware variants
   freekerf-emulator    sans-IO Grbl 1.1 device (simulator, tests)
-  freekerf-session     action registry: names, JSON schemas, permission tiers
+  freekerf-session     action registry (names, JSON schemas, tiers); the session: document,
+                       selection, view, undo/transactions, change events, their actions
 crates/config/     persistent data
   freekerf-settings    settings.toml model, migrations, JSON schema
+  freekerf-materials   material library packages (freekerf/library by git), recipes on layers
+  freekerf-migrate     LaserGRBL import, read only: BinaryFormatter reader, settings, laser counters
 crates/native/     operating system and hardware
   freekerf-transport   Transport trait: serial, emulator, emulator on a PTY
-  freekerf-platform    directories, atomic writes
+  freekerf-platform    directories, atomic writes, running external programs
+  freekerf-ipc         single instance, local endpoint (Unix socket / named pipe), token, JSON Lines
 crates/runtime/    orchestration
   freekerf-machine     I/O thread: host + link + clock, priority STOP
-  freekerf-service     the facade: every action of every front end
+  freekerf-script      embedded JavaScript (QuickJS): the registry as a sandboxed API, limits, api.d.ts
+  freekerf-service     the facade: every action of every front end; script runs (transactions, dry run),
+                       permissions and grants, the local endpoint server (remote)
+  freekerf-mcp         MCP server (fixed tools, state resources) proxied to the app over freekerf-ipc
 crates/testing/
   freekerf-testkit     simulated clock, host+device bench, fixtures (dev-dependency only)
 apps/cli/          the `freekerf` binary (thin shell over the service)
@@ -41,6 +54,7 @@ ui/tokens/         fk-tokens.css generated from freekerf/design (commit in desig
 ui/i18n/           Fluent translations: <locale>/freekerf.ftl (en is the reference),
                    <locale>/lasergrbl.ftl generated from LaserGRBL (lasergrbl.toml)
 tests/             cross-crate integration tests (crate freekerf-it)
+fuzz/              cargo-fuzz targets (own workspace, nightly; doc/fuzzing.md)
 tools/xtask/       cargo xtask check-layers | gen-docs | gen-ts | check-docs | sync-tokens | resx2ftl
 doc/               documentation (below)
 ```
@@ -52,14 +66,15 @@ cargo test --workspace                       # all tests (no hardware, no networ
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 cargo xtask check-layers                     # layer rules
-cargo xtask gen-docs                         # regenerate doc/features/actions.md, doc/schema/*, ui/web/src/gen/api.ts
+cargo xtask gen-docs                         # regenerate doc/features/actions.md, doc/schema/*, doc/scripting/api.d.ts, ui/web/src/gen/api.ts
 cargo xtask check-docs                       # CI: generated docs and TypeScript types are committed
 cargo xtask sync-tokens                      # tokens, icons, fonts from ../design at ui/tokens/design.lock
 cargo xtask resx2ftl --lasergrbl <checkout>  # LaserGRBL translations that apply → ui/i18n/*/lasergrbl.ftl
 cargo llvm-cov --workspace --exclude xtask --exclude freekerf-testkit --exclude freekerf-desktop --summary-only
 cargo bench -p freekerf-gcode                # 1M-line analysis (doc/benchmarks.md)
-cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session
+cargo build --target wasm32-unknown-unknown -p freekerf-gcode -p freekerf-protocol -p freekerf-emulator -p freekerf-session -p freekerf-geometry -p freekerf-document -p freekerf-planner -p freekerf-import -p freekerf-raster
 cargo deny check
+cd fuzz && cargo +nightly fuzz run svg       # fuzz targets: gcode, svg, dxf, nrbf (doc/fuzzing.md)
 
 cargo run -p freekerf-cli -- analyze file.nc --json
 cargo run -p freekerf-cli -- send file.nc --emulator
@@ -162,6 +177,7 @@ A change is done when its tests and docs are updated in the same PR.
 | the `host --stdio` protocol | `doc/features/host-protocol.md` and conformance's `RustHost` |
 | an action (added, renamed, new parameter, new tier) | `cargo xtask gen-docs` (`doc/features/actions.md`, checked in CI) |
 | settings format | `doc/features/settings.md`, a migration in `freekerf-settings` and its test, `cargo xtask gen-docs` |
+| project (`.fkproj`) format | `doc/features/projects.md`, bump `freekerf_document::VERSION` with a migration in `from_fkproj` and its test, `cargo xtask gen-docs` |
 | crates, traits, data flow, layers | `doc/architecture.md`, this file, `tools/xtask/src/layers.rs` |
 | a type crossing to the UI (result, event, settings) | `cargo xtask gen-ts` (`ui/web/src/gen/api.ts`, checked in CI) |
 | the design commit (tokens, icons, fonts) | `ui/tokens/design.lock`, `cargo xtask sync-tokens` |

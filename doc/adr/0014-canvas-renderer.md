@@ -1,8 +1,8 @@
-# 0012. Canvas renderer: WebGL2, own code, scene cache
+# 0014. Canvas renderer: WebGL2, own code, scene cache
 
 - Status: accepted (M4a), measurement on real hardware pending (`doc/benchmarks.md`)
 - Date: 2026-10-08
-- Context: ADR 0006 (Tauri 2, canvas risk on WebKitGTK), ADR 0011 (Svelte)
+- Context: ADR 0006 (Tauri 2, canvas risk on WebKitGTK), ADR 0013 (Svelte)
 
 ## Context
 

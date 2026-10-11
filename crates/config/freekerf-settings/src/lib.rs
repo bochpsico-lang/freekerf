@@ -9,11 +9,12 @@ use std::collections::BTreeMap;
 
 use freekerf_protocol::host::{DEFAULT_FOOTER, DEFAULT_HEADER, DEFAULT_PASSES};
 use freekerf_protocol::{AutoCooling, FirmwareKind, HostOptions, StreamingMode};
+pub use freekerf_session::{CallerKind, Tier};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Current version of the settings file.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 /// Errors.
 #[derive(Debug, thiserror::Error)]
@@ -141,6 +142,8 @@ pub struct MachineSettings {
     pub support_pwm: bool,
     /// Continuous jog (jog while pressed).
     pub continuous_jog: bool,
+    /// Count a garbled line that contains `ok` as an `ok` (tolerates a noisy link).
+    pub accept_broken_ok: bool,
     /// Automatic cooling cycles.
     pub auto_cooling: AutoCoolingSettings,
 }
@@ -157,6 +160,7 @@ impl Default for MachineSettings {
             status_query_ms: 500,
             support_pwm: true,
             continuous_jog: false,
+            accept_broken_ok: true,
             auto_cooling: AutoCoolingSettings::default(),
         }
     }
@@ -232,10 +236,24 @@ impl Default for JogSettings {
 pub struct McpSettings {
     /// MCP server enabled (off by default).
     pub enabled: bool,
-    /// Agents may use `machine` actions.
+    /// Agents may use `machine` actions. Agents never get `laser` actions.
     pub allow_machine: bool,
-    /// Agents may request `laser` actions (always confirmed by a human on screen).
-    pub allow_laser: bool,
+}
+
+/// A permission granted by the user with the scope "always" (PLAN §9.5): `caller`
+/// named `name` may use actions up to `tier` without asking.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Grant {
+    /// Kind of caller (`macro`, `agent`).
+    pub caller: CallerKind,
+    /// Caller name (macro name, MCP client name).
+    pub name: String,
+    /// Macros: hash of the code; editing the macro invalidates the grant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code_hash: Option<String>,
+    /// Highest tier granted.
+    pub tier: Tier,
 }
 
 /// Automation (scripts and agents).
@@ -244,6 +262,8 @@ pub struct McpSettings {
 pub struct AutomationSettings {
     /// MCP.
     pub mcp: McpSettings,
+    /// Permissions granted "always" (revoked by removing them).
+    pub grants: Vec<Grant>,
 }
 
 /// Colour theme of the app.
@@ -450,6 +470,7 @@ impl Settings {
             }),
             jog_step_mm: self.jog.step_mm,
             jog_speed_mm_min: self.jog.speed_mm_min,
+            accept_broken_ok: m.accept_broken_ok,
             last_known_version: None,
             last_known_settings: None,
         }
@@ -527,6 +548,14 @@ fn migrate(table: &mut toml::Table, from: u32) {
             m.insert("streaming_mode".into(), v);
         }
     }
+    if from < 2 {
+        // version 1: agents could be allowed `laser` actions; they never are now
+        if let Some(toml::Value::Table(a)) = table.get_mut("automation")
+            && let Some(toml::Value::Table(m)) = a.get_mut("mcp")
+        {
+            m.remove("allow_laser");
+        }
+    }
     table.insert("version".into(), toml::Value::Integer(i64::from(VERSION)));
 }
 
@@ -575,7 +604,7 @@ mod tests {
     fn defaults_round_trip() {
         let s = Settings::default();
         let text = s.to_toml().unwrap();
-        assert!(text.contains("version = 1"));
+        assert!(text.contains("version = 2"));
         assert_eq!(Settings::from_toml(&text).unwrap(), s);
         assert_eq!(Settings::from_toml("").unwrap().version, VERSION);
     }
@@ -586,6 +615,32 @@ mod tests {
         assert_eq!(s.machine.baud, 250_000);
         assert!(s.machine.reset_on_connect);
         assert!(!s.automation.mcp.enabled);
+        assert!(s.automation.grants.is_empty());
+    }
+
+    #[test]
+    fn grants_round_trip() {
+        let mut s = Settings::default();
+        s.automation.grants = vec![
+            Grant {
+                caller: CallerKind::Agent,
+                name: "claude".into(),
+                code_hash: None,
+                tier: Tier::Machine,
+            },
+            Grant {
+                caller: CallerKind::Macro,
+                name: "frame.js".into(),
+                code_hash: Some("abc".into()),
+                tier: Tier::Machine,
+            },
+        ];
+        let text = s.to_toml().unwrap();
+        assert!(text.contains("[[automation.grants]]"), "{text}");
+        assert_eq!(Settings::from_toml(&text).unwrap(), s);
+        let mut t = Settings::default();
+        t.set("automation.grants", serde_json::json!([]), true).unwrap();
+        assert!(t.set("automation.grants", serde_json::json!([]), false).is_err());
     }
 
     #[test]
@@ -652,7 +707,20 @@ mod tests {
     fn migration_from_version_0() {
         let s = Settings::from_toml("[machine]\nstreaming = \"Synchronous\"\n").unwrap();
         assert_eq!(s.machine.streaming_mode, Streaming::Synchronous);
-        assert_eq!(s.version, 1);
+        assert_eq!(s.version, VERSION);
+    }
+
+    #[test]
+    fn migration_from_version_1() {
+        let s = Settings::from_toml(
+            "version = 1\n[automation.mcp]\nenabled = true\nallow_machine = true\nallow_laser = true\n",
+        )
+        .unwrap();
+        assert!(s.automation.mcp.enabled && s.automation.mcp.allow_machine);
+        assert_eq!(s.version, VERSION);
+        assert!(!s.to_toml().unwrap().contains("allow_laser"));
+        // without an [automation] table
+        assert_eq!(Settings::from_toml("version = 1").unwrap().version, VERSION);
     }
 
     #[test]
@@ -715,8 +783,11 @@ mod tests {
         s.machine.firmware = Firmware::Marlin;
         s.jog.step_mm = 2.5;
         s.jog.speed_mm_min = 1200.0;
+        assert!(s.host_options().accept_broken_ok);
+        s.machine.accept_broken_ok = false;
         let o = s.host_options();
         assert_eq!((o.jog_step_mm, o.jog_speed_mm_min), (2.5, 1200.0));
+        assert!(!o.accept_broken_ok);
         assert_eq!(
             o.auto_cooling,
             Some(AutoCooling {

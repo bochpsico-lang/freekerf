@@ -20,6 +20,19 @@ tests and divergences from LaserGRBL. The action catalogue is generated.
 | [cli.md](cli.md) | the `freekerf` command line | M1 |
 | [host-protocol.md](host-protocol.md) | `freekerf host --stdio` (JSON Lines) | M1 |
 | [actions.md](actions.md) | the action registry (generated) | M1 |
+| [projects.md](projects.md) | the document model and the `.fkproj` file | M2 |
+| [planner.md](planner.md) | document → G-code: layer order, fillings, the G-code writer | M2 |
+| [test-patterns.md](test-patterns.md) | cutting, power/speed and shake tests, Hershey text | M2 |
+| [svg-import.md](svg-import.md) | SVG files: colour layers, shapes, transforms, curves | M2 |
+| [dxf-import.md](dxf-import.md) | DXF files: lines, true arcs, splines, blocks, colours | M2 |
+| [raster.md](raster.md) | bitmaps: image operations, dithering, Line2Line | M2 |
+| [vectorize.md](vectorize.md) | Potrace vectorize (outlines, fillings) and centerline (autotrace) | M2 |
+| [session.md](session.md) | the session: document, selection, view, undo, transactions, events | M2 |
+| [mcp.md](mcp.md) | AI agents: `freekerf mcp`, tools, resources, tiers, safety | M2 |
+| [ipc.md](ipc.md) | the local endpoint: single instance, token, protocol | M2 |
+| [scripting.md](scripting.md) | JavaScript scripts: the generated `app` API, transactions, dry run, limits, `freekerf run` | M2 |
+| [materials.md](materials.md) | the material library: packages, search, recipes on layers | M2 |
+| [migration.md](migration.md) | LaserGRBL migration: settings, laser counters, materials | M2 |
 | [shell.md](shell.md) | app shell: view state, layouts, STOP, dialogs, keyboard, dispatch-only | M4a |
 | [fire-confirmation.md](fire-confirmation.md) | the human confirmation before any laser action | M4a |
 | [produce-mode.md](produce-mode.md) | machine panel, jog, frame, overrides, console, recovery | M4a |

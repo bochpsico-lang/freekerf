@@ -28,7 +28,7 @@
         data-panel={p}
         aria-selected={view.panel === p}
         title={t(`panel-${p}`)}
-        onclick={() => run(() => service.dispatch('view.show_panel', { panel: p }))}
+        onclick={() => run(() => service.dispatch('view.open_panel', { name: p }))}
       >
         <Icon name={icon} /><span>{t(`panel-${p}`)}</span>
       </button>
@@ -37,7 +37,7 @@
       class="icon-btn dock-close"
       title={t('panel-close')}
       aria-label={t('panel-close')}
-      onclick={() => run(() => service.dispatch('view.set_drawer', { open: false }))}
+      onclick={() => run(() => service.dispatch('view.close_panel', { name: view.panel }))}
     >
       <Icon name="close" />
     </button>
