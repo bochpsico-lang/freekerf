@@ -6,7 +6,7 @@ on a local endpoint for `freekerf mcp`, the Python client and tests (`freekerf-i
 
 | | Linux / macOS | Windows |
 | --- | --- | --- |
-| endpoint | Unix socket `<runtime>/ipc/ipc.sock`, directory `0700`, socket `0600` | named pipe `\\.\pipe\freekerf-<hash>`, owner and system only |
+| endpoint | Unix socket `<runtime>/ipc/ipc.sock` in a `0700` directory (the socket itself `0600` on Linux) | named pipe `\\.\pipe\freekerf-<hash>`, owner and system only |
 | token | `<runtime>/ipc/ipc.token`, `0600` | `<runtime>\ipc\ipc.token` |
 
 `<runtime>` is `$XDG_RUNTIME_DIR/freekerf` on Linux, the data directory elsewhere, or

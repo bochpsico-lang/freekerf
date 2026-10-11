@@ -1,6 +1,6 @@
 //! The local endpoint of a running FreeKerf (PLAN §9.1): one instance per user,
 //! reached through a Unix domain socket (`$XDG_RUNTIME_DIR/freekerf/ipc/ipc.sock`,
-//! directory `0700`, socket `0600`) or a Windows named pipe restricted to its owner,
+//! directory `0700`, socket `0600` on Linux) or a Windows named pipe restricted to its owner,
 //! with a per-run **token** in a user-only file next to it. `freekerf mcp`, the
 //! Python client and tests use it.
 //!
@@ -249,7 +249,9 @@ impl Server {
             }
         }
         let options = ListenerOptions::new().name(endpoint.socket_name()?);
-        #[cfg(unix)]
+        // the socket's own mode where supported (Linux); elsewhere on Unix the
+        // `0700` directory alone keeps other users out
+        #[cfg(target_os = "linux")]
         let options = {
             use interprocess::os::unix::local_socket::ListenerOptionsExt;
             options.mode(0o600)

@@ -17,8 +17,8 @@ connects and what it may do, and which MCP implementation to use.
   instance through the **local endpoint** (`freekerf-ipc`), attaching to the
   running instance or starting `freekerf serve --headless` (which exits when idle).
   Agents see the same session the user sees.
-- **Local endpoint.** A Unix domain socket in a `0700` directory with mode `0600`
-  (`$XDG_RUNTIME_DIR/freekerf/ipc/` on Linux), or a Windows named pipe whose DACL
+- **Local endpoint.** A Unix domain socket in a `0700` directory (`$XDG_RUNTIME_DIR/freekerf/ipc/`
+  on Linux, where the socket is also `0600`), or a Windows named pipe whose DACL
   allows only its owner and the system. One instance per user: binding fails while
   another instance accepts; a socket nobody accepts is stale and replaced.
 - **Token.** Each run of the app writes a random 256-bit token to a user-only file
