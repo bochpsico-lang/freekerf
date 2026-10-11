@@ -2,9 +2,25 @@
 
 Free software for designing jobs and driving laser machines (Grbl, grblHAL, Smoothie, Marlin…), written in Rust, cross-platform, for mouse, keyboard and touch. Successor of [LaserGRBL](https://github.com/arkypita/LaserGRBL).
 
-> **Status: headless core (milestones M0 and M1).** The machine core and the `freekerf` command line work: G-code analysis, streaming to Grbl/grblHAL, Smoothie, Marlin and VigoWork boards, jog, overrides, jobs with passes and resume, a built-in emulator. They pass the protocol and G-code golden layers of the [conformance](https://github.com/freekerf/conformance) suite. The desktop app comes with M4 (M4a: shell and Produce mode; M4b: Design mode on top of M2). The plan is in **[PLAN.md](PLAN.md)**; how to work on the code is in **[AGENTS.md](AGENTS.md)**.
+> **Status: desktop MVP (milestones M0 to M4b).** The desktop app designs and runs jobs: import SVG, DXF and images, shapes, text, booleans, arrays, colour layers with cut and raster settings, material test, preview and time estimate; connect to Grbl/grblHAL, Smoothie, Marlin and VigoWork boards (or the built-in emulator), jog, frame, run, pause, overrides, job recovery, STOP always visible, a fire confirmation before the laser turns on; LaserGRBL settings and custom buttons are migrated on first start; scripts and AI agents (MCP) drive the same actions. There are no installers yet (M5): build it from source. The plan is in **[PLAN.md](PLAN.md)**; how to work on the code is in **[AGENTS.md](AGENTS.md)**.
 
 ## Try it
+
+The desktop app needs Rust ≥ 1.90 and Node.js 24 (the version CI uses); on Linux also WebKitGTK 4.1
+(Debian/Ubuntu: `sudo apt install libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev`).
+
+```bash
+cd ui/web && npm ci && npm run build && cd ../..                       # the front end, into ui/web/dist
+cargo run --release -p freekerf-desktop --features custom-protocol      # the app, with the front end embedded
+```
+
+Without `--features custom-protocol` the app loads the front end from the Vite dev
+server (`npm run dev` in `ui/web`, for development) and shows an empty window when it
+is not running. Opening `http://localhost:5173` in a browser is not the app either: the
+page needs the desktop shell, and `dev.html` there is the UI on a fake service.
+To try it without a machine, connect to **FreeKerf emulator (no machine)**.
+
+The command line:
 
 ```bash
 cargo run -p freekerf-cli -- analyze job.nc                 # time, ranges, quadrant
