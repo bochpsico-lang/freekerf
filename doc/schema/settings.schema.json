@@ -15,6 +15,14 @@
         }
       }
     },
+    "buttons": {
+      "description": "Custom buttons of the machine panel (added in M4a; none by default).",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CustomButton"
+      }
+    },
     "job": {
       "description": "Job custom code.",
       "$ref": "#/$defs/JobSettings",
@@ -52,12 +60,20 @@
         "support_pwm": true
       }
     },
+    "safety": {
+      "description": "Safety (user-only; added in M4a).",
+      "$ref": "#/$defs/SafetySettings",
+      "default": {
+        "fire_countdown_s": 3
+      }
+    },
     "ui": {
       "description": "Appearance of the desktop app (added in M4a; files without it get the defaults).",
       "$ref": "#/$defs/UiSettings",
       "default": {
         "density": "auto",
         "high_contrast": false,
+        "language": "auto",
         "theme": "dark",
         "units": "mm"
       }
@@ -110,6 +126,31 @@
             "allow_machine": false,
             "enabled": false
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "CustomButton": {
+      "description": "A custom button of the machine panel: G-code (custom code with `[expr]`) run on\na click. Running it can turn the laser on, so it goes through the fire\nconfirmation (`machine.custom_code`, tier `laser`).",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "Custom code (`[expr]` allowed; `!`, `~`, `?`, `ctrl-x`, `0xNN` sent at once).",
+          "type": "string",
+          "default": ""
+        },
+        "icon": {
+          "description": "Icon name of the design system (`target`, `air`...), optional.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "label": {
+          "description": "Label.",
+          "type": "string",
+          "default": ""
         }
       },
       "additionalProperties": false
@@ -290,6 +331,20 @@
       },
       "additionalProperties": false
     },
+    "SafetySettings": {
+      "description": "Safety settings: user-only, like automation (actions, scripts and agents cannot\nchange them).",
+      "type": "object",
+      "properties": {
+        "fire_countdown_s": {
+          "description": "Seconds before \"Fire laser\" can be pressed (1-10, default 3).",
+          "type": "integer",
+          "format": "uint64",
+          "default": 3,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
     "Streaming": {
       "description": "Streaming mode.",
       "oneOf": [
@@ -338,6 +393,11 @@
           "description": "High contrast (on top of the theme).",
           "type": "boolean",
           "default": false
+        },
+        "language": {
+          "description": "Language: `auto` (the system's) or a locale of `ui/i18n` (`en`, `pt-BR`, `de`...).",
+          "type": "string",
+          "default": "auto"
         },
         "theme": {
           "description": "Theme.",

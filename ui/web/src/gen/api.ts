@@ -73,6 +73,20 @@ export type ConsoleRow = {
   };
 };
 
+/**
+ * A custom button of the machine panel: G-code (custom code with `[expr]`) run on
+ * a click. Running it can turn the laser on, so it goes through the fire
+ * confirmation (`machine.custom_code`, tier `laser`).
+ */
+export type CustomButton = {
+  /** Custom code (`[expr]` allowed; `!`, `~`, `?`, `ctrl-x`, `0xNN` sent at once). */
+  code?: string;
+  /** Icon name of the design system (`target`, `air`...), optional. */
+  icon?: string | null;
+  /** Label. */
+  label?: string;
+};
+
 /** `machine.custom_code`. */
 export type CustomCodeParams = {
   /** Lines of custom code (`[expr]`, `!`, `~`, `?`, `ctrl-x`, `0xNN` allowed). */
@@ -149,6 +163,50 @@ export type Event = {
   LoopCountChanged: number;
 };
 
+/** `fire.cancel`. */
+export type FireCancelParams = {
+  /** The request; the pending one when absent. */
+  id?: number | null;
+};
+
+/** A laser action waiting for the person's confirmation. */
+export type FireRequest = {
+  /** The action (`job.run`, `job.resume`, `machine.send`, `machine.custom_code`). */
+  action: string;
+  /** Countdown before it can be confirmed, ms. */
+  countdown_ms: number;
+  /** Id (increasing). */
+  id: number;
+  /** Its parameters. */
+  params: unknown;
+  /** Who asked (`desktop`, an agent's name...). */
+  requested_by: string;
+  /** What it will do. */
+  summary: FireSummary;
+};
+
+/** `fire.request`. */
+export type FireRequestParams = {
+  /** An action of tier `laser` (`job.run`, `job.resume`, `machine.send`, `machine.custom_code`). */
+  action: string;
+  /** Its parameters. */
+  params?: unknown;
+};
+
+/** What the dialog shows about the job. */
+export type FireSummary = {
+  /** `[xmin, ymin, xmax, ymax]` where the laser burns, mm. */
+  bounds?: [number, number, number, number] | null;
+  /** For single lines and custom code: the text that will be sent. */
+  code?: string | null;
+  /** Estimated time, ms. */
+  estimated_ms?: number | null;
+  /** Commands of the program. */
+  lines?: number | null;
+  /** Program name, if a program is involved. */
+  program?: string | null;
+};
+
 /** Firmware family. */
 export type Firmware = "Grbl" | "Smoothie" | "Marlin" | "VigoWork";
 
@@ -175,6 +233,12 @@ export type FirmwareVersion = {
 export type FocusParams = {
   /** Element with the focus (`canvas`, `console`...), none when absent. */
   target?: string | null;
+};
+
+/** `job.frame`. */
+export type FrameParams = {
+  /** Feed in mm/min (default: the jog setting). */
+  feed_mm_min?: number | null;
 };
 
 /** State of the host for front ends. */
@@ -289,6 +353,36 @@ export type JogToParams = {
   y: number;
 };
 
+/** Usage of one laser module. */
+export type LaserLifeCounter = {
+  /** Brand. */
+  brand: string;
+  /** Emission time per 10 % power class (1-10 %, ..., 91-100 %), ms. */
+  classes_ms: number[];
+  /** Date the module died (no longer selected automatically). */
+  death_date?: string | null;
+  /** Unique id. */
+  id: string;
+  /** Last day it was used. */
+  last_usage?: string | null;
+  /** Model. */
+  model: string;
+  /** Date monitoring started. */
+  monitoring_date?: string | null;
+  /** Name given by the user (`Default` for the first one). */
+  name: string;
+  /** Emission time with power above 3 %, ms. */
+  non_zero_ms: number;
+  /** Emission time weighted by power, ms. */
+  normalized_power_ms: number;
+  /** Optical power in watts. */
+  optical_power_w?: number | null;
+  /** Purchase date (`YYYY-MM-DD`). */
+  purchase_date?: string | null;
+  /** Time in `Run`, ms. */
+  run_ms: number;
+};
+
 /** `job.load`. */
 export type LoadParams = {
   /** Path of a G-code file. */
@@ -301,6 +395,26 @@ export type LoadTextParams = {
   gcode: string;
   /** Name shown for the program. */
   name: string;
+};
+
+/** Result of `machine.info`: what the board told about itself. */
+export type MachineInfo = {
+  /** Homing enabled (`$22`). */
+  homing_enabled: boolean;
+  /** Index of the module in use, if known. */
+  laser_in_use?: number | null;
+  /** Laser module life counters. */
+  laser_life: LaserLifeCounter[];
+  /** Laser mode (`$32`). */
+  laser_mode: boolean;
+  /** Highest S (`$30`). */
+  max_power: number;
+  /** The `$$` table was read. */
+  settings_known: boolean;
+  /** Work area height (`$131`), mm. */
+  table_height_mm: number;
+  /** Work area width (`$130`), mm. */
+  table_width_mm: number;
 };
 
 /** How to reach the machine and how to talk to it. */
@@ -435,6 +549,15 @@ export type RunParams = {
   passes?: number | null;
 };
 
+/**
+ * Safety settings: user-only, like automation (actions, scripts and agents cannot
+ * change them).
+ */
+export type SafetySettings = {
+  /** Seconds before "Fire laser" can be pressed (1-10, default 3). */
+  fire_countdown_s?: number;
+};
+
 /** `machine.select_laser`. */
 export type SelectLaserParams = {
   /** Id of the laser life counter. */
@@ -457,6 +580,12 @@ export type SetDrawerParams = {
 export type SetModeParams = {
   /** `design` or `produce`. */
   mode: Mode;
+};
+
+/** `view.set_tool`. */
+export type SetToolParams = {
+  /** `select`, `rect`, `ellipse` or `text`. */
+  tool: Tool;
 };
 
 /** `settings.get`. */
@@ -496,6 +625,15 @@ export type State = {
 /** Streaming mode. */
 export type Streaming = "Buffered" | "Synchronous" | "RepeatOnError";
 
+/** `machine.system_command`. */
+export type SystemCommandParams = {
+  /**
+   * A `$` command (`$$`, `$I`, `$H`, `$X`, `$#`, `$G`, `$N=V`, `$J=...`): never turns
+   * the laser on. Other G-code goes through `machine.send` (tier `laser`).
+   */
+  line: string;
+};
+
 /** The kind of a system operation. */
 export type SystemOpKind = "ReadSettings" | "ReadInfo" | "WriteSettings" | "WriteWifi";
 
@@ -530,12 +668,17 @@ export type ToastParams = {
   message: string;
 };
 
+/** Active tool of the Design mode (`design/interaction.md` §2). */
+export type Tool = "select" | "rect" | "ellipse" | "text";
+
 /** Appearance of the desktop app. */
 export type UiSettings = {
   /** Density of the controls. */
   density?: Density;
   /** High contrast (on top of the theme). */
   high_contrast?: boolean;
+  /** Language: `auto` (the system's) or a locale of `ui/i18n` (`en`, `pt-BR`, `de`...). */
+  language?: string;
   /** Theme. */
   theme?: Theme;
   /** Units shown. */
@@ -551,6 +694,11 @@ export type ViewState = {
   dialogs: Dialog[];
   /** The panel drawer is open (medium layout). */
   drawer_open: boolean;
+  /**
+   * The laser action waiting for the person's confirmation, if any (the fire
+   * confirmation dialog is open while it is set).
+   */
+  fire_request?: FireRequest | null;
   /** Increased by `view.fit`: the UI fits the work area when it changes. */
   fit_request: number;
   /** Element with the keyboard focus (`canvas`, `console`... free text), if known. */
@@ -561,6 +709,8 @@ export type ViewState = {
   panel: Panel;
   /** Toasts, oldest first (at most [`MAX_TOASTS`]). */
   toasts: Toast[];
+  /** Active tool of the Design mode. */
+  tool: Tool;
   /** Viewport, once the UI or a caller set it. */
   viewport?: Viewport | null;
 };
@@ -654,12 +804,16 @@ export type EventMessage = {
 export type Settings = {
   /** Automation (user-only). */
   automation?: AutomationSettings;
+  /** Custom buttons of the machine panel (added in M4a; none by default). */
+  buttons?: CustomButton[];
   /** Job custom code. */
   job?: JobSettings;
   /** Jog. */
   jog?: JogSettings;
   /** Machine connection. */
   machine?: MachineSettings;
+  /** Safety (user-only; added in M4a). */
+  safety?: SafetySettings;
   /** Appearance of the desktop app (added in M4a; files without it get the defaults). */
   ui?: UiSettings;
   /** Format version. */
@@ -674,11 +828,29 @@ export interface Actions {
     result: ConsoleRow[];
     tier: "read";
   };
+  /** Cancels the pending laser request (the one given, or any). Always allowed. */
+  "fire.cancel": {
+    params: FireCancelParams;
+    result: null;
+    tier: "safety";
+  };
+  /** Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request. */
+  "fire.request": {
+    params: FireRequestParams;
+    result: FireRequest;
+    tier: "machine";
+  };
   /** Stops streaming the job and sends `M5` (lines already in the board still run; use machine.stop to stop at once). Always allowed. */
   "job.abort": {
     params: NoParams;
     result: null;
     tier: "safety";
+  };
+  /** Runs the head around the bounds of the loaded program with the laser off (jog moves). */
+  "job.frame": {
+    params: FrameParams;
+    result: null;
+    tier: "machine";
   };
   /** The loaded program (name, lines, estimated time, range). */
   "job.info": {
@@ -739,6 +911,12 @@ export interface Actions {
     params: NoParams;
     result: null;
     tier: "machine";
+  };
+  /** Work area, laser mode, highest power and laser module counters, from the board settings. */
+  "machine.info": {
+    params: NoParams;
+    result: MachineInfo;
+    tier: "read";
   };
   /** Jogs one step in a direction (laser off). */
   "machine.jog": {
@@ -811,6 +989,12 @@ export interface Actions {
     params: NoParams;
     result: null;
     tier: "safety";
+  };
+  /** Sends a `$` command (`$$`, `$I`, `$H`, `$X`, `$N=V`, `$J=...`; not during a job). It cannot turn the laser on. */
+  "machine.system_command": {
+    params: SystemCommandParams;
+    result: null;
+    tier: "machine";
   };
   /** Unlocks the alarm state (`$X`). */
   "machine.unlock": {
@@ -890,6 +1074,12 @@ export interface Actions {
     result: null;
     tier: "ui";
   };
+  /** Chooses the Design mode tool (select, rectangle, ellipse, text). */
+  "view.set_tool": {
+    params: SetToolParams;
+    result: null;
+    tier: "ui";
+  };
   /** Shows the table around a point at a zoom (CSS pixels per mm). */
   "view.set_viewport": {
     params: Viewport;
@@ -916,7 +1106,10 @@ export type ActionName = keyof Actions;
 /** Tier of each action, for the front end (the Rust side checks it again). */
 export const ACTION_TIERS = {
   "console.get": "read",
+  "fire.cancel": "safety",
+  "fire.request": "machine",
   "job.abort": "safety",
+  "job.frame": "machine",
   "job.info": "read",
   "job.load": "edit",
   "job.load_text": "edit",
@@ -927,6 +1120,7 @@ export const ACTION_TIERS = {
   "machine.disconnect": "machine",
   "machine.feed_hold": "safety",
   "machine.home": "machine",
+  "machine.info": "read",
   "machine.jog": "machine",
   "machine.jog_stop": "safety",
   "machine.jog_to": "machine",
@@ -939,6 +1133,7 @@ export const ACTION_TIERS = {
   "machine.send": "laser",
   "machine.set_zero": "machine",
   "machine.stop": "safety",
+  "machine.system_command": "machine",
   "machine.unlock": "machine",
   "machine.write_settings": "machine",
   "settings.get": "read",
@@ -952,6 +1147,7 @@ export const ACTION_TIERS = {
   "view.open_dialog": "ui",
   "view.set_drawer": "ui",
   "view.set_mode": "ui",
+  "view.set_tool": "ui",
   "view.set_viewport": "ui",
   "view.show_panel": "ui",
   "view.toast": "ui",

@@ -22,7 +22,7 @@ describe('App shell', () => {
 
   it('connects to the emulator from the machine panel', async () => {
     const { service, props } = await mountApp();
-    await fireEvent.click(screen.getByTestId('connect-emulator'));
+    await fireEvent.click(screen.getByTestId('connect'));
     await props.machine.refresh();
     await waitFor(() => expect(screen.getByTestId('state-chip').textContent).toContain('Ready'));
     expect(service.calls.some((c) => c.action === 'machine.connect')).toBe(true);
@@ -85,7 +85,7 @@ describe('App shell', () => {
       throw new Error('no emulator');
     });
     await mountApp(service);
-    await fireEvent.click(screen.getByTestId('connect-emulator'));
+    await fireEvent.click(screen.getByTestId('connect'));
     await waitFor(() => expect(screen.getByTestId('toasts').textContent).toContain('no emulator'));
   });
 
@@ -110,5 +110,28 @@ describe('layouts', () => {
     expect(document.documentElement.dataset.mode).toBe('produce');
     expect(screen.getByTestId('bottombar').querySelector('[data-testid="estop"]')).toBeTruthy();
     window.innerWidth = 1300;
+  });
+});
+
+describe('settings dialog', () => {
+  it('changes the language through settings.set and shows user-only settings read-only', async () => {
+    const { service } = await mountApp();
+    await service.dispatch('view.open_dialog', { dialog: 'settings' });
+    await screen.findByTestId('dialog-settings');
+    await fireEvent.change(screen.getByTestId('language'), { target: { value: 'pt-BR' } });
+    await waitFor(() => expect(document.documentElement.lang).toBe('pt-BR'));
+    expect(service.settings.ui?.language).toBe('pt-BR');
+    expect(screen.getByTestId('state-chip').textContent).toContain('Desconectada');
+    await fireEvent.click(screen.getByTestId('settings-tab-safety'));
+    expect(screen.getByTestId('settings-safety').querySelector('input')).toBeNull();
+    await fireEvent.click(screen.getByTestId('settings-tab-automation'));
+    expect(screen.getByTestId('settings-automation').querySelector('input')).toBeNull();
+    await fireEvent.click(screen.getByTestId('settings-tab-machine'));
+    await fireEvent.change(screen.getByLabelText('Velocidade (baud)'), { target: { value: '250000' } });
+    expect(
+      service.calls.find(
+        (c) => c.action === 'settings.set' && (c.params as { key: string }).key === 'machine.baud',
+      )?.params,
+    ).toEqual({ key: 'machine.baud', value: 250000 });
   });
 });

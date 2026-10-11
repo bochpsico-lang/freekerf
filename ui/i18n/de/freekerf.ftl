@@ -116,6 +116,17 @@ obj-contrast = Kontrast
 obj-dither = Rasterung
 
 ## machine
+machine-emulator = FreeKerf-Emulator (ohne Maschine)
+machine-refreshPorts = Erneut nach Anschlüssen suchen
+machine-openGcode = G-Code öffnen…
+machine-noProgram = Kein Programm geladen
+machine-lines = Zeilen
+machine-overrides = Echtzeitanpassungen
+machine-ovFeed = Geschwindigkeit
+machine-ovPower = Leistung
+machine-ovRapid = Eilgangbewegungen
+machine-noButtons = Noch keine benutzerdefinierten Schaltflächen.
+machine-laserLife = Nutzung des Lasermoduls
 machine-connection = Verbindung
 machine-port = Anschluss
 machine-connect = Verbinden
@@ -182,6 +193,8 @@ disc-title = Verbindung unterbrochen
 disc-body = Die Maschine reagiert seit Zeile { $n } nicht mehr. Die Steuerung hat den Laser abgeschaltet.
 
 ## recover
+recover-restoreWco = Werkstücknullpunkt des Auftrags wiederherstellen
+recover-nothing = Kein unterbrochener Auftrag.
 recover-open = Auftrag wiederherstellen…
 recover-title = Auftrag wiederherstellen
 recover-cause = Ursache
@@ -208,6 +221,35 @@ toast-homed = Referenzfahrt abgeschlossen.
 toast-origin = Werkstücknullpunkt hier gesetzt.
 
 ## settings
+settings-tab-display = Anzeige
+settings-tab-machine = Maschine
+settings-tab-job = Auftragscode
+settings-tab-safety = Sicherheit
+settings-tab-automation = Automatisierung
+settings-langAuto = Automatisch (Systemsprache)
+settings-firmware = Firmware
+settings-baud = Übertragungsgeschwindigkeit (Baud)
+settings-streaming = Übertragungsmodus
+settings-streaming-Buffered = Gepuffert (schnell)
+settings-streaming-Synchronous = Synchron (sicher)
+settings-streaming-RepeatOnError = Bei Fehler wiederholen
+settings-statusMs = Statusabfrage alle (ms)
+settings-resetOnConnect = Steuerung beim Verbinden zurücksetzen
+settings-supportPwm = Hardware-PWM
+settings-autoCooling = Automatische Abkühlpausen
+settings-jogSpeed = Verfahrgeschwindigkeit (mm/min)
+settings-header = Kopfzeilen-Code
+settings-passes = Zwischen den Durchgängen
+settings-footer = Fußzeilen-Code
+settings-jobHint = G-Code, der vor dem Auftrag, zwischen den Durchgängen und danach gesendet wird. [expr] wird ausgewertet; !, ~, ?, ctrl-x und 0xNN werden sofort gesendet.
+settings-countdown = Countdown vor „Laser auslösen“
+settings-userOnly = Nur Sie können das ändern, mit `freekerf config set` (Skripte und Agenten nicht).
+settings-mcp = KI-Agenten (MCP-Server)
+settings-mcpMachine = Agenten dürfen die Maschine bewegen
+settings-mcpLaser = Agenten dürfen das Auslösen des Lasers anfordern
+settings-on = Ein
+settings-off = Aus
+settings-automationNote = Standardmäßig aus. Auch wenn erlaubt, feuert der Laser erst, nachdem Sie auf diesem Bildschirm bestätigt haben.
 settings-title = Darstellung und Eingabe
 settings-theme = Farbschema
 
@@ -301,6 +343,7 @@ estop-title = Stopp ausgelöst
 estop-body = Laser aus und Steuerung in Zeile { $n } zurückgesetzt. Die Position kann verloren sein: vor dem Fortsetzen eine Referenzfahrt durchführen.
 
 ## cause
+cause-other = unterbrochen
 cause-alarm = Alarm der Steuerung
 cause-disc = Verbindung unterbrochen
 cause-estop = manueller Stopp (STOPP)
@@ -340,3 +383,23 @@ kb-pause = Pausieren / Fortsetzen
 kb-frame = Umriss abfahren
 kb-hold = Laufenden Auftrag pausieren
 kb-estop = STOPP (funktioniert überall)
+
+## design (M4a, on the UI contract)
+layers-mode-fill_and_line = Füllen und Kontur
+layers-mode-cut = Schneiden
+import-title = Importieren
+import-file = Datei (SVG, DXF oder Bild)
+import-colors = Farben der Datei
+import-colors-keep = Farben behalten: eine Ebene pro Farbe
+import-colors-unify = Alles auf die aktuelle Ebene legen
+import-go = Importieren
+import-done = { $objects } Objekte importiert ({ $layers } neue Ebenen).
+welcome-migrateSub = Verbindung, benutzerdefinierte Schaltflächen, Materialien und Zähler
+migrate-none = Auf diesem Computer wurde keine LaserGRBL-Installation gefunden.
+migrate-connection = Verbindung: Anschluss, Baudrate, Firmware und Streaming-Modus
+migrate-buttons = { $n } benutzerdefinierte Schaltflächen
+migrate-materials = { $n } Materialien der Leistungs- und Geschwindigkeitsbibliothek
+migrate-counters = Nutzungszähler von { $n } Lasermodulen
+migrate-shortcuts = Tastenkürzel
+migrate-preferences = Importeinstellungen
+migrate-language = Sprache

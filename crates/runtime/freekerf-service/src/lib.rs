@@ -15,11 +15,13 @@ use std::time::{Duration, Instant};
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use freekerf_gcode::{AnalysisOptions, Program};
 use freekerf_machine::{Machine, MachineEvent, SystemClock};
+use freekerf_protocol::Clock;
 use freekerf_protocol::host::decimal;
 use freekerf_protocol::{
     ConsoleRow, Event, FirmwareKind, Host, HostError, HostSnapshot, Issue, JogDirection, ResumeSuggestion,
 };
-use freekerf_session::view::{Dialog, Mode, Panel, ToastLevel, ViewCommand, ViewState, Viewport};
+use freekerf_session::fire::{FireGate, FireRequest, FireSummary};
+use freekerf_session::view::{Dialog, Mode, Panel, ToastLevel, Tool, ViewCommand, ViewState, Viewport};
 use freekerf_session::{NoParams, Registry};
 use freekerf_settings::{MachineCache, Settings, SettingsStore};
 use freekerf_transport::{EmulatorTransport, SerialTransport, Transport};
@@ -46,7 +48,7 @@ pub enum ServiceEvent {
     /// A program was loaded.
     ProgramLoaded,
     /// The view state changed (`view.*` actions).
-    ViewChanged(ViewState),
+    ViewChanged(Box<ViewState>),
 }
 
 /// A [`ServiceEvent`] as front ends receive it (JSON, tagged by `event`).
@@ -75,7 +77,7 @@ pub enum EventMessage {
     /// The view state changed.
     View {
         /// The new view state.
-        view: ViewState,
+        view: Box<ViewState>,
     },
 }
 
@@ -233,6 +235,8 @@ pub struct Inner {
     stores: Stores,
     loaded: Mutex<Option<Loaded>>,
     view: Mutex<ViewState>,
+    fire: Mutex<FireGate>,
+    fire_clock: Mutex<Arc<dyn Clock>>,
     console: Arc<Mutex<VecDeque<ConsoleRow>>>,
     issues: Arc<Mutex<Vec<Issue>>>,
     subscribers: Arc<Mutex<Vec<Sender<ServiceEvent>>>>,
@@ -303,6 +307,8 @@ impl Service {
             stores,
             loaded: Mutex::new(None),
             view: Mutex::new(ViewState::default()),
+            fire: Mutex::new(FireGate::default()),
+            fire_clock: Mutex::new(Arc::new(SystemClock::default())),
             console: Arc::new(Mutex::new(VecDeque::new())),
             issues: Arc::new(Mutex::new(Vec::new())),
             subscribers: Arc::new(Mutex::new(Vec::new())),
@@ -370,6 +376,31 @@ impl Service {
         })))
     }
 
+    /// Runs the pending laser request `id` after the person confirmed it on screen
+    /// (PLAN §9.5). Not an action of the registry on purpose: scripts and agents can
+    /// ask for a laser action (`fire.request`) but never confirm one. Only a front
+    /// end with a person in front of it calls this (the desktop window's
+    /// "Fire laser" button).
+    ///
+    /// # Errors
+    /// No such request, countdown not over, or the action's own error.
+    pub fn confirm_fire(&self, id: u64) -> Result<Value, ActionError> {
+        let now = lock(&self.inner.fire_clock).now_ms();
+        let request = lock(&self.inner.fire)
+            .confirm(id, now)
+            .map_err(|e| ActionError::Refused(e.to_string()))?;
+        // the dialog closes whatever happens next
+        self.inner.view(ViewCommand::SetFireRequest(None))?;
+        tracing::info!(action = %request.action, by = %request.requested_by, "laser action confirmed");
+        self.registry
+            .dispatch(&self.inner, &Caller::user(), &request.action, request.params)
+    }
+
+    /// Replaces the clock of the fire confirmation countdown (tests).
+    pub fn set_fire_clock(&self, clock: Arc<dyn Clock>) {
+        *lock(&self.inner.fire_clock) = clock;
+    }
+
     /// STOP without going through the registry (also bound to Ctrl-C by the CLI).
     pub fn stop(&self) {
         self.inner.machine.stop();
@@ -419,6 +450,26 @@ impl Inner {
         lock(&self.subscribers).retain(|s| s.send(e.clone()).is_ok());
     }
 
+    /// What the fire confirmation shows for a request.
+    fn fire_summary(&self, action: &str, params: &Value) -> FireSummary {
+        let code = params
+            .get("line")
+            .or_else(|| params.get("code"))
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let program = match action {
+            "job.run" | "job.resume" => lock(&self.loaded).as_ref().map(program_info),
+            _ => None,
+        };
+        FireSummary {
+            program: program.as_ref().map(|p| p.name.clone()),
+            lines: program.as_ref().map(|p| p.lines),
+            estimated_ms: program.as_ref().map(|p| p.estimated_ms),
+            bounds: program.and_then(|p| p.drawing_range),
+            code,
+        }
+    }
+
     /// Applies a view command and publishes the new view state when it changed.
     fn view(&self, cmd: ViewCommand) -> Result<Option<u64>, ActionError> {
         let (result, changed) = {
@@ -430,7 +481,7 @@ impl Inner {
             (r, (*v != before).then(|| v.clone()))
         };
         if let Some(v) = changed {
-            self.publish(&ServiceEvent::ViewChanged(v));
+            self.publish(&ServiceEvent::ViewChanged(Box::new(v)));
         }
         Ok(result)
     }
@@ -674,12 +725,77 @@ pub struct ConsoleParams {
     pub last: Option<usize>,
 }
 
+/// `machine.system_command`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SystemCommandParams {
+    /// A `$` command (`$$`, `$I`, `$H`, `$X`, `$#`, `$G`, `$N=V`, `$J=...`): never turns
+    /// the laser on. Other G-code goes through `machine.send` (tier `laser`).
+    pub line: String,
+}
+
+/// `job.frame`.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrameParams {
+    /// Feed in mm/min (default: the jog setting).
+    pub feed_mm_min: Option<f64>,
+}
+
+/// Result of `machine.info`: what the board told about itself.
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct MachineInfo {
+    /// Work area width (`$130`), mm.
+    pub table_width_mm: f64,
+    /// Work area height (`$131`), mm.
+    pub table_height_mm: f64,
+    /// Laser mode (`$32`).
+    pub laser_mode: bool,
+    /// Highest S (`$30`).
+    pub max_power: f64,
+    /// Homing enabled (`$22`).
+    pub homing_enabled: bool,
+    /// The `$$` table was read.
+    pub settings_known: bool,
+    /// Laser module life counters.
+    pub laser_life: Vec<freekerf_protocol::LaserLifeCounter>,
+    /// Index of the module in use, if known.
+    pub laser_in_use: Option<usize>,
+}
+
+/// `fire.request`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FireRequestParams {
+    /// An action of tier `laser` (`job.run`, `job.resume`, `machine.send`, `machine.custom_code`).
+    pub action: String,
+    /// Its parameters.
+    #[serde(default)]
+    pub params: Value,
+}
+
+/// `fire.cancel`.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FireCancelParams {
+    /// The request; the pending one when absent.
+    pub id: Option<u64>,
+}
+
 /// `view.set_mode`.
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SetModeParams {
     /// `design` or `produce`.
     pub mode: Mode,
+}
+
+/// `view.set_tool`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SetToolParams {
+    /// `select`, `rect`, `ellipse` or `text`.
+    pub tool: Tool,
 }
 
 /// `view.show_panel`.
@@ -1026,6 +1142,41 @@ fn build_registry() -> Registry<Inner> {
         },
     ));
     add(r.register(
+        "machine.system_command",
+        "Sends a `$` command (`$$`, `$I`, `$H`, `$X`, `$N=V`, `$J=...`; not during a job). It cannot turn the laser on.",
+        Tier::Machine,
+        |s: &Inner, p: SystemCommandParams| {
+            let line = p.line.trim().to_owned();
+            if !is_system_command(&line) {
+                return Err(ActionError::InvalidParams(
+                    "only `$` commands; other G-code needs machine.send".into(),
+                ));
+            }
+            s.host_result(move |h, now| h.send_command(&line, now))
+        },
+    ));
+    add(r.register(
+        "machine.info",
+        "Work area, laser mode, highest power and laser module counters, from the board settings.",
+        Tier::Read,
+        |s: &Inner, _: NoParams| {
+            s.host(|h, _| {
+                let st = h.settings();
+                let life = h.laser_life();
+                MachineInfo {
+                    table_width_mm: decimal_to_f64(st.table_width()),
+                    table_height_mm: decimal_to_f64(st.table_height()),
+                    laser_mode: st.laser_mode(),
+                    max_power: decimal_to_f64(st.max_pwm()),
+                    homing_enabled: st.homing_enabled(),
+                    settings_known: !st.is_empty(),
+                    laser_life: life.counters.clone(),
+                    laser_in_use: life.current,
+                }
+            })
+        },
+    ));
+    add(r.register(
         "machine.send",
         "Sends one line of G-code or a `$` command (not during a job). It can turn the laser on.",
         Tier::Laser,
@@ -1077,6 +1228,34 @@ fn build_registry() -> Registry<Inner> {
         |s: &Inner, _: NoParams| Ok(lock(&s.loaded).as_ref().map(program_info)),
     ));
     add(r.register(
+        "job.frame",
+        "Runs the head around the bounds of the loaded program with the laser off (jog moves).",
+        Tier::Machine,
+        |s: &Inner, p: FrameParams| {
+            let range = lock(&s.loaded)
+                .as_ref()
+                .and_then(|l| program_info(l).drawing_range)
+                .ok_or_else(|| ActionError::Refused("no program with a drawing loaded".into()))?;
+            let feed = p
+                .feed_mm_min
+                .unwrap_or_else(|| lock(&s.settings).jog.speed_mm_min);
+            #[allow(clippy::cast_possible_truncation)]
+            let (x0, y0, x1, y1, feed) = (
+                range[0] as f32,
+                range[1] as f32,
+                range[2] as f32,
+                range[3] as f32,
+                feed as f32,
+            );
+            s.host_result(move |h, now| {
+                for (x, y) in [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)] {
+                    h.jog_to(x, y, feed, now)?;
+                }
+                Ok(())
+            })
+        },
+    ));
+    add(r.register(
         "job.run",
         "Runs the loaded program from the start (header, program, footer, passes). Fires the laser.",
         Tier::Laser,
@@ -1101,8 +1280,55 @@ fn build_registry() -> Registry<Inner> {
         |s: &Inner, _: NoParams| s.host_result(Host::abort_program),
     ));
     register_view(&mut r);
+    register_fire(&mut r);
     describe_results(&mut r);
     r
+}
+
+/// `fire.request` and `fire.cancel` (PLAN §9.5). Confirming is
+/// [`Service::confirm_fire`], not an action.
+fn register_fire(r: &mut Registry<Inner>) {
+    let laser: Vec<String> = r
+        .specs()
+        .filter(|s| s.tier == Tier::Laser)
+        .map(|s| s.name.clone())
+        .collect();
+    let add = |result: Result<(), freekerf_session::RegistryError>| {
+        if let Err(e) = result {
+            tracing::error!("action registration: {e}");
+        }
+    };
+    add(r.register(
+        "fire.request",
+        "Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request.",
+        Tier::Machine,
+        move |s: &Inner, p: FireRequestParams| {
+            if !laser.contains(&p.action) {
+                return Err(ActionError::InvalidParams(format!(
+                    "`{}` is not a laser action ({})",
+                    p.action,
+                    laser.join(", ")
+                )));
+            }
+            let summary = s.fire_summary(&p.action, &p.params);
+            let countdown_ms = lock(&s.settings).safety.fire_countdown_s.saturating_mul(1000);
+            let now = lock(&s.fire_clock).now_ms();
+            let request = lock(&s.fire).request(&p.action, p.params, "desktop", summary, countdown_ms, now);
+            s.view(ViewCommand::SetFireRequest(Some(request.clone())))?;
+            Ok(request)
+        },
+    ));
+    add(r.register(
+        "fire.cancel",
+        "Cancels the pending laser request (the one given, or any). Always allowed.",
+        Tier::Safety,
+        |s: &Inner, p: FireCancelParams| {
+            if lock(&s.fire).cancel(p.id) {
+                s.view(ViewCommand::SetFireRequest(None))?;
+            }
+            Ok(())
+        },
+    ));
 }
 
 /// The `view.*` actions (tier `ui`): what the app shows, as data.
@@ -1126,6 +1352,12 @@ fn register_view(r: &mut Registry<Inner>) {
         move |s: &Inner, p: SetModeParams| unit(s, ViewCommand::SetMode(p.mode)),
     ));
     add(r.register(
+        "view.set_tool",
+        "Chooses the Design mode tool (select, rectangle, ellipse, text).",
+        Tier::Ui,
+        move |s: &Inner, p: SetToolParams| unit(s, ViewCommand::SetTool(p.tool)),
+    ));
+    add(r.register(
         "view.show_panel",
         "Shows a panel of the dock (opens the drawer in the medium layout).",
         Tier::Ui,
@@ -1147,7 +1379,15 @@ fn register_view(r: &mut Registry<Inner>) {
         "view.close_dialog",
         "Closes a dialog (the one on top when none is given).",
         Tier::Ui,
-        move |s: &Inner, p: CloseDialogParams| unit(s, ViewCommand::CloseDialog(p.dialog)),
+        move |s: &Inner, p: CloseDialogParams| {
+            let target = p.dialog.or_else(|| lock(&s.view).top_dialog());
+            if target == Some(Dialog::FireConfirmation) {
+                // closing the fire confirmation cancels its request
+                lock(&s.fire).cancel(None);
+                return unit(s, ViewCommand::SetFireRequest(None));
+            }
+            unit(s, ViewCommand::CloseDialog(p.dialog))
+        },
     ));
     add(r.register(
         "view.toast",
@@ -1204,6 +1444,8 @@ fn describe_results(r: &mut Registry<Inner>) {
     add(r.describe_result::<ProgramInfo>("job.load_text"));
     add(r.describe_result::<Option<ProgramInfo>>("job.info"));
     add(r.describe_result::<ViewState>("view.get"));
+    add(r.describe_result::<MachineInfo>("machine.info"));
+    add(r.describe_result::<FireRequest>("fire.request"));
     add(r.describe_result::<u64>("view.toast"));
     for name in [
         "settings.set",
@@ -1223,12 +1465,16 @@ fn describe_results(r: &mut Registry<Inner>) {
         "machine.read_settings",
         "machine.write_settings",
         "machine.send",
+        "machine.system_command",
         "machine.custom_code",
         "machine.select_laser",
+        "job.frame",
+        "fire.cancel",
         "job.run",
         "job.resume",
         "job.abort",
         "view.set_mode",
+        "view.set_tool",
         "view.show_panel",
         "view.set_drawer",
         "view.open_dialog",
@@ -1240,6 +1486,15 @@ fn describe_results(r: &mut Registry<Inner>) {
     ] {
         add(r.describe_result::<()>(name));
     }
+}
+
+/// A `$` command (never turns the laser on).
+fn is_system_command(line: &str) -> bool {
+    line.starts_with('$') && !line.contains(['\n', '\r'])
+}
+
+fn decimal_to_f64(d: freekerf_gcode::Decimal) -> f64 {
+    freekerf_gcode::number::f64_from_decimal(d)
 }
 
 fn load_program(s: &Inner, name: String, bytes: &[u8]) -> Result<ProgramInfo, ActionError> {

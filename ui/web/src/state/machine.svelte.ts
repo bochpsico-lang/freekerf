@@ -2,7 +2,7 @@
 // the service events. Nothing here changes app state; actions go through
 // `service.dispatch`.
 
-import type { EventMessage, MachineStatus, State } from '../gen/api';
+import type { EventMessage, MachineInfo, MachineStatus, State } from '../gen/api';
 import type { AppService } from '../service';
 
 /** The six visual states of `design/ux.md` ("Estados da máquina"). */
@@ -39,6 +39,7 @@ export function visualState(status: MachineStatus | undefined): VisualState {
 export class MachineState {
   #state: State | null = $state(null);
   #visual: VisualState = $derived(visualState(this.#state?.machine.status));
+  #info: MachineInfo | null = $state(null);
   private pending: Promise<void> | null = null;
 
   constructor(private readonly service: AppService) {
@@ -48,6 +49,16 @@ export class MachineState {
   /** The last `state.get` (patched by events until the next read). */
   get state(): State | null {
     return this.#state;
+  }
+
+  /** What the board told about itself (`machine.info`). */
+  get info(): MachineInfo | null {
+    return this.#info;
+  }
+
+  /** Reads `machine.info` again. */
+  async refreshInfo(): Promise<void> {
+    this.#info = await this.service.dispatch('machine.info', {});
   }
 
   /** One of the six visual states. */
@@ -69,6 +80,13 @@ export class MachineState {
   }
 
   private onEvent(e: EventMessage): void {
+    if (
+      e.event === 'connected' ||
+      (e.event === 'host' &&
+        (e.data === 'SettingsChanged' || (typeof e.data === 'object' && 'VersionDetected' in e.data)))
+    ) {
+      void this.refreshInfo().catch(() => undefined);
+    }
     switch (e.event) {
       case 'host':
         if (typeof e.data === 'object' && 'StatusChanged' in e.data && this.#state) {

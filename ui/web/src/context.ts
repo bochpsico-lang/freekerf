@@ -3,7 +3,10 @@
 
 import { getContext, setContext } from 'svelte';
 
+import type { Actions } from './gen/api';
 import type { AppService } from './service';
+import type { ConsoleProjection } from './state/console.svelte';
+import type { DocumentProjection } from './state/document.svelte';
 import type { Environment } from './state/environment.svelte';
 import type { MachineState } from './state/machine.svelte';
 import type { PreviewState } from './state/preview.svelte';
@@ -17,6 +20,14 @@ export interface AppContext {
   view: ViewProjection;
   settings: SettingsProjection;
   env: Environment;
+  console: ConsoleProjection;
+  /** The Design mode document; `null` until M2 provides it (the Design mode is then hidden). */
+  doc: DocumentProjection | null;
+  /**
+   * Asks to run an action that can turn the laser on: it only runs after the human
+   * confirmation on screen (checklist and countdown, PLAN §9.5).
+   */
+  laser(request: LaserRequest): Promise<void>;
   /** Runs an action and shows a failure as a toast (through `view.toast`). */
   run(action: () => Promise<unknown>): Promise<void>;
 }
@@ -30,3 +41,10 @@ export function setApp(ctx: AppContext): void {
 export function app(): AppContext {
   return getContext<AppContext>(KEY);
 }
+
+/** The actions of tier `laser` and their parameters. */
+export type LaserRequest =
+  | { action: 'job.run'; params: Actions['job.run']['params'] }
+  | { action: 'job.resume'; params: Actions['job.resume']['params'] }
+  | { action: 'machine.send'; params: Actions['machine.send']['params'] }
+  | { action: 'machine.custom_code'; params: Actions['machine.custom_code']['params'] };

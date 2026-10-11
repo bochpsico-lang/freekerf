@@ -19,6 +19,16 @@ export interface OverlayScene {
   marquee: { x0: number; y0: number; x1: number; y1: number; crossing: boolean } | null;
   /** Unit labels (mm or inch). */
   units: 'mm' | 'in';
+  /**
+   * Design mode selection: its box (world), the handles (screen positions) and,
+   * while dragging, the outline the selection will have (world polygon).
+   */
+  selection: {
+    box: Rect;
+    handles: [string, number, number][];
+    handleSize: number;
+    ghost: [number, number][] | null;
+  } | null;
 }
 
 /** Formats a ruler label (no trailing zeros). */
@@ -76,6 +86,7 @@ export function drawOverlay(
     }
     ctx.restore();
   }
+  if (scene.selection) drawSelection(ctx, cam, scene.selection, colors);
   // marquee: solid = window (left to right), dashed = crossing (right to left)
   if (scene.marquee) {
     const m = scene.marquee;
@@ -86,6 +97,44 @@ export function drawOverlay(
     ctx.restore();
   }
   drawRulers(ctx, cam, colors, font, major, scene.units);
+}
+
+function drawSelection(
+  ctx: CanvasRenderingContext2D,
+  cam: CameraState,
+  sel: NonNullable<OverlayScene['selection']>,
+  colors: OverlayColors,
+): void {
+  ctx.save();
+  ctx.strokeStyle = colors.selection;
+  ctx.lineWidth = 1;
+  const b = sel.box;
+  const [x0, y0] = Camera.toScreen(cam, b.x, b.y + b.height);
+  ctx.setLineDash([4, 3]);
+  ctx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, b.width * cam.scale, b.height * cam.scale);
+  ctx.setLineDash([]);
+  if (sel.ghost) {
+    ctx.beginPath();
+    sel.ghost.forEach(([x, y], i) => {
+      const [sx, sy] = Camera.toScreen(cam, x, y);
+      if (i) ctx.lineTo(sx, sy);
+      else ctx.moveTo(sx, sy);
+    });
+    ctx.closePath();
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  } else {
+    const h = sel.handleSize;
+    ctx.fillStyle = colors.canvas;
+    for (const [name, x, y] of sel.handles) {
+      ctx.beginPath();
+      if (name === 'rotate') ctx.arc(x, y, h / 2, 0, Math.PI * 2);
+      else ctx.rect(Math.round(x - h / 2) + 0.5, Math.round(y - h / 2) + 0.5, h, h);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 function drawRulers(

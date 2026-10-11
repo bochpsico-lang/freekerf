@@ -13,6 +13,7 @@ Renderer decision: [ADR 0012](../adr/0012-canvas-renderer.md). Code:
 | Zoom | wheel at the cursor (×1.2 per notch), Ctrl + wheel / trackpad pinch | pinch (centre between the fingers) |
 | Select (Design) | click; Shift/Ctrl + click adds | tap |
 | Area selection (Design) | drag on empty space: left→right selects what is inside (solid), right→left what it touches (dashed) | — |
+| Edit (Design) | drag an object to move it; drag the handles to resize or rotate; drawing tools place or draw a box ([design-mode.md](design-mode.md)) | the same, bigger handles |
 | Context menu | right click | long press (500 ms) |
 
 - A second finger cancels the current drag and starts a pinch.
@@ -64,7 +65,8 @@ only visible cells are drawn. The check of PLAN M4a runs inside the app:
 
 `ui/web/src/canvas/*.test.ts`: camera maths, gestures (click, marquee window and
 crossing, pan in Produce / middle button / Space, wheel zoom at the cursor,
-pinch, long press, lost pointer), the tool path decoder (with the Rust fixture),
+pinch, long press, lost pointer, handle drags, a second finger cancelling a drag,
+drawing tools), the tool path decoder (with the Rust fixture),
 spatial buckets, synthetic data, benchmark options. Rust: `preview.rs` (lines, arcs
 within tolerance, binary layout, head frames, shared fixture) and the desktop
 bridge (`preview_and_head`, head frames only on change).

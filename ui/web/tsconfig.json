@@ -16,5 +16,6 @@
     "allowJs": false,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte", "tests/**/*.ts", "vite.config.ts", "scripts/**/*.mjs"]
+  "include": ["src/**/*.ts", "src/**/*.svelte", "tests/**/*.ts", "vite.config.ts", "scripts/**/*.mjs"],
+  "exclude": ["tests/e2e/**"]
 }

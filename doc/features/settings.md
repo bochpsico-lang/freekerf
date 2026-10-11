@@ -50,13 +50,22 @@ allow_machine = false
 allow_laser = false
 
 [ui]                        # desktop app appearance (M4a)
+language = "auto"           # auto | a locale of ui/i18n (en, pt-BR, de, fr...)
 theme = "dark"              # dark | light
 high_contrast = false
 density = "auto"            # auto | compact | comfortable
 units = "mm"                # mm | in (display only; the machine works in mm)
+
+[safety]                    # user-only (M4a)
+fire_countdown_s = 3        # seconds before "Fire laser" works (1-10)
+
+[[buttons]]                 # custom buttons of the machine panel (M4a); none by default
+label = "Air on"
+code = "M8"                 # custom code: [expr] allowed; runs through the fire confirmation
+icon = "air"                # optional, an icon name of the design system
 ```
 
-`[ui]` was added in M4a with defaults for every key, so older files load unchanged
+`[ui]`, `[safety]` and `[[buttons]]` were added in M4a with defaults for every key, so older files load unchanged
 and no migration (or version bump) is needed; `ui_section_is_optional_and_settable`
 tests it. The desktop app reads and writes these keys only through
 `settings.get` / `settings.set` ([theming.md](theming.md)).
@@ -65,7 +74,7 @@ tests it. The desktop app reads and writes these keys only through
 
 - `freekerf config path | get [KEY] | set KEY VALUE | schema` (the user: every key).
 - Actions `settings.get {key?}`, `settings.set {key, value}` (tier `edit`); keys under
-  `automation` and `version` are refused there: only the user changes them.
+  `automation`, `safety` and `version` are refused there: only the user changes them.
 
 ## Tests
 

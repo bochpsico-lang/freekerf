@@ -282,9 +282,11 @@ pub enum Units {
 }
 
 /// Appearance of the desktop app.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct UiSettings {
+    /// Language: `auto` (the system's) or a locale of `ui/i18n` (`en`, `pt-BR`, `de`...).
+    pub language: String,
     /// Theme.
     pub theme: Theme,
     /// High contrast (on top of the theme).
@@ -293,6 +295,47 @@ pub struct UiSettings {
     pub density: Density,
     /// Units shown.
     pub units: Units,
+}
+
+impl Default for UiSettings {
+    fn default() -> Self {
+        Self {
+            language: "auto".into(),
+            theme: Theme::default(),
+            high_contrast: false,
+            density: Density::default(),
+            units: Units::default(),
+        }
+    }
+}
+
+/// A custom button of the machine panel: G-code (custom code with `[expr]`) run on
+/// a click. Running it can turn the laser on, so it goes through the fire
+/// confirmation (`machine.custom_code`, tier `laser`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct CustomButton {
+    /// Label.
+    pub label: String,
+    /// Custom code (`[expr]` allowed; `!`, `~`, `?`, `ctrl-x`, `0xNN` sent at once).
+    pub code: String,
+    /// Icon name of the design system (`target`, `air`...), optional.
+    pub icon: Option<String>,
+}
+
+/// Safety settings: user-only, like automation (actions, scripts and agents cannot
+/// change them).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SafetySettings {
+    /// Seconds before "Fire laser" can be pressed (1-10, default 3).
+    pub fire_countdown_s: u64,
+}
+
+impl Default for SafetySettings {
+    fn default() -> Self {
+        Self { fire_countdown_s: 3 }
+    }
 }
 
 /// The whole settings file.
@@ -311,6 +354,10 @@ pub struct Settings {
     pub automation: AutomationSettings,
     /// Appearance of the desktop app (added in M4a; files without it get the defaults).
     pub ui: UiSettings,
+    /// Custom buttons of the machine panel (added in M4a; none by default).
+    pub buttons: Vec<CustomButton>,
+    /// Safety (user-only; added in M4a).
+    pub safety: SafetySettings,
 }
 
 impl Default for Settings {
@@ -322,6 +369,8 @@ impl Default for Settings {
             jog: JogSettings::default(),
             automation: AutomationSettings::default(),
             ui: UiSettings::default(),
+            buttons: Vec::new(),
+            safety: SafetySettings::default(),
         }
     }
 }
@@ -418,13 +467,16 @@ impl Settings {
             .ok_or_else(|| SettingsError::UnknownKey(key.to_owned()))
     }
 
-    /// Sets a dotted key from JSON. `automation.*` is refused when `user` is false:
+    /// Sets a dotted key from JSON. `automation.*` and `safety.*` are refused when `user` is false:
     /// only the user changes it, in the app or with `freekerf config set`.
     ///
     /// # Errors
     /// Unknown key, user-only key, or a value of the wrong type.
     pub fn set(&mut self, key: &str, value: serde_json::Value, user: bool) -> Result<(), SettingsError> {
-        if !user && (key == "automation" || key.starts_with("automation.") || key == "version") {
+        let user_only = ["automation", "safety"]
+            .iter()
+            .any(|k| key == *k || key.starts_with(&format!("{k}.")));
+        if !user && (user_only || key == "version") {
             return Err(SettingsError::UserOnly(key.to_owned()));
         }
         let mut root = serde_json::to_value(&*self).map_err(|e| SettingsError::Invalid(e.to_string()))?;
@@ -551,12 +603,49 @@ mod tests {
         s.set("ui.density", serde_json::json!("comfortable"), false)
             .unwrap();
         s.set("ui.units", serde_json::json!("in"), false).unwrap();
+        s.set("ui.language", serde_json::json!("pt-BR"), false).unwrap();
         let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
         assert_eq!(back.ui.theme, Theme::Light);
         assert!(back.ui.high_contrast);
         assert_eq!(back.ui.density, Density::Comfortable);
         assert_eq!(back.ui.units, Units::In);
+        assert_eq!(back.ui.language, "pt-BR");
+        assert_eq!(UiSettings::default().language, "auto");
         assert!(s.set("ui.theme", serde_json::json!("sepia"), false).is_err());
+    }
+
+    #[test]
+    fn safety_is_user_only() {
+        let mut s = Settings::default();
+        assert_eq!(s.safety.fire_countdown_s, 3);
+        assert!(matches!(
+            s.set("safety.fire_countdown_s", serde_json::json!(0), false),
+            Err(SettingsError::UserOnly(_))
+        ));
+        s.set("safety.fire_countdown_s", serde_json::json!(5), true)
+            .unwrap();
+        assert_eq!(s.safety.fire_countdown_s, 5);
+    }
+
+    #[test]
+    fn custom_buttons() {
+        let s = Settings::from_toml(
+            "version = 1\n[[buttons]]\nlabel = \"Air\"\ncode = \"M8\"\nicon = \"air\"\n[[buttons]]\nlabel = \"Focus\"\ncode = \"M3 S10\"\n",
+        )
+        .unwrap();
+        assert_eq!(s.buttons.len(), 2);
+        assert_eq!(s.buttons[0].icon.as_deref(), Some("air"));
+        assert_eq!(s.buttons[1].icon, None);
+        assert_eq!(Settings::from_toml(&s.to_toml().unwrap()).unwrap(), s);
+        let mut t = Settings::default();
+        assert!(t.buttons.is_empty());
+        t.set(
+            "buttons",
+            serde_json::json!([{"label": "Home", "code": "$H"}]),
+            false,
+        )
+        .unwrap();
+        assert_eq!(t.buttons[0].code, "$H");
     }
 
     #[test]

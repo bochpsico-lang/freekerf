@@ -6,7 +6,7 @@
   import EStop from './EStop.svelte';
   import StateChip from './StateChip.svelte';
 
-  const { machine, view, run, service } = app();
+  const { machine, view, run, service, doc } = app();
   const connected = $derived(machine.visual !== 'offline');
 </script>
 
@@ -32,7 +32,7 @@
     <span class="file-name">{machine.state?.program?.name ?? ''}</span>
   </div>
   <div class="seg mode-switch" role="tablist" aria-label="Mode">
-    {#if flags.designMode}
+    {#if flags.designMode && doc}
       <button
         role="tab"
         aria-selected={view.mode === 'design'}

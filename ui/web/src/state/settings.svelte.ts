@@ -22,6 +22,7 @@ export class SettingsProjection {
   get ui(): Required<NonNullable<Settings['ui']>> {
     const ui = this.#settings?.ui ?? {};
     return {
+      language: ui.language ?? 'auto',
       theme: ui.theme ?? 'dark',
       high_contrast: ui.high_contrast ?? false,
       density: ui.density ?? 'auto',
