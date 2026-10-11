@@ -422,3 +422,72 @@ app.session.snapshot().document.objects.length"#,
         .code(2)
         .stderr(predicate::str::contains("reading missing.js"));
 }
+
+#[test]
+fn mcp_is_off_by_default_then_attaches_or_launches() {
+    let home = tempfile::tempdir().unwrap();
+    freekerf(home.path())
+        .arg("mcp")
+        .write_stdin("")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("MCP is disabled"));
+    freekerf(home.path())
+        .args(["serve"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("--headless"));
+    freekerf(home.path())
+        .args(["config", "set", "automation.mcp.enabled", "true"])
+        .assert()
+        .success();
+    // nothing runs: `freekerf mcp` starts a headless instance and attaches
+    let bin = assert_cmd::cargo::cargo_bin("freekerf");
+    let mut mcp = StdCommand::new(&bin)
+        .arg("--home")
+        .arg(home.path())
+        .args(["mcp", "--idle-exit", "1"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = mcp.stdin.take().unwrap();
+    let mut stdout = BufReader::new(mcp.stdout.take().unwrap());
+    let mut ask = |msg: Value| -> Value {
+        writeln!(stdin, "{msg}").unwrap();
+        let mut line = String::new();
+        stdout.read_line(&mut line).unwrap();
+        serde_json::from_str(&line).unwrap()
+    };
+    let init = ask(
+        json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "cli-test", "version": "1"}}}),
+    );
+    assert_eq!(init["result"]["serverInfo"]["name"], "freekerf", "{init}");
+    let state = ask(
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+        "name": "get_state", "arguments": {"path": "session.view.mode"}}}),
+    );
+    assert_eq!(state["result"]["content"][0]["text"], "design", "{state}");
+    // a second agent attaches to the same instance
+    let r = freekerf(home.path())
+        .args(["mcp"])
+        .write_stdin(
+            json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "second"}}})
+            .to_string()
+                + "\n",
+        )
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&r.stdout).contains("\"freekerf\""));
+    drop(stdin);
+    assert!(mcp.wait().unwrap().success());
+    // the started instance leaves once idle
+    let token = home.path().join("ipc").join("ipc.token");
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while token.exists() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(!token.exists(), "the headless instance did not exit");
+}

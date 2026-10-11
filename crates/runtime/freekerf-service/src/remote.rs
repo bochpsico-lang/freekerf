@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use freekerf_ipc::{Connection, Endpoint, IpcError, LineWriter, RemoteError, Server, token_matches};
+use freekerf_ipc::{Connection, LineWriter, RemoteError, Server, token_matches};
 use freekerf_session::{ActionError, Caller, CallerKind, Tier};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -24,6 +24,21 @@ use serde_json::{Value, json};
 use crate::Service;
 use crate::permissions::RunGrants;
 use crate::script::{Limits, ScriptRequest};
+
+pub use freekerf_ipc::{Endpoint, IpcError};
+
+/// The endpoint of the instance using the files in `home` (the per-user
+/// directories when `None`, `$FREEKERF_HOME` overrides them).
+///
+/// # Errors
+/// No home directory.
+pub fn endpoint(home: Option<&std::path::Path>) -> Result<Endpoint, String> {
+    let dirs = match home {
+        Some(h) => freekerf_platform::Dirs::under(h),
+        None => freekerf_platform::Dirs::user().map_err(|e| e.to_string())?,
+    };
+    Ok(Endpoint::in_dir(&dirs.runtime))
+}
 
 /// Version of the local protocol.
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -353,20 +368,33 @@ fn request(
     }
 }
 
-/// Actions whose name or description contain every word of the query.
+/// Actions whose name or description contain every word of the query, those
+/// matching in the name first.
 fn search_api(service: &Service, p: &SearchParams) -> Value {
     let words: Vec<String> = p.query.split_whitespace().map(str::to_lowercase).collect();
     let limit = p.limit.unwrap_or(20).clamp(1, 200);
-    let found: Vec<Value> = service
+    let mut found: Vec<(usize, freekerf_session::ActionSpec)> = service
         .specs()
-        .iter()
-        .filter(|s| {
-            let hay =
-                format!("{} {} {}", s.name, freekerf_script::camel(&s.name), s.description).to_lowercase();
-            words.iter().all(|w| hay.contains(w.as_str()))
+        .into_iter()
+        .filter_map(|s| {
+            let name = format!("{} {}", s.name, freekerf_script::camel(&s.name)).to_lowercase();
+            let description = s.description.to_lowercase();
+            let mut in_name = 0;
+            for w in &words {
+                if name.contains(w.as_str()) {
+                    in_name += 1;
+                } else if !description.contains(w.as_str()) {
+                    return None;
+                }
+            }
+            Some((in_name, s))
         })
+        .collect();
+    found.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.name.cmp(&b.1.name)));
+    let results: Vec<Value> = found
+        .iter()
         .take(limit)
-        .map(|s| {
+        .map(|(_, s)| {
             json!({
                 "action": s.name,
                 "tier": s.tier,
@@ -376,7 +404,7 @@ fn search_api(service: &Service, p: &SearchParams) -> Value {
             })
         })
         .collect();
-    Value::Array(found)
+    Value::Array(results)
 }
 
 /// The semantic snapshot: session (view, selection, document summary, history),

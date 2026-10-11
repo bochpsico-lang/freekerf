@@ -35,10 +35,13 @@ crates/config/     persistent data
 crates/native/     operating system and hardware
   freekerf-transport   Transport trait: serial, emulator, emulator on a PTY
   freekerf-platform    directories, atomic writes, running external programs
+  freekerf-ipc         single instance, local endpoint (Unix socket / named pipe), token, JSON Lines
 crates/runtime/    orchestration
   freekerf-machine     I/O thread: host + link + clock, priority STOP
   freekerf-script      embedded JavaScript (QuickJS): the registry as a sandboxed API, limits, api.d.ts
-  freekerf-service     the facade: every action of every front end; script runs (transactions, dry run)
+  freekerf-service     the facade: every action of every front end; script runs (transactions, dry run),
+                       permissions and grants, the local endpoint server (remote)
+  freekerf-mcp         MCP server (fixed tools, state resources) proxied to the app over freekerf-ipc
 crates/testing/
   freekerf-testkit     simulated clock, host+device bench, fixtures (dev-dependency only)
 apps/cli/          the `freekerf` binary (thin shell over the service)

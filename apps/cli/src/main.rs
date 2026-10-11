@@ -82,6 +82,28 @@ enum Command {
         #[arg(long)]
         persistent: bool,
     },
+    /// Serves this instance on the local endpoint for `freekerf mcp` and the Python
+    /// client (one instance per user). Ctrl-C sends STOP and exits.
+    Serve {
+        /// No user interface (the only mode until the desktop app): permission
+        /// requests and laser actions are refused.
+        #[arg(long)]
+        headless: bool,
+        /// Exit after this many seconds without clients (instances started by
+        /// `freekerf mcp`).
+        #[arg(long, value_name = "SECONDS")]
+        idle_exit: Option<u64>,
+    },
+    /// MCP server on stdin/stdout for AI agents: attaches to the running instance,
+    /// or starts a headless one. Needs `automation.mcp.enabled` (off by default).
+    Mcp {
+        /// Seconds to wait for a started instance to listen.
+        #[arg(long, default_value_t = 10)]
+        launch_timeout: u64,
+        /// Seconds a started instance stays up without clients.
+        #[arg(long, default_value_t = 60)]
+        idle_exit: u64,
+    },
     /// Imports data from another program (read only on its side).
     Migrate {
         #[command(subcommand)]
@@ -228,6 +250,11 @@ fn run(cli: Cli) -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Config { op } => cmd_config(home.as_deref(), op),
+        Command::Serve { headless, idle_exit } => cmd_serve(home.as_deref(), headless, idle_exit),
+        Command::Mcp {
+            launch_timeout,
+            idle_exit,
+        } => cmd_mcp(home, launch_timeout, idle_exit),
         Command::Migrate { from } => cmd_migrate(home.as_deref(), from),
         Command::Actions { json, markdown } => {
             let service = Service::in_memory()?;
@@ -307,6 +334,74 @@ fn cmd_run_script(
     } else {
         ExitCode::SUCCESS
     })
+}
+
+fn cmd_serve(home: Option<&std::path::Path>, headless: bool, idle_exit: Option<u64>) -> Result<ExitCode> {
+    use freekerf_service::remote::{ServeOptions, endpoint, serve};
+    if !headless {
+        bail!("only `--headless` is available until the desktop app");
+    }
+    let service = open_service(home)?;
+    install_stop_on_ctrl_c(&service);
+    let endpoint = endpoint(home).map_err(|e| anyhow!(e))?;
+    tracing::info!(endpoint = %endpoint.name, "serving");
+    serve(
+        &service,
+        &endpoint,
+        ServeOptions {
+            idle_exit: idle_exit.map(Duration::from_secs),
+        },
+    )?;
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `freekerf mcp`: refuses at once while MCP is disabled; otherwise attaches to the
+/// running instance (or starts `freekerf serve --headless`) when the agent
+/// initializes, and proxies MCP on stdin/stdout.
+fn cmd_mcp(home: Option<PathBuf>, launch_timeout: u64, idle_exit: u64) -> Result<ExitCode> {
+    use freekerf_service::remote::{MCP_DISABLED, endpoint};
+    let settings = match Stores::settings_path(home.as_deref()) {
+        Some(path) => freekerf_settings::Settings::load(&freekerf_service::FileStore(path))?,
+        None => freekerf_settings::Settings::default(),
+    };
+    if !settings.automation.mcp.enabled {
+        bail!(MCP_DISABLED);
+    }
+    let endpoint = endpoint(home.as_deref()).map_err(|e| anyhow!(e))?;
+    let exe = std::env::current_exe().context("locating the freekerf binary")?;
+    let launch = move || {
+        let mut c = std::process::Command::new(exe);
+        if let Some(h) = &home {
+            c.arg("--home").arg(h);
+        }
+        c.args(["serve", "--headless", "--idle-exit", &idle_exit.to_string()])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        detach(&mut c);
+        c.spawn().map(|_| ())
+    };
+    let connect: freekerf_mcp::Connect = Box::new(move |name: &str| {
+        freekerf_mcp::attach_or_launch(&endpoint, name, launch, Duration::from_secs(launch_timeout))
+    });
+    freekerf_mcp::serve(connect, std::io::stdin().lock(), std::io::stdout())?;
+    Ok(ExitCode::SUCCESS)
+}
+
+/// The started instance outlives `freekerf mcp` (its own process group).
+fn detach(c: &mut std::process::Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        c.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        c.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+    }
 }
 
 fn open_service(home: Option<&std::path::Path>) -> Result<Service> {

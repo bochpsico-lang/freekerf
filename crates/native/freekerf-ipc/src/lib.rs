@@ -152,12 +152,17 @@ impl Endpoint {
     /// [`IpcError::Token`].
     pub fn read_token(&self) -> Result<String, IpcError> {
         let path = self.token_file();
-        std::fs::read_to_string(&path)
-            .map(|t| t.trim().to_owned())
-            .map_err(|e| IpcError::Token {
+        match std::fs::read_to_string(&path) {
+            Ok(t) if !t.trim().is_empty() => Ok(t.trim().to_owned()),
+            Ok(_) => Err(IpcError::Token {
+                path,
+                message: "empty".into(),
+            }),
+            Err(e) => Err(IpcError::Token {
                 path,
                 message: e.to_string(),
-            })
+            }),
+        }
     }
 
     fn connect_stream(&self) -> Result<Stream, IpcError> {
@@ -191,7 +196,9 @@ fn private_dir(dir: &Path) -> Result<(), IpcError> {
     Ok(())
 }
 
+/// Writes a user-only file atomically (a reader never sees it half written).
 fn write_private(path: &Path, contents: &str) -> Result<(), IpcError> {
+    let tmp = path.with_extension(format!("tmp{}", std::process::id()));
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]
@@ -199,9 +206,11 @@ fn write_private(path: &Path, contents: &str) -> Result<(), IpcError> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut f = options.open(path)?;
+    let mut f = options.open(&tmp)?;
     f.write_all(contents.as_bytes())?;
     f.sync_all()?;
+    drop(f);
+    std::fs::rename(&tmp, path)?;
     Ok(())
 }
 

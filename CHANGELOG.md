@@ -65,6 +65,11 @@ All notable changes to FreeKerf are documented here. The format follows
   generated from the action registry, limits, STOP cancellation, one undo step per
   run with rollback on error, dry runs, laser actions refused without a person to
   confirm them, `api.d.ts`, and `freekerf run <script.js>`.
+- Agents and clients: `freekerf-ipc` (one instance per user, Unix socket / named
+  pipe, token), `freekerf serve --headless`, permission tiers per caller with grants
+  (this run, this session, always), and the MCP server `freekerf mcp` (attach or
+  launch, disabled by default; tools `run_script`, `get_state`, `screenshot`,
+  `search_api`, `stop`; state resources with notifications; ADR 0012).
 - `freekerf import-case`: runs `conformance` importer golden cases.
 - `freekerf` CLI: `analyze`, `send`, `console`, `emulate --pty`, `host --stdio`,
   `config`, `actions`, `run`.

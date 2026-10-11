@@ -700,6 +700,7 @@ dependencies = [
  "clap",
  "crossbeam-channel",
  "ctrlc",
+ "freekerf-mcp",
  "freekerf-service",
  "freekerf-settings",
  "freekerf-testkit",
@@ -844,6 +845,19 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "freekerf-mcp"
+version = "0.1.0"
+dependencies = [
+ "crossbeam-channel",
+ "freekerf-ipc",
+ "freekerf-service",
+ "freekerf-settings",
+ "serde_json",
+ "tempfile",
+ "tracing",
 ]
 
 [[package]]
