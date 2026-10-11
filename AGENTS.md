@@ -77,6 +77,7 @@ npm run build && cargo run -p freekerf-desktop --features custom-protocol   # em
 npm run lint && npm run check && npm test    # ESLint (architecture rules), svelte-check, Vitest
 npm run coverage                             # Vitest + V8 coverage (report in ui/web/coverage)
 npm run test:web                             # Playwright in Chromium on dev.html (PW_CHROMIUM=<path> to reuse a browser)
+xvfb-run -a npm run test:e2e                 # the app end to end on the emulator (tauri-driver; after build + custom-protocol build)
 npm run format                               # Prettier
 npm run check:bundle                         # after build: the fake service is not in dist/
 npm run licenses                             # npm license allow-list (GPL-3.0 compatible)
