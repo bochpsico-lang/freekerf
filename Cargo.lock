@@ -1610,6 +1610,7 @@ dependencies = [
  "freekerf-document",
  "freekerf-geometry",
  "freekerf-import",
+ "freekerf-planner",
  "freekerf-raster",
  "schemars 1.2.2",
  "serde",

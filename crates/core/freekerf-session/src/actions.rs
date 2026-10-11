@@ -8,11 +8,11 @@ use std::sync::{Mutex, MutexGuard};
 
 use base64::Engine;
 use freekerf_document::{
-    Bytes, Color, Document, ImageData, ImageObject, Layer, LayerId, LayerMode, ObjectId, ObjectKind,
-    RasterSettings, Source, SourceFormat,
+    Bytes, Color, Document, ImageData, ImageObject, Layer, LayerId, LayerMode, Object, ObjectId, ObjectKind,
+    RasterSettings, Source, SourceFormat, TextSpec, ellipse_path, rect_path,
 };
-use freekerf_geometry::Point;
 use freekerf_geometry::hatch::FillPattern;
+use freekerf_geometry::{Matrix, Path, Point, Rect};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -130,6 +130,8 @@ enum SelectMode {
     Add,
     /// Remove these.
     Remove,
+    /// Add those not selected, remove those selected.
+    Toggle,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -346,6 +348,298 @@ struct FocusParams {
     target: Option<String>,
 }
 
+/// Shapes of `document.add_shape`.
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum ShapeKind {
+    /// Rectangle.
+    Rect,
+    /// Ellipse inscribed in the rectangle.
+    Ellipse,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct AddShapeParams {
+    /// `rect` or `ellipse`.
+    shape: ShapeKind,
+    /// Left, mm.
+    x: f64,
+    /// Bottom, mm (Y up).
+    y: f64,
+    /// Width, mm (positive).
+    width: f64,
+    /// Height, mm (positive).
+    height: f64,
+    /// Layer id (default: the current layer; a black layer when there is none).
+    #[serde(default)]
+    layer: Option<u32>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct AddTextParams {
+    /// The text (printable ASCII is drawn; other characters are skipped).
+    text: String,
+    /// Left of the first letter, mm.
+    x: f64,
+    /// Baseline, mm (Y up).
+    y: f64,
+    /// Height of the font, mm (default 10).
+    #[serde(default)]
+    height_mm: Option<f64>,
+    /// Layer id (default: the current layer; a black layer when there is none).
+    #[serde(default)]
+    layer: Option<u32>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct SetTextParams {
+    /// Id of a text object.
+    id: u64,
+    /// New text.
+    #[serde(default)]
+    text: Option<String>,
+    /// New height of the font, mm.
+    #[serde(default)]
+    height_mm: Option<f64>,
+}
+
+/// A transform of `document.transform`.
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(untagged, deny_unknown_fields)]
+enum TransformOp {
+    /// Move by `[dx, dy]` mm.
+    Translate {
+        /// `[dx, dy]`, mm.
+        translate: [f64; 2],
+    },
+    /// Scale by `[sx, sy]` about `pivot` (negative factors mirror).
+    Scale {
+        /// `[sx, sy]` (not zero).
+        scale: [f64; 2],
+        /// `[x, y]`, mm.
+        pivot: [f64; 2],
+    },
+    /// Rotate counterclockwise by `rotate_deg` degrees about `pivot`.
+    Rotate {
+        /// Degrees, counterclockwise.
+        rotate_deg: f64,
+        /// `[x, y]`, mm.
+        pivot: [f64; 2],
+    },
+    /// Any affine transform `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`.
+    Matrix {
+        /// `[a, b, c, d, e, f]`.
+        matrix: [f64; 6],
+    },
+}
+
+impl TransformOp {
+    fn matrix(self) -> Result<Matrix, ActionError> {
+        let finite = |v: &[f64]| v.iter().all(|x| x.is_finite());
+        let bad = || ActionError::InvalidParams("the transform needs finite numbers".into());
+        let m = match self {
+            Self::Translate { translate: [dx, dy] } => {
+                if !finite(&[dx, dy]) {
+                    return Err(bad());
+                }
+                Matrix::translation(dx, dy)
+            }
+            Self::Scale {
+                scale: [sx, sy],
+                pivot: [px, py],
+            } => {
+                if !finite(&[sx, sy, px, py]) {
+                    return Err(bad());
+                }
+                if sx == 0.0 || sy == 0.0 {
+                    return Err(ActionError::InvalidParams("scale factors cannot be 0".into()));
+                }
+                let mut m = Matrix::translation(-px, -py);
+                m.scale(sx, sy);
+                m.translate(px, py);
+                m
+            }
+            Self::Rotate {
+                rotate_deg,
+                pivot: [px, py],
+            } => {
+                if !finite(&[rotate_deg, px, py]) {
+                    return Err(bad());
+                }
+                let mut m = Matrix::IDENTITY;
+                m.rotate_at(rotate_deg, px, py);
+                m
+            }
+            Self::Matrix {
+                matrix: [a, b, c, d, e, f],
+            } => {
+                if !finite(&[a, b, c, d, e, f]) {
+                    return Err(bad());
+                }
+                let m = Matrix::new(a, b, c, d, e, f);
+                if m.determinant() == 0.0 {
+                    return Err(ActionError::InvalidParams(
+                        "the matrix flattens the drawing".into(),
+                    ));
+                }
+                m
+            }
+        };
+        Ok(m)
+    }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TransformParams {
+    /// The transform.
+    op: TransformOp,
+    /// Object ids (default: the selection).
+    #[serde(default)]
+    ids: Option<Vec<u64>>,
+}
+
+/// How `document.align` lines objects up (on the box around all of them).
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum AlignHow {
+    /// Left edges.
+    Left,
+    /// Horizontal centres.
+    CenterH,
+    /// Right edges.
+    Right,
+    /// Top edges.
+    Top,
+    /// Vertical middles.
+    MiddleV,
+    /// Bottom edges.
+    Bottom,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct AlignParams {
+    /// Which edge or centre.
+    how: AlignHow,
+    /// Object ids (default: the selection; at least two).
+    #[serde(default)]
+    ids: Option<Vec<u64>>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct DuplicateParams {
+    /// Object ids (default: the selection).
+    #[serde(default)]
+    ids: Option<Vec<u64>>,
+    /// Offset of the copies, `[dx, dy]` mm (default `[5, -5]`: right and down).
+    #[serde(default)]
+    offset_mm: Option<[f64; 2]>,
+}
+
+#[derive(Serialize, JsonSchema)]
+struct NewIds {
+    /// Ids of what was created.
+    ids: Vec<u64>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ColorParams {
+    /// Colour, `#RRGGBB`.
+    color: Color,
+}
+
+#[derive(Serialize, JsonSchema)]
+struct LayerRef {
+    /// Layer id.
+    layer: u32,
+    /// Whether the layer was created.
+    created: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct MoveLayerParams {
+    /// Layer id.
+    id: u32,
+    /// New position in the layer list (0 is first; past the end means last).
+    to: usize,
+}
+
+/// Default height of new text, mm.
+const TEXT_HEIGHT_MM: f64 = 10.0;
+
+/// The strokes of `text` at the origin (baseline-left), `height_mm` high.
+fn text_paths(text: &str, height_mm: f64) -> Vec<Path> {
+    freekerf_planner::hershey::text_polylines(text, 0.0, 0.0, height_mm)
+        .into_iter()
+        .map(|pts| {
+            let pts: Vec<Point> = pts.into_iter().map(|(x, y)| Point::new(x, y)).collect();
+            Path::polyline(&pts, false)
+        })
+        .collect()
+}
+
+fn check_height(h: f64) -> Result<f64, ActionError> {
+    if h > 0.0 && h.is_finite() {
+        Ok(h)
+    } else {
+        Err(ActionError::InvalidParams("height_mm must be positive".into()))
+    }
+}
+
+/// The layer of a new object: the one asked for, else the current one, else a new
+/// black layer.
+fn layer_for_new(
+    d: &mut Document,
+    asked: Option<u32>,
+    current: Option<LayerId>,
+) -> Result<LayerId, ActionError> {
+    match asked {
+        Some(id) if d.layer(LayerId(id)).is_some() => Ok(LayerId(id)),
+        Some(id) => Err(ActionError::InvalidParams(format!("no layer {id}"))),
+        None => Ok(current
+            .filter(|id| d.layer(*id).is_some())
+            .unwrap_or_else(|| d.layer_for_color(Color::BLACK, 1000, 1000))),
+    }
+}
+
+/// Adds an object made in the editor (source `native`) and selects it alone.
+fn add_native(
+    d: &mut Document,
+    sel: &mut BTreeSet<ObjectId>,
+    layer: LayerId,
+    kind: ObjectKind,
+    name: &str,
+) -> Result<ObjectId, ActionError> {
+    let id = d
+        .add_object_with(
+            layer,
+            kind,
+            name.to_owned(),
+            Some(Source {
+                format: SourceFormat::Native,
+                file: String::new(),
+            }),
+        )
+        .map_err(failed)?;
+    *sel = BTreeSet::from([id]);
+    Ok(id)
+}
+
+fn bounds_of<'a>(objects: impl Iterator<Item = &'a Object>) -> Rect {
+    let mut r = Rect::EMPTY;
+    for o in objects {
+        r.union(&o.bounds());
+    }
+    r
+}
+
 /// Imports a file's bytes into `doc`: drawings by colour layer (an existing layer of
 /// the same colour is reused), images on a layer of their own at the origin.
 ///
@@ -552,15 +846,7 @@ pub fn register_session_actions<C: SessionHost>(r: &mut Registry<C>) -> Result<(
                 let mut any = false;
                 for id in &ids {
                     if let Some(o) = d.object_mut(*id) {
-                        match &mut o.kind {
-                            ObjectKind::Shape { paths } => {
-                                paths.iter_mut().for_each(|path| path.translate(p.dx, p.dy));
-                            }
-                            ObjectKind::Image(img) => {
-                                img.position = Point::new(img.position.x + p.dx, img.position.y + p.dy);
-                            }
-                            ObjectKind::Unsupported { .. } => {}
-                        }
+                        o.translate(p.dx, p.dy);
                         any = true;
                     }
                 }
@@ -636,6 +922,242 @@ pub fn register_session_actions<C: SessionHost>(r: &mut Registry<C>) -> Result<(
         },
     )?;
 
+    r.register(
+        "document.add_shape",
+        "Draws a rectangle or an ellipse on a layer (default: the current layer) and selects it. One undo step.",
+        Tier::Edit,
+        |c: &C, p: AddShapeParams| {
+            if ![p.x, p.y, p.width, p.height].iter().all(|v| v.is_finite()) || p.width <= 0.0 || p.height <= 0.0 {
+                return Err(ActionError::InvalidParams(
+                    "x and y must be finite, width and height positive".into(),
+                ));
+            }
+            let mut s = lock(c);
+            let current = s.current_layer();
+            let mut id = ObjectId(0);
+            s.edit("add shape", |d, sel| {
+                let layer = layer_for_new(d, p.layer, current)?;
+                let (path, name) = match p.shape {
+                    ShapeKind::Rect => (rect_path(p.x, p.y, p.width, p.height), "rectangle"),
+                    ShapeKind::Ellipse => (ellipse_path(p.x, p.y, p.width, p.height), "ellipse"),
+                };
+                id = add_native(d, sel, layer, ObjectKind::Shape { paths: vec![path] }, name)?;
+                Ok::<_, ActionError>(true)
+            })?;
+            Ok(NewId { id: id.0 })
+        },
+    )?;
+    r.register(
+        "document.add_text",
+        "Writes text in the single-stroke font on a layer (default: the current layer) and selects it; the text stays editable (`document.set_text`). One undo step.",
+        Tier::Edit,
+        |c: &C, p: AddTextParams| {
+            let height = check_height(p.height_mm.unwrap_or(TEXT_HEIGHT_MM))?;
+            if !(p.x.is_finite() && p.y.is_finite()) {
+                return Err(ActionError::InvalidParams("x and y must be finite".into()));
+            }
+            let mut s = lock(c);
+            let current = s.current_layer();
+            let mut id = ObjectId(0);
+            s.edit("add text", |d, sel| {
+                let layer = layer_for_new(d, p.layer, current)?;
+                id = add_native(d, sel, layer, ObjectKind::Shape { paths: Vec::new() }, "text")?;
+                if let Some(o) = d.object_mut(id) {
+                    o.transform = Matrix::translation(p.x, p.y);
+                    o.set_text_paths(
+                        TextSpec {
+                            text: p.text.clone(),
+                            height_mm: height,
+                        },
+                        &text_paths(&p.text, height),
+                    );
+                }
+                Ok::<_, ActionError>(true)
+            })?;
+            Ok(NewId { id: id.0 })
+        },
+    )?;
+    r.register(
+        "document.set_text",
+        "Changes a text object's text or font height (its position, rotation and scale stay). One undo step.",
+        Tier::Edit,
+        |c: &C, p: SetTextParams| {
+            if let Some(h) = p.height_mm {
+                check_height(h)?;
+            }
+            let changed = lock(c).edit("edit text", |d, _| {
+                let o = d
+                    .object_mut(ObjectId(p.id))
+                    .ok_or_else(|| ActionError::InvalidParams(format!("no object {}", p.id)))?;
+                let old = o
+                    .text
+                    .clone()
+                    .ok_or_else(|| ActionError::InvalidParams(format!("object {} is not text", p.id)))?;
+                let spec = TextSpec {
+                    text: p.text.clone().unwrap_or_else(|| old.text.clone()),
+                    height_mm: p.height_mm.unwrap_or(old.height_mm),
+                };
+                if spec == old {
+                    return Ok(false);
+                }
+                let paths = text_paths(&spec.text, spec.height_mm);
+                o.set_text_paths(spec, &paths);
+                Ok::<_, ActionError>(true)
+            })?;
+            Ok(Changed { changed })
+        },
+    )?;
+    r.register(
+        "document.transform",
+        "Moves, scales, mirrors or rotates objects (default: the selection): `{translate}`, `{scale, pivot}`, `{rotate_deg, pivot}` or `{matrix}`. Images only move and scale. One undo step.",
+        Tier::Edit,
+        |c: &C, p: TransformParams| {
+            let m = p.op.matrix()?;
+            let mut s = lock(c);
+            let ids = targets(p.ids, &s);
+            let changed = s.edit("transform", |d, _| {
+                let mut any = false;
+                for id in &ids {
+                    if let Some(o) = d.object_mut(*id) {
+                        o.apply_transform(&m).map_err(|e| ActionError::InvalidParams(e.to_string()))?;
+                        any = true;
+                    }
+                }
+                Ok::<_, ActionError>(any && m != Matrix::IDENTITY)
+            })?;
+            Ok(Changed { changed })
+        },
+    )?;
+    r.register(
+        "document.align",
+        "Lines up objects (default: the selection, at least two) on the box around them: left, center_h, right, top, middle_v or bottom. One undo step.",
+        Tier::Edit,
+        |c: &C, p: AlignParams| {
+            let mut s = lock(c);
+            let ids = targets(p.ids, &s);
+            let changed = s.edit("align", |d, _| {
+                let all = bounds_of(d.objects.iter().filter(|o| ids.contains(&o.id)));
+                if ids.len() < 2 || all.is_empty() {
+                    return Ok(false);
+                }
+                let mut any = false;
+                for id in &ids {
+                    let Some(o) = d.object_mut(*id) else { continue };
+                    let b = o.bounds();
+                    if b.is_empty() {
+                        continue;
+                    }
+                    let (dx, dy) = match p.how {
+                        AlignHow::Left => (all.min_x - b.min_x, 0.0),
+                        AlignHow::Right => (all.max_x - b.max_x, 0.0),
+                        AlignHow::CenterH => ((all.min_x + all.max_x - b.min_x - b.max_x) / 2.0, 0.0),
+                        AlignHow::Top => (0.0, all.max_y - b.max_y),
+                        AlignHow::Bottom => (0.0, all.min_y - b.min_y),
+                        AlignHow::MiddleV => (0.0, (all.min_y + all.max_y - b.min_y - b.max_y) / 2.0),
+                    };
+                    if dx != 0.0 || dy != 0.0 {
+                        o.translate(dx, dy);
+                        any = true;
+                    }
+                }
+                Ok::<_, ActionError>(any)
+            })?;
+            Ok(Changed { changed })
+        },
+    )?;
+    r.register(
+        "document.duplicate",
+        "Copies objects (default: the selection), offset by `offset_mm`, and selects the copies. One undo step.",
+        Tier::Edit,
+        |c: &C, p: DuplicateParams| {
+            let [dx, dy] = p.offset_mm.unwrap_or([5.0, -5.0]);
+            if !(dx.is_finite() && dy.is_finite()) {
+                return Err(ActionError::InvalidParams("offset_mm must be finite".into()));
+            }
+            let mut s = lock(c);
+            let ids = targets(p.ids, &s);
+            let mut new = Vec::new();
+            s.edit("duplicate", |d, sel| {
+                let copies: Vec<Object> = d.objects.iter().filter(|o| ids.contains(&o.id)).cloned().collect();
+                for mut o in copies {
+                    o.translate(dx, dy);
+                    let id = d
+                        .add_object_with(o.layer, o.kind.clone(), o.name.clone(), o.source.clone())
+                        .map_err(failed)?;
+                    if let Some(added) = d.object_mut(id) {
+                        added.text = o.text;
+                        added.transform = o.transform;
+                    }
+                    new.push(id);
+                }
+                if new.is_empty() {
+                    return Ok(false);
+                }
+                *sel = new.iter().copied().collect();
+                Ok::<_, ActionError>(true)
+            })?;
+            Ok(NewIds {
+                ids: new.into_iter().map(|i| i.0).collect(),
+            })
+        },
+    )?;
+    r.register(
+        "document.layer_for_color",
+        "The layer of a colour, created (line, 1000 mm/min, power 1000) when missing; it becomes the current layer. Creating it is one undo step.",
+        Tier::Edit,
+        |c: &C, p: ColorParams| {
+            let mut s = lock(c);
+            let mut layer = s.document().layer_by_color(p.color).map(|l| l.id);
+            let created = layer.is_none();
+            if created {
+                s.edit("add layer", |d, _| {
+                    layer = Some(d.layer_for_color(p.color, 1000, 1000));
+                    Ok::<_, ActionError>(true)
+                })?;
+            }
+            let layer = layer.ok_or_else(|| failed("no layer"))?;
+            s.set_current_layer(layer);
+            Ok(LayerRef {
+                layer: layer.0,
+                created,
+            })
+        },
+    )?;
+    r.register(
+        "document.set_current_layer",
+        "Chooses the layer new shapes and text go to.",
+        Tier::Ui,
+        |c: &C, p: LayerIdParams| {
+            if lock(c).set_current_layer(LayerId(p.id)) {
+                Ok(Changed { changed: true })
+            } else {
+                Err(ActionError::InvalidParams(format!("no layer {}", p.id)))
+            }
+        },
+    )?;
+    r.register(
+        "document.move_layer",
+        "Moves a layer in the layer list (the order of layers of the same mode is the order they run). One undo step.",
+        Tier::Edit,
+        |c: &C, p: MoveLayerParams| {
+            let changed = lock(c).edit("move layer", |d, _| {
+                let from = d
+                    .layers
+                    .iter()
+                    .position(|l| l.id == LayerId(p.id))
+                    .ok_or_else(|| ActionError::InvalidParams(format!("no layer {}", p.id)))?;
+                let to = p.to.min(d.layers.len() - 1);
+                if from == to {
+                    return Ok(false);
+                }
+                let l = d.layers.remove(from);
+                d.layers.insert(to, l);
+                Ok::<_, ActionError>(true)
+            })?;
+            Ok(Changed { changed })
+        },
+    )?;
+
     // ---- selection
     r.register(
         "document.select",
@@ -649,6 +1171,13 @@ pub fn register_session_actions<C: SessionHost>(r: &mut Registry<C>) -> Result<(
                 SelectMode::Replace => sel = ids,
                 SelectMode::Add => sel.extend(ids),
                 SelectMode::Remove => sel.retain(|i| !ids.contains(i)),
+                SelectMode::Toggle => {
+                    for id in ids {
+                        if !sel.remove(&id) {
+                            sel.insert(id);
+                        }
+                    }
+                }
             }
             s.select(sel);
             Ok(s.selection().iter().map(|i| i.0).collect::<Vec<_>>())
@@ -803,6 +1332,210 @@ mod tests {
 
     fn b64(b: &[u8]) -> String {
         base64::engine::general_purpose::STANDARD.encode(b)
+    }
+
+    #[test]
+    fn editing_actions() {
+        let (r, h) = setup();
+        let user = Caller::user();
+        let d = |name: &str, p: Value| r.dispatch(&h, &user, name, p);
+        let bounds = |id: &Value| {
+            let snap = d("session.snapshot", Value::Null).unwrap();
+            let o = snap["document"]["objects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|o| o["id"] == *id)
+                .cloned()
+                .unwrap();
+            let b: [f64; 4] = serde_json::from_value(o["bounds"].clone()).unwrap();
+            (b, o)
+        };
+        let close = |a: [f64; 4], b: [f64; 4]| a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-6);
+
+        // shapes: a black layer is made when there is none, and it becomes current
+        let rect = d(
+            "document.add_shape",
+            json!({"shape": "rect", "x": 0, "y": 0, "width": 10, "height": 5}),
+        )
+        .unwrap()["id"]
+            .clone();
+        let snap = d("session.snapshot", Value::Null).unwrap();
+        assert_eq!(snap["selection"], json!([rect]));
+        assert_eq!(snap["current_layer"], snap["document"]["layers"][0]["id"]);
+        assert_eq!(bounds(&rect).1["kind"], "shape");
+        assert!(close(bounds(&rect).0, [0.0, 0.0, 10.0, 5.0]));
+        let ell = d(
+            "document.add_shape",
+            json!({"shape": "ellipse", "x": 20, "y": 0, "width": 10, "height": 10}),
+        )
+        .unwrap()["id"]
+            .clone();
+        assert!(close(bounds(&ell).0, [20.0, 0.0, 30.0, 10.0]));
+        assert!(
+            d(
+                "document.add_shape",
+                json!({"shape": "rect", "x": 0, "y": 0, "width": 0, "height": 5})
+            )
+            .is_err()
+        );
+        assert!(
+            d(
+                "document.add_shape",
+                json!({"shape": "rect", "x": 0, "y": 0, "width": 1, "height": 5, "layer": 99})
+            )
+            .is_err()
+        );
+
+        // colour layers and the current layer
+        let red = d("document.layer_for_color", json!({"color": "#FF0000"})).unwrap();
+        assert_eq!(red["created"], true);
+        assert_eq!(
+            d("document.layer_for_color", json!({"color": "#FF0000"})).unwrap()["created"],
+            false
+        );
+        let snap = d("session.snapshot", Value::Null).unwrap();
+        assert_eq!(snap["current_layer"], red["layer"]);
+        let text = d(
+            "document.add_text",
+            json!({"text": "Hi", "x": 5, "y": 5, "height_mm": 10}),
+        )
+        .unwrap()["id"]
+            .clone();
+        let (tb, to) = bounds(&text);
+        assert_eq!(to["kind"], "text");
+        assert_eq!(to["layer"], red["layer"]);
+        assert_eq!(to["text"], json!({"text": "Hi", "height_mm": 10.0}));
+        assert!(
+            tb[0] >= 5.0 - 1e-9 && tb[1] >= 5.0 - 1e-9 && tb[3] <= 15.5,
+            "{tb:?}"
+        );
+        let first = snap["document"]["layers"][0]["id"].clone();
+        d("document.set_current_layer", json!({"id": first})).unwrap();
+        assert_eq!(
+            d("session.snapshot", Value::Null).unwrap()["current_layer"],
+            first
+        );
+        assert!(d("document.set_current_layer", json!({"id": 99})).is_err());
+
+        // text stays editable through transforms
+        d(
+            "document.transform",
+            json!({"ids": [text], "op": {"rotate_deg": 90, "pivot": [5, 5]}}),
+        )
+        .unwrap();
+        let (rb, ro) = bounds(&text);
+        assert!(rb[2] <= 5.0 + 1e-9, "rotated to the left of the pivot: {rb:?}");
+        let t: [f64; 6] = serde_json::from_value(ro["transform"].clone()).unwrap();
+        assert!((t[1] - 1.0).abs() < 1e-9, "{t:?}");
+        d("document.set_text", json!({"id": text, "text": "Hello"})).unwrap();
+        let (hb, ho) = bounds(&text);
+        assert_eq!(ho["text"]["text"], "Hello");
+        assert!(
+            hb[3] - hb[1] > rb[3] - rb[1],
+            "longer text, taller when turned: {hb:?}"
+        );
+        assert!(hb[2] <= 5.0 + 1e-9);
+        assert_eq!(
+            d("document.set_text", json!({"id": text, "text": "Hello"})).unwrap()["changed"],
+            false
+        );
+        assert!(d("document.set_text", json!({"id": rect, "text": "x"})).is_err());
+        assert!(d("document.set_text", json!({"id": text, "height_mm": 0})).is_err());
+        assert_eq!(d("history.undo", Value::Null).unwrap()["step"], "edit text");
+        assert_eq!(bounds(&text).1["text"]["text"], "Hi");
+        d("history.redo", Value::Null).unwrap();
+
+        // transforms
+        d(
+            "document.transform",
+            json!({"ids": [rect], "op": {"translate": [1, 2]}}),
+        )
+        .unwrap();
+        assert!(close(bounds(&rect).0, [1.0, 2.0, 11.0, 7.0]));
+        d(
+            "document.transform",
+            json!({"ids": [rect], "op": {"scale": [2, -1], "pivot": [1, 2]}}),
+        )
+        .unwrap();
+        assert!(close(bounds(&rect).0, [1.0, -3.0, 21.0, 2.0]));
+        d(
+            "document.transform",
+            json!({"ids": [rect], "op": {"matrix": [1, 0, 0, 1, -1, 3]}}),
+        )
+        .unwrap();
+        assert!(close(bounds(&rect).0, [0.0, 0.0, 20.0, 5.0]));
+        assert!(
+            d(
+                "document.transform",
+                json!({"op": {"scale": [0, 1], "pivot": [0, 0]}})
+            )
+            .is_err()
+        );
+        assert!(
+            d(
+                "document.transform",
+                json!({"op": {"matrix": [1, 1, 1, 1, 0, 0]}})
+            )
+            .is_err()
+        );
+        assert!(d("document.transform", json!({"op": {"spin": 1}})).is_err());
+
+        // align and duplicate
+        d("document.align", json!({"ids": [rect, ell], "how": "right"})).unwrap();
+        assert!(close(bounds(&rect).0, [10.0, 0.0, 30.0, 5.0]));
+        d("document.align", json!({"ids": [rect, ell], "how": "top"})).unwrap();
+        assert!(close(bounds(&rect).0, [10.0, 5.0, 30.0, 10.0]));
+        d("document.align", json!({"ids": [rect, ell], "how": "center_h"})).unwrap();
+        d("document.align", json!({"ids": [rect, ell], "how": "middle_v"})).unwrap();
+        assert!(close(bounds(&rect).0, [10.0, 2.5, 30.0, 7.5]));
+        assert!(close(bounds(&ell).0, [15.0, 0.0, 25.0, 10.0]));
+        d("document.align", json!({"ids": [rect, ell], "how": "left"})).unwrap();
+        d("document.align", json!({"ids": [rect, ell], "how": "bottom"})).unwrap();
+        assert!(close(bounds(&ell).0, [10.0, 0.0, 20.0, 10.0]));
+        assert_eq!(
+            d("document.align", json!({"ids": [rect], "how": "left"})).unwrap()["changed"],
+            false
+        );
+        let copies = d("document.duplicate", json!({"ids": [text, ell]})).unwrap()["ids"].clone();
+        let copies: Vec<u64> = serde_json::from_value(copies).unwrap();
+        assert_eq!(copies.len(), 2);
+        let snap = d("session.snapshot", Value::Null).unwrap();
+        assert_eq!(snap["selection"], json!(copies));
+        let (cb, co) = bounds(&json!(copies[1]));
+        assert_eq!(co["text"]["text"], "Hello");
+        assert!(close(cb, [hb[0] + 5.0, hb[1] - 5.0, hb[2] + 5.0, hb[3] - 5.0]));
+        d("document.set_text", json!({"id": copies[1], "text": "Hey"})).unwrap();
+        assert_eq!(
+            bounds(&text).1["text"]["text"],
+            "Hello",
+            "the original keeps its text"
+        );
+
+        // layer order
+        let layers = |d: &dyn Fn(&str, Value) -> Result<Value, ActionError>| -> Vec<Value> {
+            d("session.snapshot", Value::Null).unwrap()["document"]["layers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|l| l["id"].clone())
+                .collect()
+        };
+        let before = layers(&d);
+        d("document.move_layer", json!({"id": before[0], "to": 9})).unwrap();
+        assert_eq!(layers(&d), vec![before[1].clone(), before[0].clone()]);
+        assert_eq!(
+            d("document.move_layer", json!({"id": before[0], "to": 1})).unwrap()["changed"],
+            false
+        );
+        assert!(d("document.move_layer", json!({"id": 99, "to": 0})).is_err());
+
+        // toggle selection
+        d("document.select", json!({"ids": [rect]})).unwrap();
+        assert_eq!(
+            d("document.select", json!({"ids": [rect, ell], "mode": "toggle"})).unwrap(),
+            json!([ell])
+        );
     }
 
     #[test]

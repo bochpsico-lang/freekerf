@@ -18,6 +18,24 @@ interface AppDocument {
    */
   addLayer(params: { color: string; fill_pattern?: "horizontal" | "vertical" | "diagonal" | "reverse_diagonal" | "grid" | "diagonal_grid" | "cross" | "diagonal_cross" | "squares" | "zig_zag" | "hilbert" | "inset" | null; lines_per_mm?: number | null; mode?: "line" | "fill" | "fill_and_line" | "cut" | "ignore" | null; name?: string | null; passes?: number | null; power?: number | null; speed_mm_min?: number | null; visible?: boolean | null }): unknown;
   /**
+   * Draws a rectangle or an ellipse on a layer (default: the current layer) and selects it. One undo step.
+   *
+   * Action `document.add_shape`, tier `edit`.
+   */
+  addShape(params: { height: number; layer?: number | null; shape: "rect" | "ellipse"; width: number; x: number; y: number }): unknown;
+  /**
+   * Writes text in the single-stroke font on a layer (default: the current layer) and selects it; the text stays editable (`document.set_text`). One undo step.
+   *
+   * Action `document.add_text`, tier `edit`.
+   */
+  addText(params: { height_mm?: number | null; layer?: number | null; text: string; x: number; y: number }): unknown;
+  /**
+   * Lines up objects (default: the selection, at least two) on the box around them: left, center_h, right, top, middle_v or bottom. One undo step.
+   *
+   * Action `document.align`, tier `edit`.
+   */
+  align(params: { how: "left" | "center_h" | "right" | "top" | "middle_v" | "bottom"; ids?: number[] | null }): unknown;
+  /**
    * Selects nothing.
    *
    * Action `document.clear_selection`, tier `ui`.
@@ -29,6 +47,12 @@ interface AppDocument {
    * Action `document.delete`, tier `edit`.
    */
   delete(params?: { ids?: number[] | null }): unknown;
+  /**
+   * Copies objects (default: the selection), offset by `offset_mm`, and selects the copies. One undo step.
+   *
+   * Action `document.duplicate`, tier `edit`.
+   */
+  duplicate(params?: { ids?: number[] | null; offset_mm?: number[] | null }): unknown;
   /**
    * Replaces the document with a `.fkproj` text (the undo history starts again).
    *
@@ -53,6 +77,18 @@ interface AppDocument {
    * Action `document.import_data`, tier `edit`.
    */
   importData(params: { data?: string | null; dpi?: number | null; format: "svg" | "dxf" | "image"; name?: string; power?: number | null; speed_mm_min?: number | null; text?: string | null }): unknown;
+  /**
+   * The layer of a colour, created (line, 1000 mm/min, power 1000) when missing; it becomes the current layer. Creating it is one undo step.
+   *
+   * Action `document.layer_for_color`, tier `edit`.
+   */
+  layerForColor(params: { color: string }): unknown;
+  /**
+   * Moves a layer in the layer list (the order of layers of the same mode is the order they run). One undo step.
+   *
+   * Action `document.move_layer`, tier `edit`.
+   */
+  moveLayer(params: { id: number; to: number }): unknown;
   /**
    * Moves objects (default: the selection) to another layer. One undo step.
    *
@@ -88,7 +124,7 @@ interface AppDocument {
    *
    * Action `document.select`, tier `ui`.
    */
-  select(params: { ids: number[]; mode?: "replace" | "add" | "remove" }): unknown;
+  select(params: { ids: number[]; mode?: "replace" | "add" | "remove" | "toggle" }): unknown;
   /**
    * Selects every object.
    *
@@ -96,11 +132,29 @@ interface AppDocument {
    */
   selectAll(params?: Record<string, unknown>): unknown;
   /**
+   * Chooses the layer new shapes and text go to.
+   *
+   * Action `document.set_current_layer`, tier `ui`.
+   */
+  setCurrentLayer(params: { id: number }): unknown;
+  /**
+   * Changes a text object's text or font height (its position, rotation and scale stay). One undo step.
+   *
+   * Action `document.set_text`, tier `edit`.
+   */
+  setText(params: { height_mm?: number | null; id: number; text?: string | null }): unknown;
+  /**
    * The document as `.fkproj` text.
    *
    * Action `document.to_fkproj`, tier `read`.
    */
   toFkproj(params?: Record<string, unknown>): unknown;
+  /**
+   * Moves, scales, mirrors or rotates objects (default: the selection): `{translate}`, `{scale, pivot}`, `{rotate_deg, pivot}` or `{matrix}`. Images only move and scale. One undo step.
+   *
+   * Action `document.transform`, tier `edit`.
+   */
+  transform(params: { ids?: number[] | null; op: { translate: number[] } | { pivot: number[]; scale: number[] } | { pivot: number[]; rotate_deg: number } | { matrix: number[] } }): unknown;
   /**
    * Moves objects (default: the selection) by `dx`, `dy` mm. One undo step.
    *

@@ -6,7 +6,7 @@
 
 use std::collections::BTreeSet;
 
-use freekerf_document::{Document, ObjectId};
+use freekerf_document::{Document, LayerId, ObjectId, TextSpec};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +21,7 @@ pub use crate::view::{Mode, ViewState, Viewport};
 pub enum Change {
     /// The document.
     Document,
-    /// The selection.
+    /// The selection or the current layer.
     Selection,
     /// The view.
     View,
@@ -66,6 +66,7 @@ pub struct Session {
     events: Vec<SessionEvent>,
     revision: u64,
     dirty: bool,
+    current_layer: Option<LayerId>,
 }
 
 /// The state as a front end or an agent reads it (`session.snapshot`).
@@ -77,6 +78,8 @@ pub struct Snapshot {
     pub dirty: bool,
     /// Selected object ids.
     pub selection: Vec<u64>,
+    /// The layer new objects go to (see [`Session::current_layer`]).
+    pub current_layer: Option<u32>,
     /// View.
     pub view: ViewState,
     /// Labels of the steps that can be undone, oldest first.
@@ -119,10 +122,16 @@ pub struct ObjectSummary {
     pub layer: u32,
     /// Name.
     pub name: String,
-    /// `shape`, `image` or `unsupported`.
+    /// `shape`, `text`, `image` or `unsupported`.
     pub kind: String,
     /// `[min_x, min_y, max_x, max_y]` in mm, none for unsupported elements.
     pub bounds: Option<[f64; 4]>,
+    /// Every transform applied since the object was made, `[a, b, c, d, e, f]`:
+    /// `x' = a·x + c·y + e`, `y' = b·x + d·y + f` (the geometry already includes it).
+    pub transform: [f64; 6],
+    /// The text of a text object.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<TextSpec>,
 }
 
 /// The document without geometry.
@@ -168,12 +177,18 @@ pub fn summary(doc: &Document) -> DocumentSummary {
                 layer: o.layer.0,
                 name: o.name.clone(),
                 kind: match o.kind {
+                    ObjectKind::Shape { .. } if o.text.is_some() => "text",
                     ObjectKind::Shape { .. } => "shape",
                     ObjectKind::Image(_) => "image",
                     ObjectKind::Unsupported { .. } => "unsupported",
                 }
                 .into(),
                 bounds: rect(o.bounds()),
+                transform: {
+                    let m = o.transform;
+                    [m.m11, m.m12, m.m21, m.m22, m.offset_x, m.offset_y]
+                },
+                text: o.text.clone(),
             })
             .collect(),
         bounds: rect(doc.bounds()),
@@ -318,6 +333,29 @@ impl Session {
         }
     }
 
+    /// The layer new objects go to: the one chosen with
+    /// [`Session::set_current_layer`] while it exists, else the first layer.
+    #[must_use]
+    pub fn current_layer(&self) -> Option<LayerId> {
+        self.current_layer
+            .filter(|id| self.document.layer(*id).is_some())
+            .or_else(|| self.document.layers.first().map(|l| l.id))
+    }
+
+    /// Chooses the layer new objects go to (not an undo step). Returns `false`
+    /// for an unknown layer.
+    pub fn set_current_layer(&mut self, id: LayerId) -> bool {
+        if self.document.layer(id).is_none() {
+            return false;
+        }
+        let before = self.current_layer();
+        self.current_layer = Some(id);
+        if before != Some(id) {
+            self.emit(Change::Selection);
+        }
+        true
+    }
+
     /// Changes the view (not an undo step).
     pub fn change_view(&mut self, f: impl FnOnce(&mut ViewState)) {
         let before = self.view.clone();
@@ -434,6 +472,7 @@ impl Session {
             revision: self.revision,
             dirty: self.dirty,
             selection: self.selection.iter().map(|id| id.0).collect(),
+            current_layer: self.current_layer().map(|l| l.0),
             view: self.view.clone(),
             undo: self.undo.iter().map(|s| s.label.clone()).collect(),
             redo: self.redo.iter().rev().map(|s| s.label.clone()).collect(),

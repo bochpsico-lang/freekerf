@@ -756,6 +756,50 @@
         }
       ]
     },
+    "Matrix": {
+      "description": "An affine transform `x' = x·m11 + y·m21 + offset_x`, `y' = x·m12 + y·m22 + offset_y`.",
+      "type": "object",
+      "properties": {
+        "m11": {
+          "description": "Row 1, column 1.",
+          "type": "number",
+          "format": "double"
+        },
+        "m12": {
+          "description": "Row 1, column 2.",
+          "type": "number",
+          "format": "double"
+        },
+        "m21": {
+          "description": "Row 2, column 1.",
+          "type": "number",
+          "format": "double"
+        },
+        "m22": {
+          "description": "Row 2, column 2.",
+          "type": "number",
+          "format": "double"
+        },
+        "offset_x": {
+          "description": "Translation X.",
+          "type": "number",
+          "format": "double"
+        },
+        "offset_y": {
+          "description": "Translation Y.",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "m11",
+        "m12",
+        "m21",
+        "m22",
+        "offset_x",
+        "offset_y"
+      ]
+    },
     "Object": {
       "description": "An object on a layer.",
       "type": "object",
@@ -782,6 +826,21 @@
               "type": "null"
             }
           ]
+        },
+        "text": {
+          "description": "The text of a text object (its paths are the strokes); none otherwise.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transform": {
+          "description": "Every transform applied since the object was created or imported. The\ngeometry already includes it: the editor reads the rotation from it, and a\ntext's strokes are written at the origin and then transformed by it.",
+          "$ref": "#/$defs/Matrix"
         }
       },
       "oneOf": [
@@ -1141,6 +1200,25 @@
           "type": "string",
           "const": "native"
         }
+      ]
+    },
+    "TextSpec": {
+      "description": "The text an object was made from (editable: the editor writes the strokes again\nwhen the text or its height change, at the origin, then applies the object's\n`transform`). Single-stroke Hershey font of the test generators.",
+      "type": "object",
+      "properties": {
+        "height_mm": {
+          "description": "Height of the font, mm.",
+          "type": "number",
+          "format": "double"
+        },
+        "text": {
+          "description": "The text (printable ASCII is drawn; other characters are skipped).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "height_mm"
       ]
     },
     "UnsupportedReason": {

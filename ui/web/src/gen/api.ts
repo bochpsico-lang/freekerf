@@ -23,6 +23,44 @@ export type AddLayerParams = {
   visible?: boolean | null;
 };
 
+export type AddShapeParams = {
+  /** Height, mm (positive). */
+  height: number;
+  /** Layer id (default: the current layer; a black layer when there is none). */
+  layer?: number | null;
+  /** `rect` or `ellipse`. */
+  shape: ShapeKind;
+  /** Width, mm (positive). */
+  width: number;
+  /** Left, mm. */
+  x: number;
+  /** Bottom, mm (Y up). */
+  y: number;
+};
+
+export type AddTextParams = {
+  /** Height of the font, mm (default 10). */
+  height_mm?: number | null;
+  /** Layer id (default: the current layer; a black layer when there is none). */
+  layer?: number | null;
+  /** The text (printable ASCII is drawn; other characters are skipped). */
+  text: string;
+  /** Left of the first letter, mm. */
+  x: number;
+  /** Baseline, mm (Y up). */
+  y: number;
+};
+
+/** How `document.align` lines objects up (on the box around all of them). */
+export type AlignHow = "left" | "center_h" | "right" | "top" | "middle_v" | "bottom";
+
+export type AlignParams = {
+  /** Which edge or centre. */
+  how: AlignHow;
+  /** Object ids (default: the selection; at least two). */
+  ids?: number[] | null;
+};
+
 /** Automatic cooling: hold the job `off_s` every `on_s` seconds of work. */
 export type AutoCoolingSettings = {
   /** Enabled. */
@@ -49,6 +87,11 @@ export type Change = "document" | "selection" | "view" | "history";
 
 /** sRGB colour `#RRGGBB` */
 export type Color = string;
+
+export type ColorParams = {
+  /** Colour, `#RRGGBB`. */
+  color: Color;
+};
 
 /** Status of a sent command (`CommandStatus`). */
 export type CommandStatus = "Queued" | "WaitingResponse" | "ResponseGood" | "ResponseBad" | "InvalidResponse";
@@ -131,6 +174,13 @@ export type Dialog = "settings" | "shortcuts" | "fire_confirmation" | "recover" 
 export type DialogParams = {
   /** The dialog (`settings`, `shortcuts`, `recover`, `welcome`, `import`, `raster`, `about`...). */
   name: Dialog;
+};
+
+export type DuplicateParams = {
+  /** Object ids (default: the selection). */
+  ids?: number[] | null;
+  /** Offset of the copies, `[dx, dy]` mm (default `[5, -5]`: right and down). */
+  offset_mm?: [number, number] | null;
 };
 
 /** What happened, for the front ends. */
@@ -551,6 +601,13 @@ export type ModeParams = {
   mode: Mode;
 };
 
+export type MoveLayerParams = {
+  /** Layer id. */
+  id: number;
+  /** New position in the layer list (0 is first; past the end means last). */
+  to: number;
+};
+
 export type MoveToLayerParams = {
   /** Object ids (default: the selection). */
   ids?: number[] | null;
@@ -664,7 +721,7 @@ export type SelectLaserParams = {
 };
 
 /** How `document.select` combines the ids with the current selection. */
-export type SelectMode = "replace" | "add" | "remove";
+export type SelectMode = "replace" | "add" | "remove" | "toggle";
 
 export type SelectParams = {
   /** Object ids. */
@@ -677,6 +734,15 @@ export type SelectParams = {
 export type SendParams = {
   /** One line of G-code or a `$` command. */
   line: string;
+};
+
+export type SetTextParams = {
+  /** New height of the font, mm. */
+  height_mm?: number | null;
+  /** Id of a text object. */
+  id: number;
+  /** New text. */
+  text?: string | null;
 };
 
 /** `settings.get`. */
@@ -692,6 +758,9 @@ export type SettingsSetParams = {
   /** New value (JSON). */
   value: unknown;
 };
+
+/** Shapes of `document.add_shape`. */
+export type ShapeKind = "rect" | "ellipse";
 
 /** Result of `state.get`. */
 export type State = {
@@ -763,6 +832,32 @@ export type Tool = "select" | "rect" | "ellipse" | "text";
 export type ToolParams = {
   /** `select`, `rect`, `ellipse` or `text`. */
   tool: Tool;
+};
+
+/** A transform of `document.transform`. */
+export type TransformOp = {
+  /** `[dx, dy]`, mm. */
+  translate: [number, number];
+} | {
+  /** `[x, y]`, mm. */
+  pivot: [number, number];
+  /** `[sx, sy]` (not zero). */
+  scale: [number, number];
+} | {
+  /** `[x, y]`, mm. */
+  pivot: [number, number];
+  /** Degrees, counterclockwise. */
+  rotate_deg: number;
+} | {
+  /** `[a, b, c, d, e, f]`. */
+  matrix: [number, number, number, number, number, number];
+};
+
+export type TransformParams = {
+  /** Object ids (default: the selection). */
+  ids?: number[] | null;
+  /** The transform. */
+  op: TransformOp;
 };
 
 export type TranslateParams = {
@@ -958,6 +1053,24 @@ export interface Actions {
     result: unknown;
     tier: "edit";
   };
+  /** Draws a rectangle or an ellipse on a layer (default: the current layer) and selects it. One undo step. */
+  "document.add_shape": {
+    params: AddShapeParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Writes text in the single-stroke font on a layer (default: the current layer) and selects it; the text stays editable (`document.set_text`). One undo step. */
+  "document.add_text": {
+    params: AddTextParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Lines up objects (default: the selection, at least two) on the box around them: left, center_h, right, top, middle_v or bottom. One undo step. */
+  "document.align": {
+    params: AlignParams;
+    result: unknown;
+    tier: "edit";
+  };
   /** Selects nothing. */
   "document.clear_selection": {
     params: NoParams;
@@ -967,6 +1080,12 @@ export interface Actions {
   /** Deletes objects (default: the selection). One undo step. */
   "document.delete": {
     params: IdsParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Copies objects (default: the selection), offset by `offset_mm`, and selects the copies. One undo step. */
+  "document.duplicate": {
+    params: DuplicateParams;
     result: unknown;
     tier: "edit";
   };
@@ -991,6 +1110,18 @@ export interface Actions {
   /** Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step. */
   "document.import_data": {
     params: ImportParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** The layer of a colour, created (line, 1000 mm/min, power 1000) when missing; it becomes the current layer. Creating it is one undo step. */
+  "document.layer_for_color": {
+    params: ColorParams;
+    result: unknown;
+    tier: "edit";
+  };
+  /** Moves a layer in the layer list (the order of layers of the same mode is the order they run). One undo step. */
+  "document.move_layer": {
+    params: MoveLayerParams;
     result: unknown;
     tier: "edit";
   };
@@ -1036,11 +1167,29 @@ export interface Actions {
     result: unknown;
     tier: "ui";
   };
+  /** Chooses the layer new shapes and text go to. */
+  "document.set_current_layer": {
+    params: LayerIdParams;
+    result: unknown;
+    tier: "ui";
+  };
+  /** Changes a text object's text or font height (its position, rotation and scale stay). One undo step. */
+  "document.set_text": {
+    params: SetTextParams;
+    result: unknown;
+    tier: "edit";
+  };
   /** The document as `.fkproj` text. */
   "document.to_fkproj": {
     params: NoParams;
     result: unknown;
     tier: "read";
+  };
+  /** Moves, scales, mirrors or rotates objects (default: the selection): `{translate}`, `{scale, pivot}`, `{rotate_deg, pivot}` or `{matrix}`. Images only move and scale. One undo step. */
+  "document.transform": {
+    params: TransformParams;
+    result: unknown;
+    tier: "edit";
   };
   /** Moves objects (default: the selection) by `dx`, `dy` mm. One undo step. */
   "document.translate": {
@@ -1357,12 +1506,18 @@ export type ActionName = keyof Actions;
 export const ACTION_TIERS = {
   "console.get": "read",
   "document.add_layer": "edit",
+  "document.add_shape": "edit",
+  "document.add_text": "edit",
+  "document.align": "edit",
   "document.clear_selection": "ui",
   "document.delete": "edit",
+  "document.duplicate": "edit",
   "document.from_fkproj": "edit",
   "document.get": "read",
   "document.import": "edit",
   "document.import_data": "edit",
+  "document.layer_for_color": "edit",
+  "document.move_layer": "edit",
   "document.move_to_layer": "edit",
   "document.new": "edit",
   "document.open": "edit",
@@ -1370,7 +1525,10 @@ export const ACTION_TIERS = {
   "document.save": "edit",
   "document.select": "ui",
   "document.select_all": "ui",
+  "document.set_current_layer": "ui",
+  "document.set_text": "edit",
   "document.to_fkproj": "read",
+  "document.transform": "edit",
   "document.translate": "edit",
   "document.update_layer": "edit",
   "fire.cancel": "safety",

@@ -348,11 +348,15 @@ fn stop_answers_while_a_script_runs() {
     mcp.send(&json!({"jsonrpc": "2.0", "id": 900, "method": "tools/call", "params": {"name": "run_script", "arguments": {"code": "app.view.setMode({mode: 'produce'}); while (true) {}"}}}));
     mcp.wait_notification("freekerf://state/view");
     assert_eq!(text(&mcp.tool("stop", json!({}))), "stopped");
-    let stuck = loop {
-        let msg = mcp.from.recv_timeout(Duration::from_secs(10)).unwrap();
-        if msg["id"] == 900 {
-            break msg;
-        }
+    // the script's answer may come before stop's (then `request` kept it aside)
+    let stuck = match mcp.notifications.iter().position(|m| m["id"] == 900) {
+        Some(i) => mcp.notifications.remove(i),
+        None => loop {
+            let msg = mcp.from.recv_timeout(Duration::from_secs(10)).unwrap();
+            if msg["id"] == 900 {
+                break msg;
+            }
+        },
     };
     assert_eq!(stuck["result"]["isError"], true);
     assert_eq!(

@@ -8,12 +8,18 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | --- | --- | --- |
 | `console.get` | read | Console rows (sent commands, answers, messages). |
 | `document.add_layer` | edit | Adds a layer of a colour (line, 1000 mm/min, power 1000, 1 pass unless given). One undo step. |
+| `document.add_shape` | edit | Draws a rectangle or an ellipse on a layer (default: the current layer) and selects it. One undo step. |
+| `document.add_text` | edit | Writes text in the single-stroke font on a layer (default: the current layer) and selects it; the text stays editable (`document.set_text`). One undo step. |
+| `document.align` | edit | Lines up objects (default: the selection, at least two) on the box around them: left, center_h, right, top, middle_v or bottom. One undo step. |
 | `document.clear_selection` | ui | Selects nothing. |
 | `document.delete` | edit | Deletes objects (default: the selection). One undo step. |
+| `document.duplicate` | edit | Copies objects (default: the selection), offset by `offset_mm`, and selects the copies. One undo step. |
 | `document.from_fkproj` | edit | Replaces the document with a `.fkproj` text (the undo history starts again). |
 | `document.get` | read | The whole document (layers, objects with geometry and images), as in a `.fkproj` file. |
 | `document.import` | edit | Imports an SVG, DXF or image file into the document (format from the extension). One undo step. |
 | `document.import_data` | edit | Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, into the document: SVG and DXF by colour layer, images on a layer of their own. One undo step. |
+| `document.layer_for_color` | edit | The layer of a colour, created (line, 1000 mm/min, power 1000) when missing; it becomes the current layer. Creating it is one undo step. |
+| `document.move_layer` | edit | Moves a layer in the layer list (the order of layers of the same mode is the order they run). One undo step. |
 | `document.move_to_layer` | edit | Moves objects (default: the selection) to another layer. One undo step. |
 | `document.new` | edit | Starts an empty document (the undo history starts again). |
 | `document.open` | edit | Opens a `.fkproj` project file (the undo history starts again). |
@@ -21,7 +27,10 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `document.save` | edit | Saves the document as a `.fkproj` project file (written atomically). |
 | `document.select` | ui | Selects objects (replace, add to or remove from the selection). Unknown ids are ignored. |
 | `document.select_all` | ui | Selects every object. |
+| `document.set_current_layer` | ui | Chooses the layer new shapes and text go to. |
+| `document.set_text` | edit | Changes a text object's text or font height (its position, rotation and scale stay). One undo step. |
 | `document.to_fkproj` | read | The document as `.fkproj` text. |
+| `document.transform` | edit | Moves, scales, mirrors or rotates objects (default: the selection): `{translate}`, `{scale, pivot}`, `{rotate_deg, pivot}` or `{matrix}`. Images only move and scale. One undo step. |
 | `document.translate` | edit | Moves objects (default: the selection) by `dx`, `dy` mm. One undo step. |
 | `document.update_layer` | edit | Changes a layer's name, mode, speed, power, passes, visibility or filling. One undo step. |
 | `fire.cancel` | safety | Cancels the pending laser request (the one given, or any). Always allowed. |
@@ -100,6 +109,40 @@ Adds a layer of a colour (line, 1000 mm/min, power 1000, 1 pass unless given). O
 | `speed_mm_min` | no | Speed, mm/min. |
 | `visible` | no | Shown and planned. |
 
+### `document.add_shape`
+
+Draws a rectangle or an ellipse on a layer (default: the current layer) and selects it. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `height` | yes | Height, mm (positive). |
+| `layer` | no | Layer id (default: the current layer; a black layer when there is none). |
+| `shape` | yes | `rect` or `ellipse`. |
+| `width` | yes | Width, mm (positive). |
+| `x` | yes | Left, mm. |
+| `y` | yes | Bottom, mm (Y up). |
+
+### `document.add_text`
+
+Writes text in the single-stroke font on a layer (default: the current layer) and selects it; the text stays editable (`document.set_text`). One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `height_mm` | no | Height of the font, mm (default 10). |
+| `layer` | no | Layer id (default: the current layer; a black layer when there is none). |
+| `text` | yes | The text (printable ASCII is drawn; other characters are skipped). |
+| `x` | yes | Left of the first letter, mm. |
+| `y` | yes | Baseline, mm (Y up). |
+
+### `document.align`
+
+Lines up objects (default: the selection, at least two) on the box around them: left, center_h, right, top, middle_v or bottom. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `how` | yes | Which edge or centre. |
+| `ids` | no | Object ids (default: the selection; at least two). |
+
 ### `document.clear_selection`
 
 Selects nothing.
@@ -113,6 +156,15 @@ Deletes objects (default: the selection). One undo step.
 | Parameter | Required | Description |
 | --- | --- | --- |
 | `ids` | no | Object ids (default: the selection). |
+
+### `document.duplicate`
+
+Copies objects (default: the selection), offset by `offset_mm`, and selects the copies. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `ids` | no | Object ids (default: the selection). |
+| `offset_mm` | no | Offset of the copies, `[dx, dy]` mm (default `[5, -5]`: right and down). |
 
 ### `document.from_fkproj`
 
@@ -149,6 +201,23 @@ Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, int
 | `power` | no | Power of new layers, `S` (default 1000). |
 | `speed_mm_min` | no | Speed of new layers, mm/min (default 1000). |
 | `text` | no | SVG or DXF: the file as text instead of `data` (for scripts that build a drawing). |
+
+### `document.layer_for_color`
+
+The layer of a colour, created (line, 1000 mm/min, power 1000) when missing; it becomes the current layer. Creating it is one undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `color` | yes | Colour, `#RRGGBB`. |
+
+### `document.move_layer`
+
+Moves a layer in the layer list (the order of layers of the same mode is the order they run). One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `id` | yes | Layer id. |
+| `to` | yes | New position in the layer list (0 is first; past the end means last). |
 
 ### `document.move_to_layer`
 
@@ -204,11 +273,38 @@ Selects every object.
 
 No parameters.
 
+### `document.set_current_layer`
+
+Chooses the layer new shapes and text go to.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `id` | yes | Layer id. |
+
+### `document.set_text`
+
+Changes a text object's text or font height (its position, rotation and scale stay). One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `height_mm` | no | New height of the font, mm. |
+| `id` | yes | Id of a text object. |
+| `text` | no | New text. |
+
 ### `document.to_fkproj`
 
 The document as `.fkproj` text.
 
 No parameters.
+
+### `document.transform`
+
+Moves, scales, mirrors or rotates objects (default: the selection): `{translate}`, `{scale, pivot}`, `{rotate_deg, pivot}` or `{matrix}`. Images only move and scale. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `ids` | no | Object ids (default: the selection). |
+| `op` | yes | The transform. |
 
 ### `document.translate`
 

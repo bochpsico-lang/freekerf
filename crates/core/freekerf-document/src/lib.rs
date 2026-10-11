@@ -33,12 +33,14 @@ pub use image::{
     Interpolation, LineDirection, RasterSettings, RasterTool, VectorFill, VectorizeSettings,
 };
 pub use layer::{Color, FillSettings, Layer, LayerId, LayerMode};
-pub use object::{Object, ObjectId, ObjectKind, Source, SourceFormat, UnsupportedReason};
+pub use object::{
+    Object, ObjectId, ObjectKind, Source, SourceFormat, TextSpec, UnsupportedReason, ellipse_path, rect_path,
+};
 
 /// Value of the `format` field of a project file.
 pub const FORMAT: &str = "freekerf-project";
 /// Current version of the project file.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 /// Errors of documents and project files.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -173,6 +175,8 @@ impl Document {
             layer,
             name,
             source,
+            text: None,
+            transform: freekerf_geometry::Matrix::IDENTITY,
             kind,
         });
         Ok(id)
@@ -305,7 +309,9 @@ impl Document {
                 supported: VERSION,
             });
         }
-        // version 1 is the first one: future versions migrate `value` here, step by step
+        // migrations, step by step:
+        // 1 -> 2: objects may carry `text` (editable text) and `transform`; both are
+        //         optional, so nothing changes in `value`
         let mut doc: Self =
             serde_json::from_value(value).map_err(|e| DocumentError::Invalid(e.to_string()))?;
         doc.version = VERSION;
@@ -327,7 +333,7 @@ pub fn json_schema() -> String {
 
 #[cfg(test)]
 mod tests {
-    use freekerf_geometry::{Path, Point};
+    use freekerf_geometry::{Matrix, Path, Point};
 
     use super::*;
 
@@ -447,12 +453,12 @@ mod tests {
         assert!(d.objects[1].bounds().is_empty());
 
         let mut v: serde_json::Value = serde_json::from_str(&text).unwrap();
-        v["version"] = 2.into();
+        v["version"] = 3.into();
         assert_eq!(
             Document::from_fkproj(v.to_string().as_bytes()),
             Err(DocumentError::TooNew {
-                found: 2,
-                supported: 1
+                found: 3,
+                supported: 2
             })
         );
         v["version"] = serde_json::Value::Null;
@@ -483,6 +489,97 @@ mod tests {
                 .next_object_id,
             4
         );
+    }
+
+    #[test]
+    fn version_1_files_open_as_version_2() {
+        let v1 = r##"{"format": "freekerf-project", "version": 1,
+            "layers": [{"id": 1, "color": "#000000", "speed_mm_min": 1000, "power": 1000}],
+            "objects": [{"id": 1, "layer": 1, "kind": "shape",
+                "paths": [{"start": {"x": 0, "y": 0}, "segments": [{"kind": "line", "end": {"x": 1, "y": 0}}]}]}],
+            "next_object_id": 2}"##;
+        let d = Document::from_fkproj(v1.as_bytes()).unwrap();
+        assert_eq!(d.version, VERSION);
+        assert_eq!(d.objects[0].text, None);
+        assert_eq!(d.objects[0].transform, Matrix::IDENTITY);
+        // version 2 keeps text and transform, and leaves them out when unused
+        let mut d2 = d.clone();
+        d2.objects[0].text = Some(TextSpec {
+            text: "Hi".into(),
+            height_mm: 5.0,
+        });
+        d2.objects[0]
+            .apply_transform(&Matrix::translation(3.0, 4.0))
+            .unwrap();
+        let text = d2.to_fkproj();
+        assert!(text.contains("\"transform\"") && text.contains("\"height_mm\""));
+        assert_eq!(Document::from_fkproj(text.as_bytes()).unwrap(), d2);
+        assert!(!d.to_fkproj().contains("\"transform\""));
+    }
+
+    #[test]
+    fn transforms_and_shapes() {
+        let mut d = Document::new();
+        let l = d.layer_for_color(Color::BLACK, 1000, 500);
+        let id = d
+            .add_object(
+                l,
+                ObjectKind::Shape {
+                    paths: vec![rect_path(0.0, 0.0, 10.0, 5.0)],
+                },
+            )
+            .unwrap();
+        let o = d.object_mut(id).unwrap();
+        let mut m = Matrix::IDENTITY;
+        m.rotate_at(90.0, 0.0, 0.0);
+        o.apply_transform(&m).unwrap();
+        let b = o.bounds();
+        assert!(
+            (b.min_x + 5.0).abs() < 1e-9 && (b.max_y - 10.0).abs() < 1e-9,
+            "{b:?}"
+        );
+        o.translate(5.0, 0.0);
+        assert!((o.transform.m12 - 1.0).abs() < 1e-12 && (o.transform.offset_x - 5.0).abs() < 1e-12);
+        let e = ellipse_path(0.0, 0.0, 20.0, 10.0).bounds();
+        assert!(e.min_x.abs() < 1e-9 && (e.max_x - 20.0).abs() < 1e-9 && (e.max_y - 10.0).abs() < 1e-9);
+        // text strokes are written again through the transform
+        o.set_text_paths(
+            TextSpec {
+                text: "-".into(),
+                height_mm: 2.0,
+            },
+            &[Path::polyline(
+                &[Point::new(0.0, 0.0), Point::new(1.0, 0.0)],
+                false,
+            )],
+        );
+        let ObjectKind::Shape { paths } = &o.kind else {
+            panic!()
+        };
+        assert!((paths[0].end().x - 5.0).abs() < 1e-9 && (paths[0].end().y - 1.0).abs() < 1e-9);
+        // images move and scale, but do not rotate or mirror
+        let img = d
+            .add_object(
+                l,
+                ObjectKind::Image(Box::new(ImageObject {
+                    data: ImageData::Rgba {
+                        width: 1,
+                        height: 1,
+                        pixels: Bytes(vec![0, 0, 0, 255]),
+                    },
+                    position: Point::new(1.0, 2.0),
+                    size_mm: [10.0, 10.0],
+                    settings: RasterSettings::default(),
+                    edits: vec![],
+                })),
+            )
+            .unwrap();
+        let o = d.object_mut(img).unwrap();
+        o.apply_transform(&Matrix::new(2.0, 0.0, 0.0, 0.5, 1.0, 0.0))
+            .unwrap();
+        assert_eq!(o.bounds().max_x, 23.0);
+        assert!(o.apply_transform(&m).is_err());
+        assert!(o.apply_transform(&Matrix::scaling(-1.0, 1.0)).is_err());
     }
 
     #[test]

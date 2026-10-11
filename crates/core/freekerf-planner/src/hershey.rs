@@ -142,9 +142,77 @@ pub fn text(
     rv
 }
 
+/// Height of the glyphs of the horizontal font, in font units (`text` uses 2).
+pub const GLYPH_HEIGHT: f64 = 2.0;
+
+/// The strokes of `text` as polylines in mm: the bottom-left corner of the text at
+/// `(x, y)`, glyphs scaled so the font's height is `height_mm`, Y up (editable text
+/// objects of the editor; characters outside printable ASCII are skipped).
+#[must_use]
+pub fn text_polylines(text: &str, x: f64, y: f64, height_mm: f64) -> Vec<Vec<(f64, f64)>> {
+    let k = height_mm / GLYPH_HEIGHT;
+    let mut out: Vec<Vec<(f64, f64)>> = Vec::new();
+    let mut ox = 0.0;
+    for c in text.encode_utf16() {
+        let Some(g) = glyph(c, true) else { continue };
+        let (_, w, _) = apply_offset(g, 0.0, 0.0);
+        let (mut px, mut py) = (0.0f64, 0.0f64);
+        let mut on = false;
+        let mut cur: Vec<(f64, f64)> = Vec::new();
+        for part in g {
+            if part.starts_with("M3") {
+                on = true;
+                cur = vec![((ox + px) * k + x, py * k + y)];
+                continue;
+            }
+            if part.starts_with("M5") {
+                on = false;
+                if cur.len() > 1 {
+                    out.push(std::mem::take(&mut cur));
+                }
+                continue;
+            }
+            for (a, b) in coordinates(part) {
+                let v: f64 = part[a + 1..b].parse().unwrap_or(0.0);
+                if &part[a..=a] == "X" {
+                    px = v;
+                } else {
+                    py = v;
+                }
+            }
+            if on {
+                cur.push(((ox + px) * k + x, py * k + y));
+            }
+        }
+        if cur.len() > 1 {
+            out.push(cur);
+        }
+        ox += w + SPACE_BETWEEN_LETTERS;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_as_polylines() {
+        let p = text_polylines("I", 10.0, 5.0, 10.0);
+        assert!(!p.is_empty());
+        let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        for (x, y) in p.iter().flatten() {
+            (x0, y0, x1, y1) = (x0.min(*x), y0.min(*y), x1.max(*x), y1.max(*y));
+        }
+        assert!(x0 >= 10.0 - 1e-9 && y0 >= 5.0 - 1e-9, "{x0} {y0}");
+        assert!(y1 - 5.0 <= 10.5 && y1 - y0 > 5.0, "{y0}..{y1}");
+        assert!((x1 - x0).abs() < 1e-9, "\"I\" is one vertical stroke");
+        let ab = text_polylines("AB", 0.0, 0.0, 10.0);
+        assert!(ab.iter().flatten().map(|p| p.0).fold(0.0, f64::max) > 5.0);
+        // wider text, more strokes; nothing for spaces or other characters
+        assert!(text_polylines("II", 0.0, 0.0, 10.0).len() > p.len());
+        assert!(text_polylines(" é", 0.0, 0.0, 10.0).is_empty());
+    }
 
     #[test]
     fn tokens_and_offsets() {

@@ -28,7 +28,8 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 
 | Item | Why | When |
 | --- | --- | --- |
-| Per-object transform in the document (scale/rotate without touching the geometry) | needs the editor's handles to be useful | M4/M5 |
+| Image rotation and skew in the document (objects record their transform since M4b, but images only move and scale) | the raster pipeline takes axis-aligned images | M5 |
+| More single-stroke and outline fonts for text objects (M4b has the Hershey font of the generators) | the editor needs text first | M5 |
 | Bundling `autotrace` with the desktop app (built per platform from a pinned commit, source published with each release) | needs the installers; M2 runs it from the `PATH` (ADR 0010) | M4 (installers) |
 | Keeping imported LaserGRBL user materials; downloading library packages | come with the material library UI | v1 |
 | MCP: Streamable HTTP transport (`127.0.0.1`, token, `Origin` check), screenshots | optional transport; screenshots need the desktop window | M4/M5 |
