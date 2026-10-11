@@ -6,6 +6,7 @@
   import { setApp, type AppContext, type LaserRequest } from './context';
   import ImportDialog from './design/ImportDialog.svelte';
   import RasterDialog from './design/RasterDialog.svelte';
+  import MaterialTestDialog from './design/MaterialTestDialog.svelte';
   import LayersPanel from './design/LayersPanel.svelte';
   import ObjectPanel from './design/ObjectPanel.svelte';
   import WelcomeDialog from './design/WelcomeDialog.svelte';
@@ -249,6 +250,7 @@
     welcome: welcomeDialog,
     import: importDialog,
     raster: rasterDialog,
+    material_test: materialTestDialog,
   }}
 />
 <Toasts />
@@ -276,6 +278,9 @@
 {/snippet}
 {#snippet rasterDialog(close: () => void)}
   <RasterDialog onclose={close} />
+{/snippet}
+{#snippet materialTestDialog(close: () => void)}
+  <MaterialTestDialog onclose={close} />
 {/snippet}
 {#snippet fireDialog()}
   <FireConfirmation />

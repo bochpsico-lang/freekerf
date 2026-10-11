@@ -229,7 +229,7 @@ export type Density = "auto" | "compact" | "comfortable";
  * Dialogs. Dialogs are not modal (STOP stays reachable); several can be open,
  * the last one is on top.
  */
-export type Dialog = "settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "about";
+export type Dialog = "settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "material_test" | "about";
 
 export type DialogParams = {
   /** The dialog (`settings`, `shortcuts`, `recover`, `welcome`, `import`, `raster`, `about`...). */
@@ -884,6 +884,30 @@ export type MachineSettings = {
 /** State of the machine as the host sees it (`MacStatus`). */
 export type MachineStatus = "Disconnected" | "Connecting" | "Idle" | "Run" | "Hold" | "Door" | "Home" | "Alarm" | "Check" | "Jog" | "Queue" | "Cooling" | "AutoHold" | "Tool";
 
+export type MaterialTest = {
+  /** Ids of the cells' layers, row by row from the bottom. */
+  layers: number[];
+  /** Ids of the new objects (cells, then labels). */
+  objects: number[];
+};
+
+export type MaterialTestParams = {
+  /** Side of a cell, mm (default 10). */
+  cell_mm?: number | null;
+  /** Gap between cells, mm (default 3). */
+  gap_mm?: number | null;
+  /** The machine's `$30` (the `S` of 100 %; default 1000). */
+  max_s?: number | null;
+  /** Filled squares or outlines (default: fill). */
+  mode?: TestMode;
+  /** Bottom-left corner of the grid, mm (default 0, 0). */
+  origin?: [number, number] | null;
+  /** Power, % of `max_s` (rows, bottom to top). */
+  power_pct: TestRange;
+  /** Speed, mm/min (columns, left to right). */
+  speed_mm_min: TestRange;
+};
+
 /** An affine transform `x' = x·m11 + y·m21 + offset_x`, `y' = x·m12 + y·m22 + offset_y`. */
 export type Matrix = {
   /** Row 1, column 1. */
@@ -1349,6 +1373,19 @@ export type SystemCommandParams = {
 /** The kind of a system operation. */
 export type SystemOpKind = "ReadSettings" | "ReadInfo" | "WriteSettings" | "WriteWifi";
 
+/** How the cells of a material test are burned. */
+export type TestMode = "fill" | "line";
+
+/** A range of a material test: `steps` values from `from` to `to`. */
+export type TestRange = {
+  /** First value. */
+  from: number;
+  /** Number of values (1 to 20). */
+  steps: number;
+  /** Last value. */
+  to: number;
+};
+
 /**
  * The text an object was made from (editable: the editor writes the strokes again
  * when the text or its height change, at the origin, then applies the object's
@@ -1732,6 +1769,12 @@ export interface Actions {
   "document.layer_for_color": {
     params: ColorParams;
     result: LayerRef;
+    tier: "edit";
+  };
+  /** Draws a material test (design/ux.md flow 6): a grid of cells, power rising by row and speed by column, each cell on a layer of its own with that power and speed, labelled in single-stroke text on a layer of low power. One undo step. */
+  "document.material_test": {
+    params: MaterialTestParams;
+    result: MaterialTest;
     tier: "edit";
   };
   /** Moves a layer in the layer list (the order of layers of the same mode is the order they run). One undo step. */
@@ -2170,6 +2213,7 @@ export const ACTION_TIERS = {
   "document.import": "edit",
   "document.import_data": "edit",
   "document.layer_for_color": "edit",
+  "document.material_test": "edit",
   "document.move_layer": "edit",
   "document.move_to_layer": "edit",
   "document.new": "edit",

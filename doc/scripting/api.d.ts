@@ -96,6 +96,12 @@ interface AppDocument {
    */
   layerForColor(params: { color: string }): unknown;
   /**
+   * Draws a material test (design/ux.md flow 6): a grid of cells, power rising by row and speed by column, each cell on a layer of its own with that power and speed, labelled in single-stroke text on a layer of low power. One undo step.
+   *
+   * Action `document.material_test`, tier `edit`.
+   */
+  materialTest(params: { cell_mm?: number | null; gap_mm?: number | null; max_s?: number | null; mode?: "fill" | "line"; origin?: number[] | null; power_pct: { from: number; steps: number; to: number }; speed_mm_min: { from: number; steps: number; to: number } }): unknown;
+  /**
    * Moves a layer in the layer list (the order of layers of the same mode is the order they run). One undo step.
    *
    * Action `document.move_layer`, tier `edit`.
@@ -469,7 +475,7 @@ interface AppView {
    *
    * Action `view.close_dialog`, tier `ui`.
    */
-  closeDialog(params?: { name?: "settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "about" | null }): unknown;
+  closeDialog(params?: { name?: "settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "material_test" | "about" | null }): unknown;
   /**
    * Closes the drawer when it shows this panel.
    *
@@ -505,7 +511,7 @@ interface AppView {
    *
    * Action `view.open_dialog`, tier `ui`.
    */
-  openDialog(params: { name: "settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "about" }): unknown;
+  openDialog(params: { name: "settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "material_test" | "about" }): unknown;
   /**
    * Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the drawer in the medium layout).
    *

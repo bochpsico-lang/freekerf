@@ -755,6 +755,115 @@ fn check_raster(s: &RasterSettings) -> Result<(), ActionError> {
     Ok(())
 }
 
+/// How the cells of a material test are burned.
+#[derive(Debug, Clone, Copy, Default, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum TestMode {
+    /// Filled squares (engraving).
+    #[default]
+    Fill,
+    /// Square outlines (lines, cuts).
+    Line,
+}
+
+/// A range of a material test: `steps` values from `from` to `to`.
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TestRange {
+    /// First value.
+    from: f64,
+    /// Last value.
+    to: f64,
+    /// Number of values (1 to 20).
+    steps: u32,
+}
+
+impl TestRange {
+    fn values(self, what: &str, min: f64, max: f64) -> Result<Vec<f64>, ActionError> {
+        if !(1..=20).contains(&self.steps)
+            || !(self.from.is_finite() && self.to.is_finite())
+            || self.from.min(self.to) < min
+            || self.from.max(self.to) > max
+        {
+            return Err(ActionError::InvalidParams(format!(
+                "{what}: 1 to 20 steps between {min} and {max}"
+            )));
+        }
+        let n = self.steps;
+        Ok((0..n)
+            .map(|i| {
+                if n == 1 {
+                    self.from
+                } else {
+                    self.from + (self.to - self.from) * f64::from(i) / f64::from(n - 1)
+                }
+            })
+            .collect())
+    }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct MaterialTestParams {
+    /// Power, % of `max_s` (rows, bottom to top).
+    power_pct: TestRange,
+    /// Speed, mm/min (columns, left to right).
+    speed_mm_min: TestRange,
+    /// Filled squares or outlines (default: fill).
+    #[serde(default)]
+    mode: TestMode,
+    /// Side of a cell, mm (default 10).
+    #[serde(default)]
+    cell_mm: Option<f64>,
+    /// Gap between cells, mm (default 3).
+    #[serde(default)]
+    gap_mm: Option<f64>,
+    /// Bottom-left corner of the grid, mm (default 0, 0).
+    #[serde(default)]
+    origin: Option<[f64; 2]>,
+    /// The machine's `$30` (the `S` of 100 %; default 1000).
+    #[serde(default)]
+    max_s: Option<u32>,
+}
+
+#[derive(Serialize, JsonSchema)]
+struct MaterialTest {
+    /// Ids of the cells' layers, row by row from the bottom.
+    layers: Vec<u32>,
+    /// Ids of the new objects (cells, then labels).
+    objects: Vec<u64>,
+}
+
+/// A colour for cell `i` of `n`: hues around the wheel, light enough to see.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
+fn test_color(i: usize, n: usize) -> Color {
+    let h = (i as f64 / n.max(1) as f64) * 6.0;
+    let x = 1.0 - (h % 2.0 - 1.0).abs();
+    let (r, g, b) = match h as u32 {
+        0 => (1.0, x, 0.0),
+        1 => (x, 1.0, 0.0),
+        2 => (0.0, 1.0, x),
+        3 => (0.0, x, 1.0),
+        4 => (x, 0.0, 1.0),
+        _ => (1.0, 0.0, x),
+    };
+    let c = |v: f64| (40.0 + v * 200.0).round() as u8;
+    Color::rgb(c(r), c(g), c(b))
+}
+
+/// Text strokes with their baseline-left at `(x, y)`.
+fn label_at(text: &str, x: f64, y: f64, height_mm: f64) -> Vec<Path> {
+    let mut paths = text_paths(text, height_mm);
+    for p in &mut paths {
+        p.translate(x, y);
+    }
+    paths
+}
+
 /// Default height of new text, mm.
 const TEXT_HEIGHT_MM: f64 = 10.0;
 
@@ -1490,6 +1599,91 @@ pub fn register_session_actions<C: SessionHost>(r: &mut Registry<C>) -> Result<(
         },
     )?;
     r.register(
+        "document.material_test",
+        "Draws a material test (design/ux.md flow 6): a grid of cells, power rising by row and speed by column, each cell on a layer of its own with that power and speed, labelled in single-stroke text on a layer of low power. One undo step.",
+        Tier::Edit,
+        |c: &C, p: MaterialTestParams| {
+            let powers = p.power_pct.values("power_pct", 0.0, 100.0)?;
+            let speeds = p.speed_mm_min.values("speed_mm_min", 1.0, 100_000.0)?;
+            let (cell, gap) = (p.cell_mm.unwrap_or(10.0), p.gap_mm.unwrap_or(3.0));
+            if !(cell >= 1.0 && cell.is_finite() && gap >= 0.0 && gap.is_finite()) {
+                return Err(ActionError::InvalidParams("cell_mm at least 1, gap_mm at least 0".into()));
+            }
+            let [ox, oy] = p.origin.unwrap_or([0.0, 0.0]);
+            let max_s = f64::from(p.max_s.unwrap_or(1000));
+            let label_h = (cell * 0.3).clamp(2.0, 5.0);
+            // room on the left for the power labels
+            let left = ox + label_h * 4.0;
+            let mut s = lock(c);
+            let mut out = MaterialTest {
+                layers: Vec::new(),
+                objects: Vec::new(),
+            };
+            s.edit("material test", |d, sel| {
+                let n = powers.len() * speeds.len();
+                let labels = d.add_layer({
+                    let mut l = Layer::new(LayerId(0), Color::BLACK, 3000, 0);
+                    l.name = "test labels".into();
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    {
+                        l.power = (max_s * 0.2).round() as u32;
+                    }
+                    l
+                });
+                let mut ids = Vec::new();
+                for (row, pct) in powers.iter().enumerate() {
+                    #[allow(clippy::cast_precision_loss)]
+                    let y = oy + row as f64 * (cell + gap);
+                    for (col, speed) in speeds.iter().enumerate() {
+                        #[allow(clippy::cast_precision_loss)]
+                        let x = left + col as f64 * (cell + gap);
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                        let mut l = Layer::new(
+                            LayerId(0),
+                            test_color(row * speeds.len() + col, n),
+                            speed.round() as u32,
+                            (pct / 100.0 * max_s).round() as u32,
+                        );
+                        l.name = format!("{pct:.0}% · {speed:.0} mm/min");
+                        l.mode = match p.mode {
+                            TestMode::Fill => LayerMode::Fill,
+                            TestMode::Line => LayerMode::Line,
+                        };
+                        let layer = d.add_layer(l);
+                        out.layers.push(layer.0);
+                        let name = format!("{pct:.0}% {speed:.0}");
+                        ids.push(add_native(
+                            d,
+                            sel,
+                            layer,
+                            ObjectKind::Shape {
+                                paths: vec![rect_path(x, y, cell, cell)],
+                            },
+                            &name,
+                        )?);
+                    }
+                    let label = label_at(&format!("{pct:.0}%"), ox, y + (cell - label_h) / 2.0, label_h);
+                    ids.push(add_native(d, sel, labels, ObjectKind::Shape { paths: label }, "label")?);
+                }
+                #[allow(clippy::cast_precision_loss)]
+                let top = oy + powers.len() as f64 * (cell + gap) + gap;
+                for (col, speed) in speeds.iter().enumerate() {
+                    #[allow(clippy::cast_precision_loss)]
+                    let x = left + col as f64 * (cell + gap);
+                    // speeds in tenths of a metre per minute fit a cell: "1.5" for 1500
+                    let text = format!("{}", (speed / 100.0).round() / 10.0);
+                    ids.push(add_native(d, sel, labels, ObjectKind::Shape { paths: label_at(&text, x, top, label_h) }, "label")?);
+                }
+                let title = label_at("F m/min - S %", left, top + label_h * 1.8, label_h);
+                ids.push(add_native(d, sel, labels, ObjectKind::Shape { paths: title }, "label")?);
+                *sel = ids.iter().copied().collect();
+                out.objects = ids.iter().map(|i| i.0).collect();
+                Ok::<_, ActionError>(true)
+            })?;
+            Ok(out)
+        },
+    )?;
+    r.register(
         "document.layer_for_color",
         "The layer of a colour, created (line, 1000 mm/min, power 1000) when missing; it becomes the current layer. Creating it is one undo step.",
         Tier::Edit,
@@ -1794,6 +1988,65 @@ mod tests {
             .clone();
         assert!(d("document.raster_settings", json!({"id": rect})).is_err());
         assert!(d("document.raster_settings", json!({"id": 999})).is_err());
+    }
+
+    #[test]
+    fn material_test_grid() {
+        let (r, h) = setup();
+        let user = Caller::user();
+        let d = |name: &str, p: Value| r.dispatch(&h, &user, name, p);
+        let out = d(
+            "document.material_test",
+            json!({"power_pct": {"from": 20, "to": 100, "steps": 3}, "speed_mm_min": {"from": 500, "to": 3000, "steps": 2}, "max_s": 255}),
+        )
+        .unwrap();
+        assert_eq!(out["layers"].as_array().unwrap().len(), 6);
+        let snap = d("session.snapshot", Value::Null).unwrap();
+        let layers = snap["document"]["layers"].as_array().unwrap().clone();
+        assert_eq!(layers.len(), 7, "six cells and the labels");
+        let cell = |power: u64, speed: u64| {
+            layers
+                .iter()
+                .any(|l| l["power"] == power && l["speed_mm_min"] == speed && l["mode"] == "fill")
+        };
+        assert!(cell(51, 500) && cell(153, 3000) && cell(255, 500), "{layers:?}");
+        // every cell has its own colour
+        let mut colors: Vec<&str> = layers.iter().map(|l| l["color"].as_str().unwrap()).collect();
+        colors.sort_unstable();
+        colors.dedup();
+        assert_eq!(colors.len(), 7);
+        // 6 cells, 3 power labels, 2 speed labels, a title; all selected; one step
+        assert_eq!(out["objects"].as_array().unwrap().len(), 12);
+        assert_eq!(snap["selection"].as_array().unwrap().len(), 12);
+        assert_eq!(snap["undo"], json!(["material test"]));
+        // outlines, one step each way
+        let lines = d(
+            "document.material_test",
+            json!({"power_pct": {"from": 50, "to": 50, "steps": 1}, "speed_mm_min": {"from": 1000, "to": 1000, "steps": 1}, "mode": "line", "origin": [100, 0]}),
+        )
+        .unwrap();
+        let layer = lines["layers"][0].as_u64().unwrap();
+        let snap = d("session.snapshot", Value::Null).unwrap();
+        let l = snap["document"]["layers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|l| l["id"] == layer)
+            .cloned()
+            .unwrap();
+        assert_eq!(
+            (l["mode"].as_str(), l["power"].as_u64()),
+            (Some("line"), Some(500))
+        );
+        for bad in [
+            json!({"power_pct": {"from": 0, "to": 120, "steps": 3}, "speed_mm_min": {"from": 100, "to": 200, "steps": 2}}),
+            json!({"power_pct": {"from": 10, "to": 20, "steps": 0}, "speed_mm_min": {"from": 100, "to": 200, "steps": 2}}),
+            json!({"power_pct": {"from": 10, "to": 20, "steps": 21}, "speed_mm_min": {"from": 100, "to": 200, "steps": 2}}),
+            json!({"power_pct": {"from": 10, "to": 20, "steps": 2}, "speed_mm_min": {"from": 0, "to": 200, "steps": 2}}),
+            json!({"power_pct": {"from": 10, "to": 20, "steps": 2}, "speed_mm_min": {"from": 100, "to": 200, "steps": 2}, "cell_mm": 0.5}),
+        ] {
+            assert!(d("document.material_test", bad.clone()).is_err(), "{bad}");
+        }
     }
 
     #[test]

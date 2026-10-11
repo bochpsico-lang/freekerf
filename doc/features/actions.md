@@ -21,6 +21,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `document.import` | edit | Imports an SVG, DXF or image file into the document (format from the extension). One undo step. |
 | `document.import_data` | edit | Imports a file given as base64 bytes (`data`), or as `text` for SVG and DXF, into the document: SVG and DXF by colour layer (or all on the current layer), images on a layer of their own. Returns the new objects and layers. One undo step. |
 | `document.layer_for_color` | edit | The layer of a colour, created (line, 1000 mm/min, power 1000) when missing; it becomes the current layer. Creating it is one undo step. |
+| `document.material_test` | edit | Draws a material test (design/ux.md flow 6): a grid of cells, power rising by row and speed by column, each cell on a layer of its own with that power and speed, labelled in single-stroke text on a layer of low power. One undo step. |
 | `document.move_layer` | edit | Moves a layer in the layer list (the order of layers of the same mode is the order they run). One undo step. |
 | `document.move_to_layer` | edit | Moves objects (default: the selection) to another layer. One undo step. |
 | `document.new` | edit | Starts an empty document (the undo history starts again). |
@@ -238,6 +239,20 @@ The layer of a colour, created (line, 1000 mm/min, power 1000) when missing; it 
 | Parameter | Required | Description |
 | --- | --- | --- |
 | `color` | yes | Colour, `#RRGGBB`. |
+
+### `document.material_test`
+
+Draws a material test (design/ux.md flow 6): a grid of cells, power rising by row and speed by column, each cell on a layer of its own with that power and speed, labelled in single-stroke text on a layer of low power. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `cell_mm` | no | Side of a cell, mm (default 10). |
+| `gap_mm` | no | Gap between cells, mm (default 3). |
+| `max_s` | no | The machine's `$30` (the `S` of 100 %; default 1000). |
+| `mode` | no | Filled squares or outlines (default: fill). |
+| `origin` | no | Bottom-left corner of the grid, mm (default 0, 0). |
+| `power_pct` | yes | Power, % of `max_s` (rows, bottom to top). |
+| `speed_mm_min` | yes | Speed, mm/min (columns, left to right). |
 
 ### `document.move_layer`
 

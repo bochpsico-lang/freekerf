@@ -2,8 +2,8 @@
   // Editing tools (Design mode). Select, rectangle, ellipse and text are the view
   // state's tool (`view.set_tool`); import opens its dialog; weld and subtract
   // combine the selection (`document.boolean`); offset and array open the inspector,
-  // where their parameters are; undo and redo are document actions. Node editing,
-  // tracing and the material test come later (listed, disabled).
+  // where their parameters are; the material test opens its dialog; undo and redo
+  // are document actions. Node editing and tracing come later (listed, disabled).
   import { app } from '../context';
   import type { Tool } from '../gen/api';
   import type { IconName } from '../gen/icons';
@@ -12,7 +12,7 @@
 
   const { view, doc, service, run } = app();
 
-  type Target = Tool | 'import' | 'union' | 'difference' | 'inspector';
+  type Target = Tool | 'import' | 'union' | 'difference' | 'inspector' | 'test';
   const tools: ([IconName, string, Target | null] | null)[] = [
     ['select', 'tool-select', 'select'],
     ['node', 'tool-node', null],
@@ -27,7 +27,7 @@
     ['subtract', 'tool-subtract', 'difference'],
     ['offset', 'tool-offset', 'inspector'],
     ['array', 'tool-array', 'inspector'],
-    ['test', 'tool-test', null],
+    ['test', 'tool-test', 'test'],
   ];
 
   const combining = (t: Target) => t === 'union' || t === 'difference';
@@ -35,6 +35,7 @@
   function pick(target: Target) {
     return run(() => {
       if (target === 'import') return service.dispatch('view.open_dialog', { name: 'import' });
+      if (target === 'test') return service.dispatch('view.open_dialog', { name: 'material_test' });
       if (target === 'inspector') return service.dispatch('view.open_panel', { name: 'object' });
       if (target === 'union' || target === 'difference')
         return service.dispatch('document.boolean', { op: target, ids: doc.selection });
@@ -59,7 +60,7 @@
         class="tool"
         data-tool={icon}
         disabled={!usable(target)}
-        aria-pressed={target && !['import', 'inspector', 'union', 'difference'].includes(target)
+        aria-pressed={target && !['import', 'inspector', 'union', 'difference', 'test'].includes(target)
           ? view.tool === target
           : undefined}
         title={t(label)}

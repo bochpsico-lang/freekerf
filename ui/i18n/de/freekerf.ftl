@@ -446,3 +446,18 @@ raster-dir-diagonal = Diagonal
 raster-preview = Vorschau der Gravur
 raster-apply = Anwenden
 obj-image-open = Bildgravur…
+
+## material test
+mtest-title = Materialtest
+mtest-mode = Zellen
+mtest-mode-fill = Gefüllt (Gravur)
+mtest-mode-line = Umrisse (Linien, Schnitte)
+mtest-power = Leistung, je Zeile
+mtest-speed = Geschwindigkeit, je Spalte
+mtest-from = Von
+mtest-to = Bis
+mtest-steps = Schritte
+mtest-cell = Zellengröße
+mtest-cells = { $n } Zellen, jede auf einer eigenen Ebene. Die Beschriftung wird mit geringer Leistung graviert.
+mtest-go = Test zeichnen
+mtest-done = Materialtest gezeichnet: { $n } Zellen.

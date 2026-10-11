@@ -709,6 +709,42 @@ export class FakeDocument {
         height: Math.round(30 * s.lines_per_mm),
       };
     },
+    'document.material_test': (p) => {
+      const range = (r: { from: number; to: number; steps: number }) =>
+        Array.from({ length: r.steps }, (_, i) =>
+          r.steps === 1 ? r.from : r.from + ((r.to - r.from) * i) / (r.steps - 1),
+        );
+      if (p.power_pct.steps < 1 || p.speed_mm_min.steps < 1)
+        throw invalid('document.material_test', '1 to 20 steps');
+      const cell = p.cell_mm ?? 10;
+      const maxS = p.max_s ?? 1000;
+      const out = { layers: [] as number[], objects: [] as number[] };
+      this.edit('material test', (d) => {
+        range(p.power_pct).forEach((pct, row) =>
+          range(p.speed_mm_min).forEach((speed, col) => {
+            const id = Math.max(0, ...d.layers.map((l) => l.id)) + 1;
+            const color = `#${(0x203040 + id * 0x101010).toString(16).slice(-6).toUpperCase()}`;
+            d.layers.push({
+              ...newLayer(id, color),
+              name: `${Math.round(pct)}% · ${Math.round(speed)} mm/min`,
+              mode: p.mode === 'line' ? 'line' : 'fill',
+              power: Math.round((pct / 100) * maxS),
+              speed_mm_min: Math.round(speed),
+            });
+            out.layers.push(id);
+            out.objects.push(
+              this.add(
+                `${Math.round(pct)}% ${Math.round(speed)}`,
+                [rectPath(col * (cell + 3), row * (cell + 3), cell, cell)],
+                id,
+              ),
+            );
+          }),
+        );
+        d.selection = [...out.objects];
+      });
+      return out;
+    },
     'migrate.detect': () =>
       this.migration.found
         ? {

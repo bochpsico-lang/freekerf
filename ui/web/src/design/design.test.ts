@@ -255,6 +255,34 @@ describe('Design mode', () => {
     expect((screen.getByTestId('raster-apply') as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('material test: a grid of cells on layers of their own, from the rail', async () => {
+    const { service, summary } = await mountDesign();
+    await fireEvent.click(document.querySelector('[data-tool="test"]')!);
+    const dialog = await screen.findByTestId('dialog-material-test');
+    expect(within(dialog).getByTestId('mtest-cells').textContent).toContain('25 cells');
+    const steps = within(dialog).getByTestId('mtest-power-steps') as HTMLInputElement;
+    steps.value = '3';
+    await fireEvent.change(steps);
+    const speedSteps = within(dialog).getByTestId('mtest-speed-steps') as HTMLInputElement;
+    speedSteps.value = '2';
+    await fireEvent.change(speedSteps);
+    await waitFor(() => expect(within(dialog).getByTestId('mtest-cells').textContent).toContain('6 cells'));
+    await fireEvent.click(dialog.querySelector('[data-mode="line"]')!);
+    await fireEvent.click(within(dialog).getByTestId('mtest-go'));
+    await waitFor(() => expect(screen.queryByTestId('dialog-material-test')).toBeNull());
+    expect(service.calls.find((c) => c.action === 'document.material_test')!.params).toEqual({
+      mode: 'line',
+      power_pct: { from: 10, to: 100, steps: 3 },
+      speed_mm_min: { from: 500, to: 6000, steps: 2 },
+      cell_mm: 10,
+      max_s: 1000,
+    });
+    const s = await summary();
+    expect(s.objects).toHaveLength(6);
+    expect(s.layers.filter((l) => l.mode === 'line')).toHaveLength(7);
+    await waitFor(() => expect(service.view.toasts.at(-1)!.message).toContain('6 cells'));
+  });
+
   it('import dialog: a file, keep or unify colours, a toast with the report', async () => {
     const { service, summary } = await mountDesign();
     await service.dispatch('view.open_dialog', { name: 'import' });

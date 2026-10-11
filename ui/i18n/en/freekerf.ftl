@@ -446,3 +446,18 @@ raster-dir-diagonal = Diagonal
 raster-preview = Preview of the engraving
 raster-apply = Apply
 obj-image-open = Image engraving…
+
+## material test
+mtest-title = Material test
+mtest-mode = Cells
+mtest-mode-fill = Filled (engraving)
+mtest-mode-line = Outlines (lines, cuts)
+mtest-power = Power, by row
+mtest-speed = Speed, by column
+mtest-from = From
+mtest-to = To
+mtest-steps = Steps
+mtest-cell = Cell size
+mtest-cells = { $n } cells, each on a layer of its own. Labels are engraved at low power.
+mtest-go = Draw the test
+mtest-done = Material test drawn: { $n } cells.

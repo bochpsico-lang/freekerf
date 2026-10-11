@@ -446,3 +446,18 @@ raster-dir-diagonal = Diagonal
 raster-preview = Prévia da gravação
 raster-apply = Aplicar
 obj-image-open = Gravação da imagem…
+
+## material test
+mtest-title = Teste de material
+mtest-mode = Células
+mtest-mode-fill = Preenchidas (gravação)
+mtest-mode-line = Contornos (linhas, cortes)
+mtest-power = Potência, por linha
+mtest-speed = Velocidade, por coluna
+mtest-from = De
+mtest-to = Até
+mtest-steps = Passos
+mtest-cell = Tamanho da célula
+mtest-cells = { $n } células, cada uma na sua camada. Os rótulos são gravados com pouca potência.
+mtest-go = Desenhar o teste
+mtest-done = Teste de material desenhado: { $n } células.

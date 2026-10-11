@@ -73,8 +73,10 @@ pub enum Dialog {
     Welcome,
     /// Import (Design mode).
     Import,
-    /// Image settings before an image is added (Design mode, raster pipeline).
+    /// How the selected image is engraved (Design mode, raster pipeline).
     Raster,
+    /// The material test grid (Design mode).
+    MaterialTest,
     /// About FreeKerf.
     About,
 }
