@@ -16,6 +16,7 @@ read and drive the same screen.
 | Field | Meaning | Actions |
 | --- | --- | --- |
 | `mode` | `design` or `produce` (Produce opens the Machine panel) | `view.set_mode` |
+| `tool` | Design mode tool: `select`, `rect`, `ellipse`, `text` | `view.set_tool` |
 | `panel`, `drawer_open` | active dock panel; drawer open in the medium layout | `view.show_panel`, `view.set_drawer` |
 | `dialogs` | open dialogs, bottom to top | `view.open_dialog`, `view.close_dialog` |
 | `toasts` | at most 3 messages (i18n id + args) | `view.toast`, `view.dismiss_toast` |
@@ -60,6 +61,7 @@ someone else is applied to the canvas.
 | + / − · F · Ctrl+0 | zoom · fit the table |
 | F1 or ? | keyboard shortcuts |
 
+Design mode keys (tools, undo, duplicate, delete, nudge): [design-mode.md](design-mode.md).
 Pure mapping: `ui/web/src/shell/shortcuts.ts`.
 
 ## Dispatch-only
@@ -83,7 +85,9 @@ The UI changes app state only with `service.dispatch(action)` (PLAN §9, princip
 
 The Design mode screens are built against the UI contract until M2 lands (M4b).
 `flags.designMode` is on in development and tests and off in distributed builds
-(`VITE_FK_DESIGN_MODE=1` turns it on); without it the mode switch shows Produce only.
+(`VITE_FK_DESIGN_MODE=1` turns it on); without it, or without `AppService.document`
+(the desktop app until M4b), the mode switch shows Produce only. See
+[design-mode.md](design-mode.md).
 
 ## Tests
 

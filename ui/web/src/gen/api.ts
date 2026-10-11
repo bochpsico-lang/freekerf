@@ -163,6 +163,50 @@ export type Event = {
   LoopCountChanged: number;
 };
 
+/** `fire.cancel`. */
+export type FireCancelParams = {
+  /** The request; the pending one when absent. */
+  id?: number | null;
+};
+
+/** A laser action waiting for the person's confirmation. */
+export type FireRequest = {
+  /** The action (`job.run`, `job.resume`, `machine.send`, `machine.custom_code`). */
+  action: string;
+  /** Countdown before it can be confirmed, ms. */
+  countdown_ms: number;
+  /** Id (increasing). */
+  id: number;
+  /** Its parameters. */
+  params: unknown;
+  /** Who asked (`desktop`, an agent's name...). */
+  requested_by: string;
+  /** What it will do. */
+  summary: FireSummary;
+};
+
+/** `fire.request`. */
+export type FireRequestParams = {
+  /** An action of tier `laser` (`job.run`, `job.resume`, `machine.send`, `machine.custom_code`). */
+  action: string;
+  /** Its parameters. */
+  params?: unknown;
+};
+
+/** What the dialog shows about the job. */
+export type FireSummary = {
+  /** `[xmin, ymin, xmax, ymax]` where the laser burns, mm. */
+  bounds?: [number, number, number, number] | null;
+  /** For single lines and custom code: the text that will be sent. */
+  code?: string | null;
+  /** Estimated time, ms. */
+  estimated_ms?: number | null;
+  /** Commands of the program. */
+  lines?: number | null;
+  /** Program name, if a program is involved. */
+  program?: string | null;
+};
+
 /** Firmware family. */
 export type Firmware = "Grbl" | "Smoothie" | "Marlin" | "VigoWork";
 
@@ -505,6 +549,15 @@ export type RunParams = {
   passes?: number | null;
 };
 
+/**
+ * Safety settings: user-only, like automation (actions, scripts and agents cannot
+ * change them).
+ */
+export type SafetySettings = {
+  /** Seconds before "Fire laser" can be pressed (1-10, default 3). */
+  fire_countdown_s?: number;
+};
+
 /** `machine.select_laser`. */
 export type SelectLaserParams = {
   /** Id of the laser life counter. */
@@ -527,6 +580,12 @@ export type SetDrawerParams = {
 export type SetModeParams = {
   /** `design` or `produce`. */
   mode: Mode;
+};
+
+/** `view.set_tool`. */
+export type SetToolParams = {
+  /** `select`, `rect`, `ellipse` or `text`. */
+  tool: Tool;
 };
 
 /** `settings.get`. */
@@ -609,12 +668,17 @@ export type ToastParams = {
   message: string;
 };
 
+/** Active tool of the Design mode (`design/interaction.md` §2). */
+export type Tool = "select" | "rect" | "ellipse" | "text";
+
 /** Appearance of the desktop app. */
 export type UiSettings = {
   /** Density of the controls. */
   density?: Density;
   /** High contrast (on top of the theme). */
   high_contrast?: boolean;
+  /** Language: `auto` (the system's) or a locale of `ui/i18n` (`en`, `pt-BR`, `de`...). */
+  language?: string;
   /** Theme. */
   theme?: Theme;
   /** Units shown. */
@@ -630,6 +694,11 @@ export type ViewState = {
   dialogs: Dialog[];
   /** The panel drawer is open (medium layout). */
   drawer_open: boolean;
+  /**
+   * The laser action waiting for the person's confirmation, if any (the fire
+   * confirmation dialog is open while it is set).
+   */
+  fire_request?: FireRequest | null;
   /** Increased by `view.fit`: the UI fits the work area when it changes. */
   fit_request: number;
   /** Element with the keyboard focus (`canvas`, `console`... free text), if known. */
@@ -640,6 +709,8 @@ export type ViewState = {
   panel: Panel;
   /** Toasts, oldest first (at most [`MAX_TOASTS`]). */
   toasts: Toast[];
+  /** Active tool of the Design mode. */
+  tool: Tool;
   /** Viewport, once the UI or a caller set it. */
   viewport?: Viewport | null;
 };
@@ -741,6 +812,8 @@ export type Settings = {
   jog?: JogSettings;
   /** Machine connection. */
   machine?: MachineSettings;
+  /** Safety (user-only; added in M4a). */
+  safety?: SafetySettings;
   /** Appearance of the desktop app (added in M4a; files without it get the defaults). */
   ui?: UiSettings;
   /** Format version. */
@@ -754,6 +827,18 @@ export interface Actions {
     params: ConsoleParams;
     result: ConsoleRow[];
     tier: "read";
+  };
+  /** Cancels the pending laser request (the one given, or any). Always allowed. */
+  "fire.cancel": {
+    params: FireCancelParams;
+    result: null;
+    tier: "safety";
+  };
+  /** Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request. */
+  "fire.request": {
+    params: FireRequestParams;
+    result: FireRequest;
+    tier: "machine";
   };
   /** Stops streaming the job and sends `M5` (lines already in the board still run; use machine.stop to stop at once). Always allowed. */
   "job.abort": {
@@ -989,6 +1074,12 @@ export interface Actions {
     result: null;
     tier: "ui";
   };
+  /** Chooses the Design mode tool (select, rectangle, ellipse, text). */
+  "view.set_tool": {
+    params: SetToolParams;
+    result: null;
+    tier: "ui";
+  };
   /** Shows the table around a point at a zoom (CSS pixels per mm). */
   "view.set_viewport": {
     params: Viewport;
@@ -1015,6 +1106,8 @@ export type ActionName = keyof Actions;
 /** Tier of each action, for the front end (the Rust side checks it again). */
 export const ACTION_TIERS = {
   "console.get": "read",
+  "fire.cancel": "safety",
+  "fire.request": "machine",
   "job.abort": "safety",
   "job.frame": "machine",
   "job.info": "read",
@@ -1054,6 +1147,7 @@ export const ACTION_TIERS = {
   "view.open_dialog": "ui",
   "view.set_drawer": "ui",
   "view.set_mode": "ui",
+  "view.set_tool": "ui",
   "view.set_viewport": "ui",
   "view.show_panel": "ui",
   "view.toast": "ui",

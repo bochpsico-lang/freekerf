@@ -25,6 +25,7 @@ pub fn run() {
             commands::dispatch,
             commands::catalog,
             commands::subscribe,
+            commands::confirm_fire,
             commands::preview,
             commands::subscribe_head,
             commands::bench_report
@@ -85,6 +86,17 @@ pub mod commands {
     #[allow(clippy::needless_pass_by_value)]
     pub fn subscribe(bridge: tauri::State<'_, Bridge>, events: Channel<Value>) {
         bridge.forward_events(move |e| events.send(e).is_ok());
+    }
+
+    /// "Fire laser" was pressed: runs the pending laser request `id` if its
+    /// countdown is over (PLAN §9.5). Scripts and agents have no equivalent.
+    ///
+    /// # Errors
+    /// No such request, too early, or the action's error.
+    #[tauri::command]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn confirm_fire(bridge: tauri::State<'_, Bridge>, id: u64) -> Result<Value, ActionError> {
+        bridge.confirm_fire(id)
     }
 
     /// The tool path of the loaded program as raw bytes (empty when none is loaded).

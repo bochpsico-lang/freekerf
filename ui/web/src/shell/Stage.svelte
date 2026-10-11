@@ -12,10 +12,38 @@
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
   import { formatDuration } from '../lib/format';
+  import { DesignEditor } from '../design/editor';
+  import Palette from '../design/Palette.svelte';
   import AlarmBanner from '../produce/AlarmBanner.svelte';
 
-  let { onzoom }: { onzoom?: (realSize: number) => void } = $props();
-  const { view, preview, machine, settings, service } = app();
+  let { mode = 'produce', onzoom }: { mode?: 'design' | 'produce'; onzoom?: (realSize: number) => void } =
+    $props();
+  const { view, preview, machine, settings, service, doc, env, run } = app();
+  const design = $derived(mode === 'design' && !!doc);
+
+  // the camera as last reported (the selection handles are drawn in screen space)
+  let cam: CameraState | null = $state.raw(null);
+  // bumped while a handle drag changes its preview
+  let tick = $state(0);
+  const editor = doc
+    ? new DesignEditor({
+        doc: () => doc.summary,
+        tool: () => view.tool,
+        camera: () => cam,
+        coarse: () => env.input === 'touch',
+        service: doc.service,
+        run,
+        selectTool: () => void run(() => service.dispatch('view.set_tool', { tool: 'select' })),
+        textPlaced: () => void run(() => service.dispatch('view.show_panel', { panel: 'object' })),
+        changed: () => tick++,
+      })
+    : null;
+  const selection = $derived.by(() => {
+    void tick;
+    void doc?.summary;
+    void cam;
+    return design && editor ? editor.overlay() : null;
+  });
   // the work area from the board ($130/$131), 400×400 mm until it is known
   const workArea = $derived(
     machine.info?.settings_known
@@ -32,6 +60,7 @@
   let lastFit = -1;
 
   function camera(c: CameraState) {
+    cam = c;
     onzoom?.(c.scale / REAL_SIZE);
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
@@ -72,6 +101,11 @@
     if (timer) clearTimeout(timer);
   });
 
+  /** Moves the selection (arrow keys). */
+  export function nudge(dx: number, dy: number, mods: { shift: boolean; alt: boolean }) {
+    return editor?.nudge(dx, dy, mods);
+  }
+
   /** Zoom by a factor around the centre (buttons and keys). */
   export function zoom(factor: number) {
     canvas?.zoom(factor);
@@ -86,8 +120,22 @@
 <section class="stage" id="stage" aria-label="Canvas" tabindex="-1">
   <Canvas
     {workArea}
-    mode={view.mode}
-    toolpath={preview.toolpath}
+    {mode}
+    toolpath={design ? null : preview.toolpath}
+    paths={design ? (doc?.paths ?? null) : null}
+    layerColors={design ? (doc?.layerColors ?? null) : null}
+    {selection}
+    design={design && editor
+      ? {
+          hitTest: editor.hitTest,
+          select: editor.select,
+          selectArea: editor.selectArea,
+          hitHandle: editor.hitHandle,
+          drag: editor.drag,
+          placing: editor.placing,
+          place: editor.place,
+        }
+      : {}}
     head={preview.head}
     executed={preview.head?.executed ?? 0}
     units={settings.ui.units}
@@ -104,6 +152,7 @@
     </div>
   {/if}
   <AlarmBanner />
+  {#if design && doc}<Palette {doc} />{/if}
   <div class="canvas-tools" aria-label="View">
     <button
       class="icon-btn"

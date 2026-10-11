@@ -22,6 +22,10 @@ export class ViewProjection {
     return this.#state?.mode ?? 'produce';
   }
 
+  get tool(): ViewState['tool'] {
+    return this.#state?.tool ?? 'select';
+  }
+
   get panel(): ViewState['panel'] {
     return this.#state?.panel ?? 'machine';
   }

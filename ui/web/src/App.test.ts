@@ -112,3 +112,26 @@ describe('layouts', () => {
     window.innerWidth = 1300;
   });
 });
+
+describe('settings dialog', () => {
+  it('changes the language through settings.set and shows user-only settings read-only', async () => {
+    const { service } = await mountApp();
+    await service.dispatch('view.open_dialog', { dialog: 'settings' });
+    await screen.findByTestId('dialog-settings');
+    await fireEvent.change(screen.getByTestId('language'), { target: { value: 'pt-BR' } });
+    await waitFor(() => expect(document.documentElement.lang).toBe('pt-BR'));
+    expect(service.settings.ui?.language).toBe('pt-BR');
+    expect(screen.getByTestId('state-chip').textContent).toContain('Desconectada');
+    await fireEvent.click(screen.getByTestId('settings-tab-safety'));
+    expect(screen.getByTestId('settings-safety').querySelector('input')).toBeNull();
+    await fireEvent.click(screen.getByTestId('settings-tab-automation'));
+    expect(screen.getByTestId('settings-automation').querySelector('input')).toBeNull();
+    await fireEvent.click(screen.getByTestId('settings-tab-machine'));
+    await fireEvent.change(screen.getByLabelText('Velocidade (baud)'), { target: { value: '250000' } });
+    expect(
+      service.calls.find(
+        (c) => c.action === 'settings.set' && (c.params as { key: string }).key === 'machine.baud',
+      )?.params,
+    ).toEqual({ key: 'machine.baud', value: 250000 });
+  });
+});

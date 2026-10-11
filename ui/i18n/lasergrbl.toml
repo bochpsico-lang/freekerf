@@ -1,0 +1,38 @@
+# Translations reused from LaserGRBL (GPL-3.0, © Diego Settimi and its translators)
+# by `cargo xtask resx2ftl`. Only strings whose meaning is the same in FreeKerf are
+# listed: FreeKerf message id = "<resx file without culture>:<key>". Accelerator
+# ampersands and a trailing colon are removed. The generated files are
+# ui/i18n/<locale>/lasergrbl.ftl; a message already in <locale>/freekerf.ftl wins
+# (it is not generated). Entries whose translations often mean something else in
+# LaserGRBL (MacStatusConnecting, MacStatusJog) are left out on purpose.
+
+# LaserGRBL commit the translations come from (a checkout is passed with --lasergrbl).
+commit = "1f9337b3af27133f8b1696e41cc110f2af74d04f"
+
+[messages]
+state-offline = "LaserGRBL/Strings.resx:MacStatusDisconnected"
+state-alarm = "LaserGRBL/Strings.resx:MacStatusAlarm"
+state-home = "LaserGRBL/Strings.resx:MacStatusHome"
+machine-connect = "LaserGRBL/MainForm.resx:MnConnect.Text"
+machine-disconnect = "LaserGRBL/MainForm.resx:MnDisconnect.Text"
+machine-home = "LaserGRBL/MainForm.resx:MnGoHome.Text"
+machine-unlock = "LaserGRBL/MainForm.resx:MnUnlock.Text"
+machine-estimate = "LaserGRBL/MainForm.resx:TTLEstimated.Text"
+machine-lines = "LaserGRBL/MainForm.resx:TTLLines.Text"
+machine-openGcode = "LaserGRBL/MainForm.resx:MnFileOpen.Text"
+machine-laserLife = "LaserGRBL/MainForm.resx:laserUsageStatsToolStripMenuItem.Text"
+machine-continuous = "LaserGRBL/SettingsForm.resx:CbContinuosJog.Text"
+recover-title = "LaserGRBL/ResumeJobForm.resx:$this.Text"
+recover-cause = "LaserGRBL/ResumeJobForm.resx:LblCause.Text"
+recover-fromStart = "LaserGRBL/ResumeJobForm.resx:RbFromBeginning.Text"
+recover-fromLine = "LaserGRBL/ResumeJobForm.resx:RbFromSpecific.Text"
+recover-homing = "LaserGRBL/ResumeJobForm.resx:CbRedoHoming.Text"
+preflight-cancel = "LaserGRBL/ResumeJobForm.resx:BtnCancel.Text"
+common-ok = "LaserGRBL/ResumeJobForm.resx:BtnOK.Text"
+common-close = "LaserGRBL/LaserUsage.resx:BtnClose.Text"
+settings-lang = "LaserGRBL/MainForm.resx:linguaToolStripMenuItem.Text"
+settings-header = "LaserGRBL/SettingsForm.resx:groupBox1.Text"
+settings-footer = "LaserGRBL/SettingsForm.resx:groupBox2.Text"
+settings-passes = "LaserGRBL/SettingsForm.resx:groupBox3.Text"
+settings-supportPwm = "LaserGRBL/SettingsForm.resx:CBSupportPWM.Text"
+settings-autoCooling = "LaserGRBL/SettingsForm.resx:CbAutoCooling.Text"

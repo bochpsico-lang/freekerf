@@ -6,6 +6,7 @@ import { getContext, setContext } from 'svelte';
 import type { Actions } from './gen/api';
 import type { AppService } from './service';
 import type { ConsoleProjection } from './state/console.svelte';
+import type { DocumentProjection } from './state/document.svelte';
 import type { Environment } from './state/environment.svelte';
 import type { MachineState } from './state/machine.svelte';
 import type { PreviewState } from './state/preview.svelte';
@@ -20,6 +21,8 @@ export interface AppContext {
   settings: SettingsProjection;
   env: Environment;
   console: ConsoleProjection;
+  /** The Design mode document; `null` until M2 provides it (the Design mode is then hidden). */
+  doc: DocumentProjection | null;
   /**
    * Asks to run an action that can turn the laser on: it only runs after the human
    * confirmation on screen (checklist and countdown, PLAN §9.5).

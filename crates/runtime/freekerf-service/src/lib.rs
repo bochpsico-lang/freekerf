@@ -15,11 +15,13 @@ use std::time::{Duration, Instant};
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use freekerf_gcode::{AnalysisOptions, Program};
 use freekerf_machine::{Machine, MachineEvent, SystemClock};
+use freekerf_protocol::Clock;
 use freekerf_protocol::host::decimal;
 use freekerf_protocol::{
     ConsoleRow, Event, FirmwareKind, Host, HostError, HostSnapshot, Issue, JogDirection, ResumeSuggestion,
 };
-use freekerf_session::view::{Dialog, Mode, Panel, ToastLevel, ViewCommand, ViewState, Viewport};
+use freekerf_session::fire::{FireGate, FireRequest, FireSummary};
+use freekerf_session::view::{Dialog, Mode, Panel, ToastLevel, Tool, ViewCommand, ViewState, Viewport};
 use freekerf_session::{NoParams, Registry};
 use freekerf_settings::{MachineCache, Settings, SettingsStore};
 use freekerf_transport::{EmulatorTransport, SerialTransport, Transport};
@@ -46,7 +48,7 @@ pub enum ServiceEvent {
     /// A program was loaded.
     ProgramLoaded,
     /// The view state changed (`view.*` actions).
-    ViewChanged(ViewState),
+    ViewChanged(Box<ViewState>),
 }
 
 /// A [`ServiceEvent`] as front ends receive it (JSON, tagged by `event`).
@@ -75,7 +77,7 @@ pub enum EventMessage {
     /// The view state changed.
     View {
         /// The new view state.
-        view: ViewState,
+        view: Box<ViewState>,
     },
 }
 
@@ -233,6 +235,8 @@ pub struct Inner {
     stores: Stores,
     loaded: Mutex<Option<Loaded>>,
     view: Mutex<ViewState>,
+    fire: Mutex<FireGate>,
+    fire_clock: Mutex<Arc<dyn Clock>>,
     console: Arc<Mutex<VecDeque<ConsoleRow>>>,
     issues: Arc<Mutex<Vec<Issue>>>,
     subscribers: Arc<Mutex<Vec<Sender<ServiceEvent>>>>,
@@ -303,6 +307,8 @@ impl Service {
             stores,
             loaded: Mutex::new(None),
             view: Mutex::new(ViewState::default()),
+            fire: Mutex::new(FireGate::default()),
+            fire_clock: Mutex::new(Arc::new(SystemClock::default())),
             console: Arc::new(Mutex::new(VecDeque::new())),
             issues: Arc::new(Mutex::new(Vec::new())),
             subscribers: Arc::new(Mutex::new(Vec::new())),
@@ -370,6 +376,31 @@ impl Service {
         })))
     }
 
+    /// Runs the pending laser request `id` after the person confirmed it on screen
+    /// (PLAN §9.5). Not an action of the registry on purpose: scripts and agents can
+    /// ask for a laser action (`fire.request`) but never confirm one. Only a front
+    /// end with a person in front of it calls this (the desktop window's
+    /// "Fire laser" button).
+    ///
+    /// # Errors
+    /// No such request, countdown not over, or the action's own error.
+    pub fn confirm_fire(&self, id: u64) -> Result<Value, ActionError> {
+        let now = lock(&self.inner.fire_clock).now_ms();
+        let request = lock(&self.inner.fire)
+            .confirm(id, now)
+            .map_err(|e| ActionError::Refused(e.to_string()))?;
+        // the dialog closes whatever happens next
+        self.inner.view(ViewCommand::SetFireRequest(None))?;
+        tracing::info!(action = %request.action, by = %request.requested_by, "laser action confirmed");
+        self.registry
+            .dispatch(&self.inner, &Caller::user(), &request.action, request.params)
+    }
+
+    /// Replaces the clock of the fire confirmation countdown (tests).
+    pub fn set_fire_clock(&self, clock: Arc<dyn Clock>) {
+        *lock(&self.inner.fire_clock) = clock;
+    }
+
     /// STOP without going through the registry (also bound to Ctrl-C by the CLI).
     pub fn stop(&self) {
         self.inner.machine.stop();
@@ -419,6 +450,26 @@ impl Inner {
         lock(&self.subscribers).retain(|s| s.send(e.clone()).is_ok());
     }
 
+    /// What the fire confirmation shows for a request.
+    fn fire_summary(&self, action: &str, params: &Value) -> FireSummary {
+        let code = params
+            .get("line")
+            .or_else(|| params.get("code"))
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let program = match action {
+            "job.run" | "job.resume" => lock(&self.loaded).as_ref().map(program_info),
+            _ => None,
+        };
+        FireSummary {
+            program: program.as_ref().map(|p| p.name.clone()),
+            lines: program.as_ref().map(|p| p.lines),
+            estimated_ms: program.as_ref().map(|p| p.estimated_ms),
+            bounds: program.and_then(|p| p.drawing_range),
+            code,
+        }
+    }
+
     /// Applies a view command and publishes the new view state when it changed.
     fn view(&self, cmd: ViewCommand) -> Result<Option<u64>, ActionError> {
         let (result, changed) = {
@@ -430,7 +481,7 @@ impl Inner {
             (r, (*v != before).then(|| v.clone()))
         };
         if let Some(v) = changed {
-            self.publish(&ServiceEvent::ViewChanged(v));
+            self.publish(&ServiceEvent::ViewChanged(Box::new(v)));
         }
         Ok(result)
     }
@@ -712,12 +763,39 @@ pub struct MachineInfo {
     pub laser_in_use: Option<usize>,
 }
 
+/// `fire.request`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FireRequestParams {
+    /// An action of tier `laser` (`job.run`, `job.resume`, `machine.send`, `machine.custom_code`).
+    pub action: String,
+    /// Its parameters.
+    #[serde(default)]
+    pub params: Value,
+}
+
+/// `fire.cancel`.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FireCancelParams {
+    /// The request; the pending one when absent.
+    pub id: Option<u64>,
+}
+
 /// `view.set_mode`.
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SetModeParams {
     /// `design` or `produce`.
     pub mode: Mode,
+}
+
+/// `view.set_tool`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SetToolParams {
+    /// `select`, `rect`, `ellipse` or `text`.
+    pub tool: Tool,
 }
 
 /// `view.show_panel`.
@@ -1202,8 +1280,55 @@ fn build_registry() -> Registry<Inner> {
         |s: &Inner, _: NoParams| s.host_result(Host::abort_program),
     ));
     register_view(&mut r);
+    register_fire(&mut r);
     describe_results(&mut r);
     r
+}
+
+/// `fire.request` and `fire.cancel` (PLAN §9.5). Confirming is
+/// [`Service::confirm_fire`], not an action.
+fn register_fire(r: &mut Registry<Inner>) {
+    let laser: Vec<String> = r
+        .specs()
+        .filter(|s| s.tier == Tier::Laser)
+        .map(|s| s.name.clone())
+        .collect();
+    let add = |result: Result<(), freekerf_session::RegistryError>| {
+        if let Err(e) = result {
+            tracing::error!("action registration: {e}");
+        }
+    };
+    add(r.register(
+        "fire.request",
+        "Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request.",
+        Tier::Machine,
+        move |s: &Inner, p: FireRequestParams| {
+            if !laser.contains(&p.action) {
+                return Err(ActionError::InvalidParams(format!(
+                    "`{}` is not a laser action ({})",
+                    p.action,
+                    laser.join(", ")
+                )));
+            }
+            let summary = s.fire_summary(&p.action, &p.params);
+            let countdown_ms = lock(&s.settings).safety.fire_countdown_s.saturating_mul(1000);
+            let now = lock(&s.fire_clock).now_ms();
+            let request = lock(&s.fire).request(&p.action, p.params, "desktop", summary, countdown_ms, now);
+            s.view(ViewCommand::SetFireRequest(Some(request.clone())))?;
+            Ok(request)
+        },
+    ));
+    add(r.register(
+        "fire.cancel",
+        "Cancels the pending laser request (the one given, or any). Always allowed.",
+        Tier::Safety,
+        |s: &Inner, p: FireCancelParams| {
+            if lock(&s.fire).cancel(p.id) {
+                s.view(ViewCommand::SetFireRequest(None))?;
+            }
+            Ok(())
+        },
+    ));
 }
 
 /// The `view.*` actions (tier `ui`): what the app shows, as data.
@@ -1227,6 +1352,12 @@ fn register_view(r: &mut Registry<Inner>) {
         move |s: &Inner, p: SetModeParams| unit(s, ViewCommand::SetMode(p.mode)),
     ));
     add(r.register(
+        "view.set_tool",
+        "Chooses the Design mode tool (select, rectangle, ellipse, text).",
+        Tier::Ui,
+        move |s: &Inner, p: SetToolParams| unit(s, ViewCommand::SetTool(p.tool)),
+    ));
+    add(r.register(
         "view.show_panel",
         "Shows a panel of the dock (opens the drawer in the medium layout).",
         Tier::Ui,
@@ -1248,7 +1379,15 @@ fn register_view(r: &mut Registry<Inner>) {
         "view.close_dialog",
         "Closes a dialog (the one on top when none is given).",
         Tier::Ui,
-        move |s: &Inner, p: CloseDialogParams| unit(s, ViewCommand::CloseDialog(p.dialog)),
+        move |s: &Inner, p: CloseDialogParams| {
+            let target = p.dialog.or_else(|| lock(&s.view).top_dialog());
+            if target == Some(Dialog::FireConfirmation) {
+                // closing the fire confirmation cancels its request
+                lock(&s.fire).cancel(None);
+                return unit(s, ViewCommand::SetFireRequest(None));
+            }
+            unit(s, ViewCommand::CloseDialog(p.dialog))
+        },
     ));
     add(r.register(
         "view.toast",
@@ -1306,6 +1445,7 @@ fn describe_results(r: &mut Registry<Inner>) {
     add(r.describe_result::<Option<ProgramInfo>>("job.info"));
     add(r.describe_result::<ViewState>("view.get"));
     add(r.describe_result::<MachineInfo>("machine.info"));
+    add(r.describe_result::<FireRequest>("fire.request"));
     add(r.describe_result::<u64>("view.toast"));
     for name in [
         "settings.set",
@@ -1329,10 +1469,12 @@ fn describe_results(r: &mut Registry<Inner>) {
         "machine.custom_code",
         "machine.select_laser",
         "job.frame",
+        "fire.cancel",
         "job.run",
         "job.resume",
         "job.abort",
         "view.set_mode",
+        "view.set_tool",
         "view.show_panel",
         "view.set_drawer",
         "view.open_dialog",

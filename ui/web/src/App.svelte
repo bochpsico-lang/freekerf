@@ -4,8 +4,12 @@
   // density by input kind, theme from the settings; everything else from the
   // view state in Rust (PLAN §9: the UI changes app state only through actions).
   import { setApp, type AppContext, type LaserRequest } from './context';
+  import ImportDialog from './design/ImportDialog.svelte';
+  import LayersPanel from './design/LayersPanel.svelte';
+  import ObjectPanel from './design/ObjectPanel.svelte';
+  import WelcomeDialog from './design/WelcomeDialog.svelte';
   import { flags } from './flags';
-  import { t } from './i18n/index.svelte';
+  import { setLocale, t } from './i18n/index.svelte';
   import ConsolePanel from './produce/ConsolePanel.svelte';
   import FireConfirmation from './produce/FireConfirmation.svelte';
   import MachinePanel from './produce/MachinePanel.svelte';
@@ -25,6 +29,7 @@
   import TopBar from './shell/TopBar.svelte';
   import { resolveDensity, type Environment } from './state/environment.svelte';
   import type { ConsoleProjection } from './state/console.svelte';
+  import type { DocumentProjection } from './state/document.svelte';
   import type { MachineState } from './state/machine.svelte';
   import type { PreviewState } from './state/preview.svelte';
   import type { SettingsProjection } from './state/settings.svelte';
@@ -38,6 +43,7 @@
     settings,
     env,
     console: consoleRows,
+    doc = null,
   }: {
     service: AppService;
     machine: MachineState;
@@ -46,14 +52,12 @@
     settings: SettingsProjection;
     env: Environment;
     console: ConsoleProjection;
+    doc?: DocumentProjection | null;
   } = $props();
 
-  /** The laser request waiting for the confirmation dialog (local until it is confirmed or cancelled). */
-  let pending: LaserRequest | null = $state(null);
-
+  /** Laser actions only ask: the app opens the fire confirmation (PLAN §9.5). */
   async function laser(request: LaserRequest): Promise<void> {
-    pending = request;
-    await run(() => service.dispatch('view.open_dialog', { dialog: 'fire_confirmation' }));
+    await run(() => service.dispatch('fire.request', { action: request.action, params: request.params }));
   }
 
   async function run(action: () => Promise<unknown>): Promise<void> {
@@ -75,6 +79,7 @@
     settings,
     env,
     console: consoleRows,
+    doc,
     run,
     laser,
   };
@@ -82,8 +87,12 @@
 
   let stage: Stage | undefined = $state();
   let zoom = $state(1);
-  // the narrow layout is machine-only (design/ux.md "Layouts")
-  const mode = $derived(env.layout === 'narrow' || !flags.designMode ? 'produce' : view.mode);
+  // the narrow layout is machine-only (design/ux.md "Layouts"); the Design mode
+  // needs the document (M2) and the flag
+  const designAvailable = $derived(flags.designMode && !!doc);
+  const mode = $derived(env.layout === 'narrow' || !designAvailable ? 'produce' : view.mode);
+
+  $effect(() => setLocale(settings.ui.language));
 
   $effect(() => {
     const root = document.documentElement;
@@ -96,7 +105,7 @@
     root.dataset.mode = mode;
   });
 
-  function exec(c: Command): void {
+  function exec(c: Command, e?: KeyboardEvent): void {
     const status = machine.state?.machine.status;
     switch (c) {
       case 'stop':
@@ -114,7 +123,7 @@
         if (machine.visual === 'idle') void run(() => service.dispatch('job.frame', {}));
         return;
       case 'mode-design':
-        if (flags.designMode) void run(() => service.dispatch('view.set_mode', { mode: 'design' }));
+        if (designAvailable) void run(() => service.dispatch('view.set_mode', { mode: 'design' }));
         return;
       case 'mode-produce':
         void run(() => service.dispatch('view.set_mode', { mode: 'produce' }));
@@ -129,10 +138,69 @@
         stage?.zoom(0.8);
         return;
       case 'close-dialog':
-        void run(() => service.dispatch('view.close_dialog', {}));
+        // closing the fire confirmation cancels its request (also in Rust)
+        void run(() =>
+          view.topDialog === 'fire_confirmation'
+            ? service.dispatch('fire.cancel', {})
+            : service.dispatch('view.close_dialog', {}),
+        );
         return;
       case 'shortcuts':
         void run(() => service.dispatch('view.open_dialog', { dialog: 'shortcuts' }));
+        return;
+    }
+    if (doc) editCommand(c, doc, e);
+  }
+
+  /** Design mode keys (only reached while the Design mode is shown). */
+  function editCommand(c: Command, d: DocumentProjection, e?: KeyboardEvent): void {
+    const ids = d.selection;
+    const mods = { shift: !!e?.shiftKey, alt: !!e?.altKey };
+    const tool = (tool: 'select' | 'rect' | 'ellipse' | 'text') =>
+      void run(() => service.dispatch('view.set_tool', { tool }));
+    switch (c) {
+      case 'tool-select':
+        return tool('select');
+      case 'tool-rect':
+        return tool('rect');
+      case 'tool-ellipse':
+        return tool('ellipse');
+      case 'tool-text':
+        return tool('text');
+      case 'import':
+        void run(() => service.dispatch('view.open_dialog', { dialog: 'import' }));
+        return;
+      case 'undo':
+        void run(() => d.service.dispatch('document.undo', {}));
+        return;
+      case 'redo':
+        void run(() => d.service.dispatch('document.redo', {}));
+        return;
+      case 'select-all':
+        void run(() => d.service.dispatch('document.select_all', {}));
+        return;
+      case 'deselect':
+        if (view.tool !== 'select') tool('select');
+        else if (ids.length)
+          void run(() => d.service.dispatch('document.select', { ids: [], mode: 'replace' }));
+        return;
+      case 'delete':
+        if (ids.length) void run(() => d.service.dispatch('document.delete', { ids }));
+        return;
+      case 'duplicate':
+        if (ids.length) void run(() => d.service.dispatch('document.duplicate', { ids }));
+        return;
+      case 'nudge-left':
+        void stage?.nudge(-1, 0, mods);
+        return;
+      case 'nudge-right':
+        void stage?.nudge(1, 0, mods);
+        return;
+      case 'nudge-up':
+        void stage?.nudge(0, 1, mods);
+        return;
+      case 'nudge-down':
+        void stage?.nudge(0, -1, mods);
         return;
     }
   }
@@ -142,10 +210,11 @@
       typing: isTyping(e.target),
       dialogOpen: view.dialogs.length > 0,
       running: machine.visual === 'run',
+      design: mode === 'design',
     });
     if (!c) return;
     e.preventDefault();
-    exec(c);
+    exec(c, e);
   }
 </script>
 
@@ -155,9 +224,13 @@
 <TopBar />
 <div class="main">
   {#if mode === 'design'}<ToolRail />{:else}<nav class="toolrail" aria-hidden="true"></nav>{/if}
-  <Stage bind:this={stage} onzoom={(z) => (zoom = z)} />
+  <Stage bind:this={stage} {mode} onzoom={(z) => (zoom = z)} />
   {#if env.layout === 'medium' && mode === 'design'}<DockRail />{/if}
-  <Dock panels={{ machine: machinePanel, console: consolePanel }} />
+  <Dock
+    panels={doc
+      ? { machine: machinePanel, console: consolePanel, layers: layersPanel, object: objectPanel }
+      : { machine: machinePanel, console: consolePanel }}
+  />
 </div>
 <StatusBar {zoom} />
 {#if env.layout === 'narrow'}
@@ -176,7 +249,14 @@
     >
   </BottomBar>
 {/if}
-<Dialogs extra={{ recover: recoverDialog, fire_confirmation: fireDialog }} />
+<Dialogs
+  extra={{
+    recover: recoverDialog,
+    fire_confirmation: fireDialog,
+    welcome: welcomeDialog,
+    import: importDialog,
+  }}
+/>
 <Toasts />
 
 {#snippet machinePanel()}
@@ -188,12 +268,18 @@
 {#snippet recoverDialog(close: () => void)}
   <RecoverDialog onclose={close} />
 {/snippet}
-{#snippet fireDialog(close: () => void)}
-  <FireConfirmation
-    request={pending}
-    onclose={() => {
-      pending = null;
-      close();
-    }}
-  />
+{#snippet layersPanel()}
+  {#if doc}<LayersPanel {doc} />{/if}
+{/snippet}
+{#snippet objectPanel()}
+  {#if doc}<ObjectPanel {doc} />{/if}
+{/snippet}
+{#snippet welcomeDialog(close: () => void)}
+  <WelcomeDialog onclose={close} />
+{/snippet}
+{#snippet importDialog(close: () => void)}
+  <ImportDialog onclose={close} />
+{/snippet}
+{#snippet fireDialog()}
+  <FireConfirmation />
 {/snippet}

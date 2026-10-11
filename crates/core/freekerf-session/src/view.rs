@@ -9,6 +9,8 @@
 use std::collections::BTreeMap;
 
 use schemars::JsonSchema;
+
+use crate::fire::FireRequest;
 use serde::{Deserialize, Serialize};
 
 /// Most toasts kept at once (`design/design-system.md`: at most 3 stacked).
@@ -23,6 +25,21 @@ pub enum Mode {
     /// Machine control; the canvas is a preview.
     #[default]
     Produce,
+}
+
+/// Active tool of the Design mode (`design/interaction.md` §2).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Tool {
+    /// Select, move, resize, rotate.
+    #[default]
+    Select,
+    /// Draw a rectangle.
+    Rect,
+    /// Draw an ellipse.
+    Ellipse,
+    /// Place a text.
+    Text,
 }
 
 /// Panels of the dock (wide layout) or the drawers (medium layout).
@@ -106,6 +123,8 @@ pub struct Viewport {
 pub struct ViewState {
     /// Mode.
     pub mode: Mode,
+    /// Active tool of the Design mode.
+    pub tool: Tool,
     /// Active panel of the dock.
     pub panel: Panel,
     /// The panel drawer is open (medium layout).
@@ -120,6 +139,9 @@ pub struct ViewState {
     pub fit_request: u64,
     /// Element with the keyboard focus (`canvas`, `console`... free text), if known.
     pub focus: Option<String>,
+    /// The laser action waiting for the person's confirmation, if any (the fire
+    /// confirmation dialog is open while it is set).
+    pub fire_request: Option<FireRequest>,
     /// Next toast id.
     #[serde(skip)]
     next_toast: u64,
@@ -129,6 +151,7 @@ impl Default for ViewState {
     fn default() -> Self {
         Self {
             mode: Mode::Produce,
+            tool: Tool::Select,
             panel: Panel::Machine,
             drawer_open: false,
             dialogs: Vec::new(),
@@ -136,6 +159,7 @@ impl Default for ViewState {
             viewport: None,
             fit_request: 0,
             focus: None,
+            fire_request: None,
             next_toast: 1,
         }
     }
@@ -146,6 +170,8 @@ impl Default for ViewState {
 pub enum ViewCommand {
     /// Switches the mode; Produce opens the machine panel.
     SetMode(Mode),
+    /// Chooses the Design mode tool.
+    SetTool(Tool),
     /// Shows a panel (and opens the drawer).
     ShowPanel(Panel),
     /// Opens or closes the drawer.
@@ -171,6 +197,9 @@ pub enum ViewCommand {
     Fit,
     /// Records the focus.
     Focus(Option<String>),
+    /// Shows (opens the fire confirmation dialog) or clears (closes it) the pending
+    /// laser request. Set by the service, not an action of its own.
+    SetFireRequest(Option<FireRequest>),
 }
 
 /// A command that cannot be applied.
@@ -197,6 +226,7 @@ impl ViewState {
                     self.panel = Panel::Machine;
                 }
             }
+            ViewCommand::SetTool(t) => self.tool = t,
             ViewCommand::ShowPanel(p) => {
                 self.panel = p;
                 self.drawer_open = true;
@@ -235,6 +265,13 @@ impl ViewState {
             }
             ViewCommand::Fit => self.fit_request = self.fit_request.wrapping_add(1),
             ViewCommand::Focus(f) => self.focus = f,
+            ViewCommand::SetFireRequest(r) => {
+                self.dialogs.retain(|d| *d != Dialog::FireConfirmation);
+                if r.is_some() {
+                    self.dialogs.push(Dialog::FireConfirmation);
+                }
+                self.fire_request = r;
+            }
         }
         Ok(None)
     }
@@ -262,6 +299,9 @@ mod tests {
         );
         v.apply(ViewCommand::SetDrawer(false)).unwrap();
         assert!(!v.drawer_open);
+        assert_eq!(v.tool, Tool::Select);
+        v.apply(ViewCommand::SetTool(Tool::Ellipse)).unwrap();
+        assert_eq!(v.tool, Tool::Ellipse);
         v.apply(ViewCommand::SetMode(Mode::Produce)).unwrap();
         assert_eq!(v.panel, Panel::Machine);
     }
@@ -336,6 +376,26 @@ mod tests {
         assert_eq!(v.fit_request, 2);
         v.apply(ViewCommand::Focus(Some("canvas".into()))).unwrap();
         assert_eq!(v.focus.as_deref(), Some("canvas"));
+    }
+
+    #[test]
+    fn fire_requests_open_and_close_the_dialog() {
+        let mut v = ViewState::default();
+        let r = crate::fire::FireGate::default().request(
+            "job.run",
+            serde_json::Value::Null,
+            "desktop",
+            crate::fire::FireSummary::default(),
+            3000,
+            0,
+        );
+        v.apply(ViewCommand::OpenDialog(Dialog::Settings)).unwrap();
+        v.apply(ViewCommand::SetFireRequest(Some(r))).unwrap();
+        assert_eq!(v.top_dialog(), Some(Dialog::FireConfirmation));
+        assert!(v.fire_request.is_some());
+        v.apply(ViewCommand::SetFireRequest(None)).unwrap();
+        assert_eq!(v.dialogs, [Dialog::Settings]);
+        assert!(v.fire_request.is_none());
     }
 
     #[test]

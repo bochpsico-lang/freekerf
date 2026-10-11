@@ -44,6 +44,15 @@ impl Bridge {
         self.service.dispatch(&self.caller, action, params)
     }
 
+    /// Runs the pending laser request after the person pressed "Fire laser"
+    /// (`Service::confirm_fire`). The only way the window runs a `laser` action.
+    ///
+    /// # Errors
+    /// No such request, countdown not over, or the action's error.
+    pub fn confirm_fire(&self, id: u64) -> Result<Value, ActionError> {
+        self.service.confirm_fire(id)
+    }
+
     /// Every action spec.
     #[must_use]
     pub fn catalog(&self) -> Vec<ActionSpec> {
@@ -164,6 +173,34 @@ mod tests {
         // unchanged state: no second frame
         assert!(rx.recv_timeout(Duration::from_millis(50)).is_err());
         drop(rx);
+    }
+
+    #[test]
+    fn every_laser_action_needs_the_confirmation() {
+        let b = bridge();
+        let laser: Vec<_> = b
+            .catalog()
+            .into_iter()
+            .filter(|s| s.tier == Tier::Laser)
+            .collect();
+        assert!(laser.len() >= 4);
+        for spec in laser {
+            let e = b.dispatch(&spec.name, serde_json::json!({})).unwrap_err();
+            assert!(
+                matches!(e, ActionError::PermissionDenied { .. }),
+                "{}: {e:?}",
+                spec.name
+            );
+        }
+        // asking opens the confirmation; confirming at once is refused (countdown)
+        let r = b
+            .dispatch(
+                "fire.request",
+                serde_json::json!({"action": "machine.send", "params": {"line": "M3"}}),
+            )
+            .unwrap();
+        let e = b.confirm_fire(r["id"].as_u64().unwrap()).unwrap_err();
+        assert!(matches!(e, ActionError::Refused(_)), "{e:?}");
     }
 
     #[test]
