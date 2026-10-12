@@ -21,6 +21,9 @@ export type Command =
   | 'import'
   | 'delete'
   | 'duplicate'
+  | 'copy'
+  | 'cut'
+  | 'paste'
   | 'select-all'
   | 'deselect'
   | 'undo'
@@ -84,6 +87,10 @@ export function shortcut(e: KeyInput, c: KeyContext): Command | null {
     if (k === 'z') return e.shiftKey ? 'redo' : 'undo';
     if (k === 'y') return 'redo';
     if (k === 'd') return 'duplicate';
+    // text fields keep their own copy and paste (typing returns above)
+    if (k === 'c') return 'copy';
+    if (k === 'x') return 'cut';
+    if (k === 'v') return 'paste';
     if (k === 'a') return 'select-all';
     if (k === 'i') return 'import';
   }
@@ -127,6 +134,7 @@ export const SHORTCUT_TABLE: [string, string, string][] = [
   ['kb-g-tools', 'Ctrl+I', 'tool-import'],
   ['kb-g-edit', 'Ctrl+Z', 'kb-undo'],
   ['kb-g-edit', 'Ctrl+Y · Ctrl+Shift+Z', 'kb-redo'],
+  ['kb-g-edit', 'Ctrl+C · Ctrl+X · Ctrl+V', 'kb-clipboard'],
   ['kb-g-edit', 'Ctrl+D', 'kb-dup'],
   ['kb-g-edit', 'Del', 'kb-del'],
   ['kb-g-edit', 'Ctrl+A', 'kb-all'],

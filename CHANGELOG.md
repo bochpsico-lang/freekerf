@@ -83,6 +83,12 @@ All notable changes to FreeKerf are documented here. The format follows
 - Documentation: `AGENTS.md`, architecture, ADRs 0001-0005, feature pages,
   divergences from LaserGRBL, coverage, benchmarks, roadmap.
 
+- Desktop app, Design mode: copy, cut and paste (Ctrl+C, Ctrl+X, Ctrl+V) and a
+  context menu on the canvas (copy, cut, paste where it opened, duplicate,
+  delete). Actions `document.copy`, `document.cut`, `document.paste`: the
+  session's clipboard keeps the objects and their layers across documents (a
+  missing layer is made with the copied settings); not an undo step.
+
 ### Fixed
 
 - Custom code: `[jogstep]` and `[jogspeed]` are evaluated (the jog settings), as in

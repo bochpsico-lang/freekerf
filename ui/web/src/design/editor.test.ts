@@ -161,4 +161,28 @@ describe('DesignEditor', () => {
     expect(b[1]).toBeCloseTo(0);
     expect(editor.toWorld(0, 0)).not.toBeNull();
   });
+
+  it('copies, cuts and pastes the selection; a paste from the menu is centred where it opened', async () => {
+    const { editor, add, service, refresh, summary } = await setup();
+    // nothing selected: only paste dispatches (and the clipboard is empty)
+    await editor.edit('copy');
+    expect(service.calls.some((c) => c.action === 'document.copy')).toBe(false);
+    const a = await add(10, 10);
+    await service.dispatch('document.select', { ids: [a], mode: 'replace' });
+    await refresh();
+    await editor.edit('copy');
+    expect(summary().clipboard).toBe(1);
+    await editor.edit('paste');
+    expect(summary().objects).toHaveLength(2);
+    expect(summary().objects[1]!.bounds![0]).toBeCloseTo(15);
+    await editor.edit('paste', [100, 50]);
+    const b = summary().objects[2]!.bounds!;
+    expect([(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]).toEqual([100, 50]);
+    expect(service.calls.at(-2)?.params).toEqual({ at_mm: [100, 50] });
+    await editor.edit('cut');
+    expect(summary().objects).toHaveLength(2);
+    await editor.edit('duplicate');
+    await editor.edit('delete');
+    expect(summary().objects).toHaveLength(2);
+  });
 });

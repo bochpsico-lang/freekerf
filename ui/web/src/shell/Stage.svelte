@@ -6,13 +6,14 @@
   import { onDestroy } from 'svelte';
 
   import Canvas from '../canvas/Canvas.svelte';
-  import type { CameraState } from '../canvas/camera';
+  import { Camera, type CameraState } from '../canvas/camera';
   import type { CanvasView } from '../canvas/view';
   import { app } from '../context';
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
   import { formatDuration } from '../lib/format';
-  import { DesignEditor } from '../design/editor';
+  import ContextMenu from '../design/ContextMenu.svelte';
+  import { DesignEditor, type EditCommand } from '../design/editor';
   import Palette from '../design/Palette.svelte';
   import AlarmBanner from '../produce/AlarmBanner.svelte';
 
@@ -107,6 +108,21 @@
     return editor?.nudge(dx, dy, mods);
   }
 
+  /** Copy, cut, paste, duplicate or delete (keys). */
+  export function edit(cmd: EditCommand) {
+    return editor?.edit(cmd);
+  }
+
+  // the context menu: where it opened (stage pixels) and that point in the world
+  let menu: { x: number; y: number; at: [number, number] } | null = $state(null);
+
+  function contextMenu(x: number, y: number, id: string | null) {
+    if (!design || !editor || !cam) return;
+    // a right click on an object outside the selection selects it first
+    if (id !== null) editor.select(id, false, true);
+    menu = { x, y, at: Camera.toWorld(cam, x, y) };
+  }
+
   /** Zoom by a factor around the centre (buttons and keys). */
   export function zoom(factor: number) {
     canvas?.zoom(factor);
@@ -135,6 +151,7 @@
           drag: editor.drag,
           placing: editor.placing,
           place: editor.place,
+          contextMenu,
         }
       : {}}
     head={preview.head}
@@ -151,6 +168,16 @@
         {formatDuration(Math.max(0, (job?.projected_ms ?? 0) - (job?.job_time_ms ?? 0)))}
       </div>
     </div>
+  {/if}
+  {#if menu && design && editor && doc}
+    <ContextMenu
+      x={menu.x}
+      y={menu.y}
+      selected={doc.selection.length > 0}
+      canPaste={(doc.summary?.clipboard ?? 0) > 0}
+      onpick={(cmd) => void editor.edit(cmd, menu?.at)}
+      onclose={() => (menu = null)}
+    />
   {/if}
   <AlarmBanner />
   {#if design && doc}<Palette {doc} />{/if}

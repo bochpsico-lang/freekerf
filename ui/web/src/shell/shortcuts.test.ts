@@ -69,6 +69,11 @@ describe('shortcuts', () => {
     expect(shortcut(key('Delete'), design)).toBe('delete');
     expect(shortcut(key('Backspace'), design)).toBe('delete');
     expect(shortcut(key('d', { ctrl: true }), design)).toBe('duplicate');
+    expect(shortcut(key('c', { ctrl: true }), design)).toBe('copy');
+    expect(shortcut(key('X', { ctrl: true }), design)).toBe('cut');
+    expect(shortcut(key('v', { meta: true }), design)).toBe('paste');
+    expect(shortcut(key('v', { ctrl: true }), { ...design, typing: true })).toBeNull();
+    expect(shortcut(key('v', { ctrl: true }), idle)).toBeNull();
     expect(shortcut(key('a', { meta: true }), design)).toBe('select-all');
     expect(shortcut(key('i', { ctrl: true }), design)).toBe('import');
     expect(shortcut(key('z', { ctrl: true }), design)).toBe('undo');

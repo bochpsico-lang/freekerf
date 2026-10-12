@@ -75,6 +75,18 @@ interface AppDocument {
    */
   clearSelection(params?: Record<string, unknown>): { changed: boolean };
   /**
+   * Puts copies of objects (default: the selection) and their layers on the session's clipboard, which survives opening another document. Not an undo step.
+   *
+   * Action `document.copy`, tier `ui`.
+   */
+  copy(params?: { ids?: number[] | null }): { objects: number };
+  /**
+   * Puts objects (default: the selection) on the clipboard like `document.copy` and deletes them; the next paste puts them back in place. One undo step.
+   *
+   * Action `document.cut`, tier `edit`.
+   */
+  cut(params?: { ids?: number[] | null }): { objects: number };
+  /**
    * Deletes objects (default: the selection). One undo step.
    *
    * Action `document.delete`, tier `edit`.
@@ -152,6 +164,12 @@ interface AppDocument {
    * Action `document.open`, tier `edit`.
    */
   open(params: { path: string }): { path: string };
+  /**
+   * Adds the clipboard's objects (`document.copy`, `document.cut`) and selects them: each on the layer of its colour, created with the copied settings when missing. Offset by `offset_mm`, or centred on `at_mm`, by default `[5, -5]` mm once more for every paste in the document they were copied from. One undo step.
+   *
+   * Action `document.paste`, tier `edit`.
+   */
+  paste(params?: { at_mm?: number[] | null; offset_mm?: number[] | null }): { ids: number[] };
   /**
    * The bitmap an image object's raster settings (or the ones given) make: grey levels, or black and white when dithered; a PNG, base64.
    *
@@ -463,7 +481,7 @@ interface AppSession {
    *
    * Action `session.snapshot`, tier `read`.
    */
-  snapshot(params?: Record<string, unknown>): { current_layer?: number | null; dirty: boolean; document: { bounds?: number[] | null; layers: ({ color: string; fill: { lines_per_mm: number; pattern: "horizontal" | "vertical" | "diagonal" | "reverse_diagonal" | "grid" | "diagonal_grid" | "cross" | "diagonal_cross" | "squares" | "zig_zag" | "hilbert" | "inset" }; id: number; mode: "line" | "fill" | "fill_and_line" | "cut" | "ignore"; name: string; objects: number; passes: number; power: number; speed_mm_min: number; visible: boolean })[]; objects: ({ bounds?: number[] | null; id: number; image?: { dithering: unknown; lines_per_mm: number; tool: unknown } | null; kind: string; layer: number; name: string; text?: { height_mm: number; text: string } | null; transform: number[] })[] }; document_revision: number; redo: string[]; revision: number; selection: number[]; undo: string[]; view: { dialogs: ("settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "material_test" | "about")[]; drawer_open: boolean; fire_request?: { action: string; countdown_ms: number; id: number; params: unknown; requested_by: string; summary: { bounds?: number[] | null; code?: string | null; estimated_ms?: number | null; lines?: number | null; program?: string | null } } | null; fit_request: number; focus?: string | null; mode: "design" | "produce"; panel: "layers" | "object" | "machine" | "console"; toasts: ({ args?: Record<string, unknown>; id: number; level: "info" | "ok" | "warning" | "error"; message: string })[]; tool: "select" | "rect" | "ellipse" | "text"; viewport?: { center: number[]; zoom: number } | null } };
+  snapshot(params?: Record<string, unknown>): { clipboard: number; current_layer?: number | null; dirty: boolean; document: { bounds?: number[] | null; layers: ({ color: string; fill: { lines_per_mm: number; pattern: "horizontal" | "vertical" | "diagonal" | "reverse_diagonal" | "grid" | "diagonal_grid" | "cross" | "diagonal_cross" | "squares" | "zig_zag" | "hilbert" | "inset" }; id: number; mode: "line" | "fill" | "fill_and_line" | "cut" | "ignore"; name: string; objects: number; passes: number; power: number; speed_mm_min: number; visible: boolean })[]; objects: ({ bounds?: number[] | null; id: number; image?: { dithering: unknown; lines_per_mm: number; tool: unknown } | null; kind: string; layer: number; name: string; text?: { height_mm: number; text: string } | null; transform: number[] })[] }; document_revision: number; redo: string[]; revision: number; selection: number[]; undo: string[]; view: { dialogs: ("settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "material_test" | "about")[]; drawer_open: boolean; fire_request?: { action: string; countdown_ms: number; id: number; params: unknown; requested_by: string; summary: { bounds?: number[] | null; code?: string | null; estimated_ms?: number | null; lines?: number | null; program?: string | null } } | null; fit_request: number; focus?: string | null; mode: "design" | "produce"; panel: "layers" | "object" | "machine" | "console"; toasts: ({ args?: Record<string, unknown>; id: number; level: "info" | "ok" | "warning" | "error"; message: string })[]; tool: "select" | "rect" | "ellipse" | "text"; viewport?: { center: number[]; zoom: number } | null } };
 }
 
 interface AppSettings {

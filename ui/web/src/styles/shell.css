@@ -455,6 +455,49 @@ textarea {
   overflow: hidden;
   background: var(--fk-color-surface-canvas);
 }
+/* the Design mode context menu (ContextMenu.svelte) */
+.context-menu {
+  position: absolute;
+  z-index: var(--fk-z-popover);
+  min-width: 200px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--fk-color-surface-2);
+  border: 1px solid var(--fk-color-border);
+  border-radius: var(--fk-radius-md);
+  box-shadow: var(--fk-elevation-2);
+}
+.context-menu > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fk-space-4);
+  min-height: var(--fk-control-h);
+  padding: 0 var(--fk-space-2);
+  border: 0;
+  border-radius: var(--fk-radius-sm);
+  background: transparent;
+  color: var(--fk-color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.context-menu > button:hover:not(:disabled),
+.context-menu > button:focus-visible {
+  background: var(--fk-color-surface-3);
+  outline: none;
+}
+.context-menu > button:disabled {
+  color: var(--fk-color-text-subtle);
+  cursor: default;
+}
+.context-menu kbd {
+  font: inherit;
+  font-size: var(--fk-font-size-xs);
+  color: var(--fk-color-text-muted);
+}
+
 .canvas-tools {
   position: absolute;
   right: 10px;

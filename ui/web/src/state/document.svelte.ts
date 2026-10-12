@@ -26,6 +26,8 @@ export interface DocumentSummary {
   current_layer: number | null;
   can_undo: boolean;
   can_redo: boolean;
+  /** Objects on the clipboard (`document.copy`, `document.cut`). */
+  clipboard: number;
 }
 
 /** The summary of a snapshot. */
@@ -40,6 +42,7 @@ export function documentSummary(s: Snapshot): DocumentSummary {
     current_layer: s.current_layer ?? null,
     can_undo: s.undo.length > 0,
     can_redo: s.redo.length > 0,
+    clipboard: s.clipboard,
   };
 }
 

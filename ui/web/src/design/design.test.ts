@@ -40,6 +40,34 @@ describe('Design mode', () => {
     await screen.findByTestId('dialog-import');
   });
 
+  it('keyboard: copy, cut and paste on the canvas, never while typing', async () => {
+    const { doc, summary } = await mountDesign();
+    const { id } = await doc.dispatch('document.add_shape', {
+      shape: 'rect',
+      x: 10,
+      y: 10,
+      width: 10,
+      height: 10,
+    });
+    await doc.dispatch('document.select', { ids: [id], mode: 'replace' });
+    await waitFor(async () => expect((await summary()).selection).toEqual([id]));
+    await fireEvent.keyDown(window, { key: 'c', ctrlKey: true });
+    await waitFor(async () => expect((await summary()).clipboard).toBe(1));
+    await fireEvent.keyDown(window, { key: 'v', ctrlKey: true });
+    await waitFor(async () => expect((await summary()).objects).toHaveLength(2));
+    await fireEvent.keyDown(window, { key: 'x', ctrlKey: true });
+    await waitFor(async () => expect((await summary()).objects).toHaveLength(1));
+    // a text field keeps Ctrl+V for itself
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    await fireEvent.keyDown(input, { key: 'v', ctrlKey: true });
+    input.remove();
+    await new Promise((r) => setTimeout(r, 50));
+    expect((await summary()).objects).toHaveLength(1);
+    await fireEvent.keyDown(window, { key: 'v', ctrlKey: true });
+    await waitFor(async () => expect((await summary()).objects).toHaveLength(2));
+  });
+
   it('keyboard: tools, select all, duplicate, delete, undo, nudge, Esc', async () => {
     const { service, doc, summary } = await mountDesign();
     await doc.dispatch('document.add_shape', { shape: 'rect', x: 10, y: 10, width: 10, height: 10 });

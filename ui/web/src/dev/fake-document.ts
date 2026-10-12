@@ -23,7 +23,7 @@ import { ActionFailure, type Params, type Result } from '../service';
 
 type Layer = Omit<LayerSummary, 'objects'>;
 type ObjectKind = 'shape' | 'text' | 'image';
-type Change = 'document' | 'selection' | 'history';
+type Change = 'document' | 'selection' | 'history' | 'clipboard';
 
 type Affine = [number, number, number, number, number, number];
 const IDENTITY: Affine = [1, 0, 0, 1, 0, 0];
@@ -233,6 +233,9 @@ export class FakeDocument {
     next_id: 1,
   };
   private undoStack: Step[] = [];
+  /** `document.copy` / `cut` (simplified: same document, the layers kept by id). */
+  private clipboard: FakeObject[] = [];
+  private pastes = 0;
   private redoStack: Step[] = [];
   private documentRevision = 0;
   readonly calls: { action: string; params: unknown }[] = [];
@@ -348,6 +351,7 @@ export class FakeDocument {
       selection: this.doc.selection,
       current_layer: this.doc.layers.length ? this.currentLayer() : null,
       view,
+      clipboard: this.clipboard.length,
       undo: this.undoStack.map((s) => s.label),
       redo: [...this.redoStack].reverse().map((s) => s.label),
       document: {
@@ -464,6 +468,52 @@ export class FakeDocument {
         d.selection = d.selection.filter((id) => !ids.includes(id));
       });
       return { changed: ids.length > 0 };
+    },
+    'document.copy': (p) => {
+      const ids = this.targets(p.ids);
+      const objects = this.doc.objects.filter((o) => ids.includes(o.id));
+      if (objects.length) {
+        this.clipboard = structuredClone(objects);
+        this.pastes = 1;
+        this.emit('clipboard');
+      }
+      return { objects: objects.length };
+    },
+    'document.cut': (p) => {
+      const { objects } = this.table['document.copy']!(p);
+      if (objects) {
+        this.pastes = 0;
+        const ids = this.targets(p.ids);
+        this.edit('cut', (d) => {
+          d.objects = d.objects.filter((o) => !ids.includes(o.id));
+          d.selection = d.selection.filter((id) => !ids.includes(id));
+        });
+      }
+      return { objects };
+    },
+    'document.paste': (p) => {
+      if (!this.clipboard.length) return { ids: [] };
+      const ids = this.edit('paste', (d) => {
+        let [dx, dy] = p.offset_mm ?? [5 * this.pastes, -5 * this.pastes];
+        if (!p.offset_mm && p.at_mm) {
+          const bs = this.clipboard.map((o) => this.bounds(o)).filter((b) => b !== null);
+          const [x0, y0] = [Math.min(...bs.map((b) => b[0])), Math.min(...bs.map((b) => b[1]))];
+          const [x1, y1] = [Math.max(...bs.map((b) => b[2])), Math.max(...bs.map((b) => b[3]))];
+          [dx, dy] = [p.at_mm[0] - (x0 + x1) / 2, p.at_mm[1] - (y0 + y1) / 2];
+        }
+        const out: number[] = [];
+        for (const c of this.clipboard) {
+          const o = structuredClone(c);
+          o.id = d.next_id++;
+          o.transform = compose([1, 0, 0, 1, dx, dy], o.transform);
+          d.objects.push(o);
+          out.push(o.id);
+        }
+        d.selection = out;
+        return out;
+      });
+      this.pastes++;
+      return { ids };
     },
     'document.duplicate': (p) => {
       const ids = this.edit('duplicate', (d) => {
