@@ -888,6 +888,14 @@ textarea {
 .layer-edit .row2 > * {
   flex: 1 1 140px;
 }
+.layer-edit .fill-density {
+  max-width: 160px;
+}
+.layer-edit .fill-pattern {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .empty {
   color: var(--fk-color-text-subtle);
   padding: var(--fk-space-3);

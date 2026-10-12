@@ -83,6 +83,9 @@ All notable changes to FreeKerf are documented here. The format follows
 - Documentation: `AGENTS.md`, architecture, ADRs 0001-0005, feature pages,
   divergences from LaserGRBL, coverage, benchmarks, roadmap.
 
+- Layers panel: the hatch pattern (12 patterns) and the lines per mm of fill
+  layers (fill density, with the spacing between hatch lines in its tooltip).
+
 ### Fixed
 
 - Custom code: `[jogstep]` and `[jogspeed]` are evaluated (the jog settings), as in

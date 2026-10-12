@@ -1,8 +1,9 @@
 <script lang="ts">
   // The layers panel (design/design-system.md "Camadas"): one row per colour layer
-  // in output order; expand to edit mode, speed, power and passes; show or hide;
+  // in output order; expand to edit mode, speed, power, passes and (fillings) the
+  // hatch pattern and lines per mm; show or hide;
   // move in the output order. Every change is one `document.*` action.
-  import type { LayerMode } from '../gen/api';
+  import type { FillPattern, LayerMode } from '../gen/api';
   import { app } from '../context';
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
@@ -19,8 +20,26 @@
   const count = (l: Layer) => l.objects;
   const update = (
     id: number,
-    patch: Partial<Pick<Layer, 'mode' | 'speed_mm_min' | 'power' | 'passes' | 'visible'>>,
+    patch: Partial<Pick<Layer, 'mode' | 'speed_mm_min' | 'power' | 'passes' | 'visible'>> & {
+      lines_per_mm?: number;
+      fill_pattern?: FillPattern;
+    },
   ) => run(() => doc.service.dispatch('document.update_layer', { id, ...patch }));
+  const fills = (l: Layer) => l.mode === 'fill' || l.mode === 'fill_and_line';
+  const PATTERNS: FillPattern[] = [
+    'horizontal',
+    'vertical',
+    'diagonal',
+    'reverse_diagonal',
+    'grid',
+    'diagonal_grid',
+    'cross',
+    'diagonal_cross',
+    'squares',
+    'zig_zag',
+    'hilbert',
+    'inset',
+  ];
   const current = (id: number) => run(() => doc.service.dispatch('document.set_current_layer', { id }));
   const move = (id: number, to: number) => run(() => doc.service.dispatch('document.move_layer', { id, to }));
 </script>
@@ -120,6 +139,36 @@
               />
             </div>
           </div>
+          {#if fills(l)}
+            <div class="field fill-pattern">
+              <label for="layer-pattern-{l.id}" class="mini">{t('layers-pattern')}</label>
+              <select
+                id="layer-pattern-{l.id}"
+                data-testid="layer-pattern"
+                value={l.fill.pattern}
+                onchange={(e) => update(l.id, { fill_pattern: e.currentTarget.value as FillPattern })}
+              >
+                {#each PATTERNS as p (p)}
+                  <option value={p}>{t(`layers-pattern-${p}`)}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="field fill-density">
+              <span class="mini">{t('layers-lines-per-mm')}</span>
+              <NumField
+                bare
+                label={t('layers-lines-per-mm')}
+                value={l.fill.lines_per_mm}
+                unit="/mm"
+                decimals={1}
+                min={0.1}
+                max={50}
+                title={t('layers-lines-per-mm-hint', { mm: (1 / l.fill.lines_per_mm).toFixed(2) })}
+                testid="layer-lines-per-mm"
+                oncommit={(v) => update(l.id, { lines_per_mm: v })}
+              />
+            </div>
+          {/if}
           <div class="btn-row">
             <button
               class="icon-btn"
