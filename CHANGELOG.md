@@ -106,6 +106,10 @@ All notable changes to FreeKerf are documented here. The format follows
 - Desktop app, Design mode: texts are edited on the canvas: double click a
   text (or F2), or type right after placing one with the text tool; Enter
   applies, Esc cancels.
+- Laser mode per layer: `M3` constant or `M4` dynamic power (Grbl laser mode),
+  or the machine's command (default). The planner writes each layer's command
+  when the layer begins (images included); the layers panel has an M3 / M4
+  choice. Project files are version 3 (version 2 files read unchanged).
 
 ### Fixed
 
