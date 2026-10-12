@@ -28,6 +28,10 @@ memory, for development in a browser and component tests).
 The active tool is part of the view state (`tool`, [shell.md](shell.md)), so scripts
 and agents see and set it like a person.
 
+On the canvas, filling layers (`fill`, `fill_and_line`) also show the hatch lines
+their job engraves, in the layer's colour (`freekerf_planner::vector::layer_filling`,
+in the document geometry).
+
 ## Canvas editing
 
 | Gesture | Effect |

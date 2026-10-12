@@ -24,7 +24,9 @@
 //! The Design mode's document geometry uses the same format ([`encode_document`]):
 //! `power` is the index of the object's layer in the layer list, the command index
 //! is the index of the object in drawing order, the command count is the number of
-//! objects; objects on hidden layers are left out, images are drawn as their frame.
+//! objects; objects on hidden layers are left out, images are drawn as their frame,
+//! and filling layers add the hatch lines their job engraves (command index: the
+//! layer's first object).
 
 use freekerf_document::{Document, ObjectKind};
 use freekerf_gcode::arc::ArcHelper;
@@ -184,6 +186,27 @@ pub fn document_segments(doc: &Document) -> Vec<Segment> {
             ObjectKind::Unsupported { .. } => {}
         }
     }
+    // the hatch of filling layers, as the job engraves it
+    for (index, layer) in doc.layers.iter().enumerate() {
+        if !layer.visible || !layer.mode.has_fill() {
+            continue;
+        }
+        let Some(first) = doc.objects.iter().position(|o| o.layer == layer.id) else {
+            continue;
+        };
+        // a filling that cannot be computed is only missing from the drawing; the
+        // job reports the error
+        for line in freekerf_planner::vector::layer_filling(doc, layer).unwrap_or_default() {
+            for w in line.windows(2) {
+                out.push(Segment {
+                    from: f(w[0]),
+                    to: f(w[1]),
+                    power: index as f32,
+                    command: first as u32,
+                });
+            }
+        }
+    }
     out
 }
 
@@ -318,6 +341,22 @@ mod tests {
         d.layers[1].visible = false;
         assert_eq!(document_segments(&d).len(), 4);
         assert_eq!(u32_at(&encode_document(&Document::new()), 8), 0);
+        // a filling layer adds the hatch its job engraves, inside the shape
+        d.layers[0].mode = freekerf_document::LayerMode::Fill;
+        d.layers[0].fill.lines_per_mm = 1.0;
+        let segs = document_segments(&d);
+        assert!(segs.len() > 4, "{}", segs.len());
+        let b = d.objects[0].bounds();
+        for s in &segs[4..] {
+            assert!(s.power == 0.0 && s.command == 0);
+            for [x, y] in [s.from, s.to] {
+                assert!(f64::from(x) >= b.min_x - 1e-3 && f64::from(x) <= b.max_x + 1e-3);
+                assert!(f64::from(y) >= b.min_y - 1e-3 && f64::from(y) <= b.max_y + 1e-3);
+            }
+        }
+        // hidden: neither outline nor hatch
+        d.layers[0].visible = false;
+        assert!(document_segments(&d).is_empty());
     }
 
     #[test]

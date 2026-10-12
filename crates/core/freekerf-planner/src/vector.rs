@@ -11,7 +11,7 @@
 
 use std::f64::consts::PI;
 
-use freekerf_document::{Document, ObjectKind, SourceFormat, UnsupportedReason};
+use freekerf_document::{Document, Layer, ObjectKind, SourceFormat, UnsupportedReason};
 use freekerf_geometry::{Path, Point, Segment, arc_sweep};
 
 use crate::writer::Writer;
@@ -206,6 +206,35 @@ impl Emitter {
     }
 }
 
+/// The hatch lines of a filling layer (`fill`, `fill_and_line`) as its job engraves
+/// them, in the writing style of `doc` (the Design mode draws them); none for the
+/// other modes.
+///
+/// # Errors
+/// The filling failed (coordinates out of range).
+pub fn layer_filling(doc: &Document, layer: &Layer) -> Result<Vec<Vec<Point>>, PlanError> {
+    filling(doc, layer, VectorStyle::of(doc))
+}
+
+fn filling(doc: &Document, layer: &Layer, style: VectorStyle) -> Result<Vec<Vec<Point>>, PlanError> {
+    if !layer.mode.has_fill() {
+        return Ok(Vec::new());
+    }
+    let paths: Vec<&Path> = doc
+        .objects_on(layer.id)
+        .filter_map(|o| match &o.kind {
+            ObjectKind::Shape { paths } => Some(paths.iter()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    fill::build(
+        &capture(&paths, style),
+        layer.fill.pattern,
+        layer.fill.lines_per_mm,
+    )
+}
+
 /// The G-code lines of the vector objects of `doc` (colour layers).
 ///
 /// # Errors
@@ -220,20 +249,8 @@ pub fn plan_vectors(doc: &Document, options: &PlanOptions) -> Result<Vec<String>
     e.w.initial();
     for layer in doc.execution_order() {
         let objects: Vec<_> = doc.objects_on(layer.id).collect();
-        let paths: Vec<&Path> = objects
-            .iter()
-            .filter_map(|o| match &o.kind {
-                ObjectKind::Shape { paths } => Some(paths.iter()),
-                _ => None,
-            })
-            .flatten()
-            .collect();
         let filling = if layer.mode.has_fill() {
-            Some(fill::build(
-                &capture(&paths, style),
-                layer.fill.pattern,
-                layer.fill.lines_per_mm,
-            )?)
+            Some(filling(doc, layer, style)?)
         } else {
             None
         };
