@@ -56,6 +56,8 @@ panel-object = Objekteigenschaften
 panel-machine = Maschinensteuerung
 panel-console = Konsole
 panel-close = Bereich schließen
+panel-resize-width = Ziehen, um die Bereiche anzupassen (Doppelklick: Standardgröße)
+panel-resize-layers = Ziehen, um Ebenen anzupassen (Doppelklick: Standardgröße)
 
 ## layers
 layers-output = An den Laser senden

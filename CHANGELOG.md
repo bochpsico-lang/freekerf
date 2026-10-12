@@ -82,6 +82,10 @@ All notable changes to FreeKerf are documented here. The format follows
 - Action `machine.safety_door` (tier `safety`): the Grbl 1.1 door command (0x84).
 - Documentation: `AGENTS.md`, architecture, ADRs 0001-0005, feature pages,
   divergences from LaserGRBL, coverage, benchmarks, roadmap.
+- Desktop app: the dock is resizable in the wide layout: drag its left edge for
+  its width and, in Design mode, the separator under Layers for their height
+  (keyboard: arrows, Home/End; double-click: default size); kept in
+  `ui.dock_width_px` and `ui.dock_layers_pct`.
 
 ### Fixed
 

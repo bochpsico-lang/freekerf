@@ -317,6 +317,12 @@ pub struct UiSettings {
     pub units: Units,
     /// The welcome was shown and closed (it opens by itself on the first run only).
     pub welcomed: bool,
+    /// Width of the dock in the wide layout, in pixels; `0` is the default width.
+    /// The app keeps it between a minimum and half the window.
+    pub dock_width_px: u32,
+    /// Height of the layers panel in the wide Design dock, in percent of the dock;
+    /// `0` is the default height. The app keeps it between 15 and 85.
+    pub dock_layers_pct: u8,
 }
 
 impl Default for UiSettings {
@@ -328,6 +334,8 @@ impl Default for UiSettings {
             density: Density::default(),
             units: Units::default(),
             welcomed: false,
+            dock_width_px: 0,
+            dock_layers_pct: 0,
         }
     }
 }
@@ -667,6 +675,13 @@ mod tests {
         s.set("ui.welcomed", serde_json::json!(true), false).unwrap();
         let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
         assert!(back.ui.welcomed);
+        // files without the dock sizes use the default sizes (0)
+        assert_eq!((back.ui.dock_width_px, back.ui.dock_layers_pct), (0, 0));
+        s.set("ui.dock_width_px", serde_json::json!(420), false).unwrap();
+        s.set("ui.dock_layers_pct", serde_json::json!(60), false).unwrap();
+        let back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
+        assert_eq!((back.ui.dock_width_px, back.ui.dock_layers_pct), (420, 60));
+        assert!(s.set("ui.dock_width_px", serde_json::json!(-1), false).is_err());
         assert_eq!(back.ui.theme, Theme::Light);
         assert!(back.ui.high_contrast);
         assert_eq!(back.ui.density, Density::Comfortable);

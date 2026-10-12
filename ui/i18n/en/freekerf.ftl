@@ -56,6 +56,8 @@ panel-object = Object
 panel-machine = Machine
 panel-console = Console
 panel-close = Close panel
+panel-resize-width = Drag to resize the panels (double-click: default size)
+panel-resize-layers = Drag to resize Layers (double-click: default size)
 
 ## layers
 layers-output = Send to laser

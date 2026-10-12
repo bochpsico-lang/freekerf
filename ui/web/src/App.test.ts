@@ -113,6 +113,68 @@ describe('layouts', () => {
   });
 });
 
+describe('dock sizes', () => {
+  const sets = (service: FakeService) =>
+    service.calls.filter((c) => c.action === 'settings.set').map((c) => c.params);
+
+  it('drags the dock width and the Layers height, and keeps them in the settings', async () => {
+    window.innerWidth = 1600;
+    const service = new FakeService();
+    service.view.mode = 'design';
+    await mountApp(service);
+    const dock = screen.getByTestId('dock');
+    dock.getBoundingClientRect = () => new DOMRect(1200, 100, 400, 400);
+    const edge = screen.getByTestId('dock-resize-width');
+    await fireEvent.pointerDown(edge, { button: 0, pointerId: 1, clientX: 1200 });
+    await fireEvent.pointerMove(edge, { pointerId: 1, clientX: 1100 });
+    expect(dock.style.width).toContain('500px');
+    await fireEvent.pointerUp(edge, { pointerId: 1, clientX: 1100 });
+    const split = screen.getByTestId('dock-resize-layers');
+    await fireEvent.pointerDown(split, { button: 0, pointerId: 2, clientY: 300 });
+    await fireEvent.pointerMove(split, { pointerId: 2, clientY: 340 });
+    await fireEvent.pointerUp(split, { pointerId: 2, clientY: 340 });
+    await waitFor(() =>
+      expect(sets(service)).toEqual([
+        { key: 'ui.dock_width_px', value: 500 },
+        { key: 'ui.dock_layers_pct', value: 60 },
+      ]),
+    );
+    expect(service.settings.ui).toMatchObject({ dock_width_px: 500, dock_layers_pct: 60 });
+    const layers = dock.querySelector<HTMLElement>('.panel[data-panel="layers"]');
+    expect(layers?.style.flexBasis).toBe('60%');
+    window.innerWidth = 1300;
+  });
+
+  it('resizes with the keyboard and a double click goes back to the default size', async () => {
+    window.innerWidth = 1600;
+    const service = new FakeService();
+    service.view.mode = 'design';
+    service.settings.ui = { ...service.settings.ui, dock_width_px: 400, dock_layers_pct: 46 };
+    await mountApp(service);
+    const edge = screen.getByTestId('dock-resize-width');
+    await fireEvent.keyDown(edge, { key: 'ArrowLeft' });
+    await fireEvent.keyDown(screen.getByTestId('dock-resize-layers'), { key: 'ArrowDown', shiftKey: true });
+    await fireEvent.dblClick(edge);
+    await waitFor(() =>
+      expect(sets(service)).toEqual([
+        { key: 'ui.dock_width_px', value: 416 },
+        { key: 'ui.dock_layers_pct', value: 54 },
+        { key: 'ui.dock_width_px', value: 0 },
+      ]),
+    );
+    expect(screen.getByTestId('dock').style.width).toBe('');
+    window.innerWidth = 1300;
+  });
+
+  it('the Layers separator is only in the wide Design dock', async () => {
+    const service = new FakeService();
+    service.view.mode = 'produce';
+    await mountApp(service);
+    expect(screen.queryByTestId('dock-resize-layers')).toBeNull();
+    expect(screen.getByTestId('dock-resize-width')).toBeTruthy();
+  });
+});
+
 describe('settings dialog', () => {
   it('changes the language through settings.set; user-only settings only as the person', async () => {
     const { service } = await mountApp();
