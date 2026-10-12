@@ -103,6 +103,10 @@ All notable changes to FreeKerf are documented here. The format follows
 - Layers panel: the hatch pattern (12 patterns) and the lines per mm of fill
   layers (fill density, with the spacing between hatch lines in its tooltip).
 
+- Desktop app, Design mode: texts are edited on the canvas: double click a
+  text (or F2), or type right after placing one with the text tool; Enter
+  applies, Esc cancels.
+
 ### Fixed
 
 - Design mode: a layer set to fill showed only the outlines on the canvas, as if

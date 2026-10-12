@@ -414,6 +414,7 @@ kb-clipboard = Kopieren · ausschneiden · einfügen
 kb-combine = Verbinden
 kb-split = Trennen
 kb-combine-split = Verbinden · trennen
+kb-edit-text = Text bearbeiten
 kb-dup = Duplizieren
 kb-del = Löschen
 kb-all = Alles auswählen

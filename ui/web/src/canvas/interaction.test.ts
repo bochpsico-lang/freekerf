@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Camera, type CameraState } from './camera';
-import { CanvasInteraction, LONG_PRESS_MS, type InteractionHost, type PointerInput } from './interaction';
+import {
+  CanvasInteraction,
+  DOUBLE_CLICK_MS,
+  LONG_PRESS_MS,
+  type InteractionHost,
+  type PointerInput,
+} from './interaction';
 
 function setup(
   mode: 'design' | 'produce' = 'design',
@@ -38,6 +44,32 @@ const ptr = (x: number, y: number, extra: Partial<PointerInput> = {}): PointerIn
 describe('CanvasInteraction', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
+
+  it('two quick clicks at the same place are a double click', () => {
+    const { host, ix } = setup('design', () => 'obj-1');
+    const doubleClick = vi.fn();
+    const hitHandle = vi.fn((): 'move' | null => null);
+    const h = Object.assign(host, { doubleClick, hitHandle });
+    const click = (x: number, y: number) => {
+      ix.pointerDown(ptr(x, y));
+      ix.pointerUp(ptr(x, y));
+    };
+    click(100, 100);
+    vi.advanceTimersByTime(DOUBLE_CLICK_MS - 50);
+    // the first click selected the object: inside the selection is still a click
+    hitHandle.mockReturnValue('move');
+    click(101, 101);
+    expect(h.doubleClick).toHaveBeenCalledWith(101, 101, 'obj-1');
+    // too slow, too far, or a drag in between: no double click
+    click(100, 100);
+    vi.advanceTimersByTime(DOUBLE_CLICK_MS + 1);
+    click(100, 100);
+    click(140, 100);
+    ix.pointerDown(ptr(140, 100));
+    ix.pointerMove(ptr(160, 100));
+    ix.pointerUp(ptr(160, 100));
+    expect(h.doubleClick).toHaveBeenCalledTimes(1);
+  });
 
   it('clicks select what is under the pointer', () => {
     const { host, ix } = setup('design', () => 'obj-1');

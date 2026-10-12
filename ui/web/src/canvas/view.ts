@@ -21,6 +21,8 @@ export interface CanvasViewEvents {
   select?(id: string | null, additive: boolean, keepIfSelected?: boolean): void;
   selectArea?(rect: Rect, crossing: boolean, additive: boolean): void;
   contextMenu?(x: number, y: number, id: string | null): void;
+  /** Two clicks in a row at the same place (see {@link InteractionHost.doubleClick}). */
+  doubleClick?(x: number, y: number, id: string | null): void;
   /** The camera changed (pan, zoom, resize). */
   camera?(c: CameraState): void;
   hitTest?(wx: number, wy: number): string | null;
@@ -115,6 +117,7 @@ export class CanvasView {
         this.invalidate();
       },
       contextMenu: (x, y, id) => this.events.contextMenu?.(x, y, id),
+      doubleClick: (x, y, id) => this.events.doubleClick?.(x, y, id),
       hitHandle: (x, y) => this.events.hitHandle?.(x, y) ?? null,
       drag: (phase, h, w, m) => this.events.drag?.(phase, h, w, m),
       placing: () => this.events.placing?.() ?? false,

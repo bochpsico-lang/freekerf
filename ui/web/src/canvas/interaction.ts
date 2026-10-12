@@ -48,6 +48,8 @@ export interface InteractionHost {
   marquee(m: { x0: number; y0: number; x1: number; y1: number; crossing: boolean } | null): void;
   /** Context menu (right click or long press) at a screen point. */
   contextMenu?(x: number, y: number, id: string | null): void;
+  /** Two clicks (or taps) in a row at the same place, on an object or on nothing. */
+  doubleClick?(x: number, y: number, id: string | null): void;
   /**
    * Design mode editing: the handle under a screen point (`move` for the inside of
    * the selection), or `null`.
@@ -84,6 +86,8 @@ const mods = (p: PointerInput): DragMods => ({ shift: p.shift, alt: p.alt, touch
 export const DRAG_THRESHOLD = { mouse: 3, pen: 3, touch: 8 } as const;
 /** Long press for the context menu, ms. */
 export const LONG_PRESS_MS = 500;
+/** Two clicks this close in time (ms) and place (the drag threshold) are a double click. */
+export const DOUBLE_CLICK_MS = 400;
 /** Zoom per wheel "line" (100 px of delta). */
 export const WHEEL_ZOOM = 1.2;
 
@@ -101,6 +105,8 @@ export class CanvasInteraction {
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private space = false;
   private longPress: ReturnType<typeof setTimeout> | null = null;
+  /** The last click (no drag), for double clicks. */
+  private lastClick: { x: number; y: number; at: number } | null = null;
 
   constructor(private readonly host: InteractionHost) {}
 
@@ -156,6 +162,20 @@ export class CanvasInteraction {
         }
       }, LONG_PRESS_MS);
     }
+  }
+
+  /** A click without a drag: the second one close in time and place is a double click. */
+  private click(p: PointerInput): void {
+    const now = Date.now();
+    const last = this.lastClick;
+    const near = last && Math.hypot(p.x - last.x, p.y - last.y) <= DRAG_THRESHOLD[p.type];
+    if (last && near && now - last.at <= DOUBLE_CLICK_MS && this.host.doubleClick) {
+      this.lastClick = null;
+      const [wx, wy] = Camera.toWorld(this.host.camera(), p.x, p.y);
+      this.host.doubleClick(p.x, p.y, this.host.hitTest(wx, wy));
+      return;
+    }
+    this.lastClick = { x: p.x, y: p.y, at: now };
   }
 
   pointerMove(p: PointerInput): void {
@@ -242,7 +262,10 @@ export class CanvasInteraction {
           if (s.place) {
             const [x, y] = Camera.toWorld(this.host.camera(), s.p.x, s.p.y);
             this.host.place?.({ x, y, width: 0, height: 0 }, mods(s.p));
-          } else this.host.select(s.onObject, s.p.shift || s.p.ctrl);
+          } else {
+            this.host.select(s.onObject, s.p.shift || s.p.ctrl);
+            this.click(s.p);
+          }
         }
         return;
       case 'marquee': {
