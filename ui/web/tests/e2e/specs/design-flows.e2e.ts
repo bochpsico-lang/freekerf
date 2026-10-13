@@ -18,6 +18,11 @@ describe('Design flows from scratch', () => {
     await $('[data-tool="text"]').click();
     await canvas.click();
     await browser.waitUntil(async () => (await count()) === 2, { timeout: 10_000 });
+    // the text is typed on the canvas right away: Enter keeps it (and gives the keys back)
+    const editor = await byTestId('text-editor');
+    await editor.waitForDisplayed();
+    await browser.keys('Enter');
+    await editor.waitForDisplayed({ reverse: true });
     // both selected (Ctrl+A), then Subtract in the inspector: one plate with a hole
     await browser.keys(['Control', 'a']);
     await browser.waitUntil(async () => (await snapshot()).selection.length === 2);
