@@ -17,6 +17,8 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `document.array` | edit | Copies objects (default: the selection) in a grid of `columns` × `rows` (the originals are the top-left cell; rows go down), `gap_mm` apart; selects the originals and the copies. One undo step. |
 | `document.boolean` | edit | Combines shapes (default: the selection, at least two) into one: union (weld), difference (the first in drawing order minus the others), intersection or xor. The result takes the first one's layer and is selected. One undo step. |
 | `document.clear_selection` | ui | Selects nothing. |
+| `document.copy` | ui | Puts copies of objects (default: the selection) and their layers on the session's clipboard, which survives opening another document. Not an undo step. |
+| `document.cut` | edit | Puts objects (default: the selection) on the clipboard like `document.copy` and deletes them; the next paste puts them back in place. One undo step. |
 | `document.delete` | edit | Deletes objects (default: the selection). One undo step. |
 | `document.duplicate` | edit | Copies objects (default: the selection), offset by `offset_mm`, and selects the copies. One undo step. |
 | `document.from_fkproj` | edit | Replaces the document with a `.fkproj` text (the undo history starts again). |
@@ -30,6 +32,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `document.new` | edit | Starts an empty document (the undo history starts again). |
 | `document.offset` | edit | Adds the outline of shapes (default: the selection) grown or shrunk by `distance_mm`, as new objects on the same layers, selected. One undo step. |
 | `document.open` | edit | Opens a `.fkproj` project file (the undo history starts again). |
+| `document.paste` | edit | Adds the clipboard's objects (`document.copy`, `document.cut`) and selects them: each on the layer of its colour, created with the copied settings when missing. Offset by `offset_mm`, or centred on `at_mm`, by default `[5, -5]` mm once more for every paste in the document they were copied from. One undo step. |
 | `document.raster_preview` | read | The bitmap an image object's raster settings (or the ones given) make: grey levels, or black and white when dithered; a PNG, base64. |
 | `document.raster_settings` | read | The raster dialog's settings of an image object (tool, dithering, resolution, grey adjustments, speeds, powers). |
 | `document.remove_layer` | edit | Removes a layer and its objects. One undo step. |
@@ -201,6 +204,22 @@ Selects nothing.
 
 No parameters.
 
+### `document.copy`
+
+Puts copies of objects (default: the selection) and their layers on the session's clipboard, which survives opening another document. Not an undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `ids` | no | Object ids (default: the selection). |
+
+### `document.cut`
+
+Puts objects (default: the selection) on the clipboard like `document.copy` and deletes them; the next paste puts them back in place. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `ids` | no | Object ids (default: the selection). |
+
 ### `document.delete`
 
 Deletes objects (default: the selection). One undo step.
@@ -318,6 +337,15 @@ Opens a `.fkproj` project file (the undo history starts again).
 | Parameter | Required | Description |
 | --- | --- | --- |
 | `path` | yes | Path of a G-code file. |
+
+### `document.paste`
+
+Adds the clipboard's objects (`document.copy`, `document.cut`) and selects them: each on the layer of its colour, created with the copied settings when missing. Offset by `offset_mm`, or centred on `at_mm`, by default `[5, -5]` mm once more for every paste in the document they were copied from. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `at_mm` | no | Centre of the pasted objects, `[x, y]` mm (e.g. where the context menu was opened; `offset_mm` wins when both are given). |
+| `offset_mm` | no | Offset of the copies, `[dx, dy]` mm (default: `[5, -5]` once more for every paste in the document copied from; none for the first paste in another document or after a cut). |
 
 ### `document.raster_preview`
 

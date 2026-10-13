@@ -581,6 +581,26 @@ struct DuplicateParams {
     offset_mm: Option<[f64; 2]>,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct PasteParams {
+    /// Offset of the copies, `[dx, dy]` mm (default: `[5, -5]` once more for every
+    /// paste in the document copied from; none for the first paste in another
+    /// document or after a cut).
+    #[serde(default)]
+    offset_mm: Option<[f64; 2]>,
+    /// Centre of the pasted objects, `[x, y]` mm (e.g. where the context menu was
+    /// opened; `offset_mm` wins when both are given).
+    #[serde(default)]
+    at_mm: Option<[f64; 2]>,
+}
+
+#[derive(Serialize, JsonSchema)]
+struct Copied {
+    /// Objects now on the clipboard (0: nothing was copied, the clipboard is unchanged).
+    objects: usize,
+}
+
 #[derive(Serialize, JsonSchema)]
 struct NewIds {
     /// Ids of what was created.
@@ -1403,6 +1423,56 @@ pub fn register_session_actions<C: SessionHost>(r: &mut Registry<C>) -> Result<(
             })?;
             Ok(NewIds {
                 ids: new.into_iter().map(|i| i.0).collect(),
+            })
+        },
+    )?;
+    r.register(
+        "document.copy",
+        "Puts copies of objects (default: the selection) and their layers on the session's clipboard, which survives opening another document. Not an undo step.",
+        Tier::Ui,
+        |c: &C, p: IdsParams| {
+            let mut s = lock(c);
+            let ids = targets(p.ids, &s);
+            Ok(Copied {
+                objects: s.copy(&ids, false),
+            })
+        },
+    )?;
+    r.register(
+        "document.cut",
+        "Puts objects (default: the selection) on the clipboard like `document.copy` and deletes them; the next paste puts them back in place. One undo step.",
+        Tier::Edit,
+        |c: &C, p: IdsParams| {
+            let mut s = lock(c);
+            let ids = targets(p.ids, &s);
+            let objects = s.copy(&ids, true);
+            if objects > 0 {
+                s.edit("cut", |d, _| {
+                    for id in &ids {
+                        // ids that do not exist were not copied either
+                        d.remove_object(*id).ok();
+                    }
+                    Ok::<_, ActionError>(true)
+                })?;
+            }
+            Ok(Copied { objects })
+        },
+    )?;
+    r.register(
+        "document.paste",
+        "Adds the clipboard's objects (`document.copy`, `document.cut`) and selects them: each on the layer of its colour, created with the copied settings when missing. Offset by `offset_mm`, or centred on `at_mm`, by default `[5, -5]` mm once more for every paste in the document they were copied from. One undo step.",
+        Tier::Edit,
+        |c: &C, p: PasteParams| {
+            if [p.offset_mm, p.at_mm]
+                .iter()
+                .flatten()
+                .any(|v| !v.iter().all(|x| x.is_finite()))
+            {
+                return Err(ActionError::InvalidParams("offset_mm and at_mm must be finite".into()));
+            }
+            let ids = lock(c).paste([5.0, -5.0], p.offset_mm, p.at_mm).map_err(failed)?;
+            Ok(NewIds {
+                ids: ids.into_iter().map(|i| i.0).collect(),
             })
         },
     )?;
@@ -2374,6 +2444,123 @@ mod tests {
             d("document.select", json!({"ids": [rect, ell], "mode": "toggle"})).unwrap(),
             json!([ell])
         );
+    }
+
+    #[test]
+    fn clipboard_actions() {
+        let (r, h) = setup();
+        let user = Caller::user();
+        let d = |name: &str, p: Value| r.dispatch(&h, &user, name, p);
+        let snap = || d("session.snapshot", Value::Null).unwrap();
+        let bounds = |id: &Value| -> [f64; 4] {
+            let o = snap()["document"]["objects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|o| o["id"] == *id)
+                .cloned()
+                .unwrap();
+            serde_json::from_value(o["bounds"].clone()).unwrap()
+        };
+        let close = |a: [f64; 4], b: [f64; 4]| a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-6);
+        let count = || snap()["document"]["objects"].as_array().unwrap().len();
+
+        // nothing selected: nothing copied, nothing pasted
+        assert_eq!(d("document.copy", Value::Null).unwrap(), json!({"objects": 0}));
+        assert_eq!(d("document.paste", Value::Null).unwrap(), json!({"ids": []}));
+        assert_eq!(d("document.cut", Value::Null).unwrap(), json!({"objects": 0}));
+        let a = d(
+            "document.add_shape",
+            json!({"shape": "rect", "x": 0, "y": 0, "width": 10, "height": 10}),
+        )
+        .unwrap()["id"]
+            .clone();
+        let red = d(
+            "document.add_layer",
+            json!({"color": "#FF0000", "speed_mm_min": 321, "power": 77}),
+        )
+        .unwrap()["id"]
+            .clone();
+        let t = d(
+            "document.add_text",
+            json!({"text": "Hi", "x": 20, "y": 0, "height_mm": 5, "layer": red}),
+        )
+        .unwrap()["id"]
+            .clone();
+        d("document.select", json!({"ids": [a, t]})).unwrap();
+        let undo = snap()["undo"].as_array().unwrap().len();
+        assert_eq!(d("document.copy", Value::Null).unwrap(), json!({"objects": 2}));
+        // copying is not an undo step
+        assert_eq!(snap()["undo"].as_array().unwrap().len(), undo);
+        assert_eq!(snap()["clipboard"], 2);
+
+        // same document: every paste is offset once more, and selected
+        let p1 = d("document.paste", Value::Null).unwrap()["ids"].clone();
+        assert_eq!(p1.as_array().unwrap().len(), 2);
+        assert_eq!(snap()["selection"], p1);
+        assert!(close(bounds(&p1[0]), [5.0, -5.0, 15.0, 5.0]));
+        let p2 = d("document.paste", Value::Null).unwrap()["ids"].clone();
+        assert!(close(bounds(&p2[0]), [10.0, -10.0, 20.0, 0.0]));
+        let text = snap()["document"]["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|o| o["id"] == p2[1])
+            .cloned()
+            .unwrap();
+        assert_eq!(text["text"]["text"], "Hi");
+        assert_eq!(text["layer"], red);
+        assert_eq!(d("history.undo", Value::Null).unwrap(), json!({"step": "paste"}));
+        let p3 = d("document.paste", json!({"offset_mm": [0, 30]})).unwrap()["ids"].clone();
+        assert!(close(bounds(&p3[0]), [0.0, 30.0, 10.0, 40.0]));
+        // centred where the context menu opened: the rect and the text together
+        let all = d("document.paste", json!({"at_mm": [100, 100]})).unwrap()["ids"].clone();
+        let (r0, t0) = (bounds(&all[0]), bounds(&all[1]));
+        let (cx, cy) = ((r0[0] + t0[2]) / 2.0, (r0[1].min(t0[1]) + r0[3].max(t0[3])) / 2.0);
+        assert!(
+            (cx - 100.0).abs() < 1e-6 && (cy - 100.0).abs() < 1e-6,
+            "{cx} {cy}"
+        );
+        assert!(d("document.paste", json!({"at_mm": [f64::NAN, 0]})).is_err());
+        assert!(d("document.paste", json!({"offset_mm": [f64::MAX, 0]})).is_ok());
+        assert!(d("document.paste", json!({"offset_mm": [0, "x"]})).is_err());
+
+        // cut: deleted (one undo step), pasted back in place
+        let n = count();
+        d("document.select", json!({"ids": [a]})).unwrap();
+        assert_eq!(d("document.cut", Value::Null).unwrap(), json!({"objects": 1}));
+        assert_eq!(count(), n - 1);
+        assert_eq!(snap()["undo"].as_array().unwrap().last().unwrap(), "cut");
+        let back = d("document.paste", Value::Null).unwrap()["ids"].clone();
+        assert!(close(bounds(&back[0]), [0.0, 0.0, 10.0, 10.0]));
+
+        // another document: the clipboard survives; first paste in place, the layer
+        // is made again with the copied settings
+        d("document.select", json!({"ids": [t]})).unwrap();
+        d("document.copy", Value::Null).unwrap();
+        d("document.new", Value::Null).unwrap();
+        assert_eq!(snap()["clipboard"], 1);
+        let q = d("document.paste", Value::Null).unwrap()["ids"].clone();
+        let layers = snap()["document"]["layers"].clone();
+        assert_eq!(layers.as_array().unwrap().len(), 1);
+        assert_eq!(layers[0]["color"], "#FF0000");
+        assert_eq!(
+            (layers[0]["speed_mm_min"].clone(), layers[0]["power"].clone()),
+            (json!(321), json!(77))
+        );
+        let qb = bounds(&q[0]);
+        assert!(qb[0] >= 20.0 - 1e-9 && qb[1] >= -1e-9, "{qb:?}");
+        // a second paste there is offset
+        let q2 = d("document.paste", Value::Null).unwrap()["ids"].clone();
+        let q2b = bounds(&q2[0]);
+        assert!((q2b[0] - qb[0] - 5.0).abs() < 1e-6);
+        // a black layer in the new document takes black objects
+        d("document.add_layer", json!({"color": "#000000"})).unwrap();
+        let blacks = snap()["document"]["layers"].as_array().unwrap().len();
+        d("document.select", json!({"ids": q})).unwrap();
+        d("document.cut", Value::Null).unwrap();
+        d("document.paste", Value::Null).unwrap();
+        assert_eq!(snap()["document"]["layers"].as_array().unwrap().len(), blacks);
     }
 
     #[test]

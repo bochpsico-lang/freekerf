@@ -6,7 +6,7 @@
 
 use std::collections::BTreeSet;
 
-use freekerf_document::{Document, LayerId, ObjectId, TextSpec};
+use freekerf_document::{Document, DocumentError, Layer, LayerId, Object, ObjectId, TextSpec};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +27,8 @@ pub enum Change {
     View,
     /// The undo history (steps added, undone, redone).
     History,
+    /// The clipboard (`document.copy`, `document.cut`).
+    Clipboard,
 }
 
 /// A change and the revision it produced.
@@ -54,6 +56,20 @@ struct Transaction {
     changed: bool,
 }
 
+/// Objects copied with `document.copy` or `document.cut`, with their layers. Not
+/// part of the document nor of the undo history: it survives opening another one.
+#[derive(Debug, Clone, Default)]
+struct Clipboard {
+    objects: Vec<Object>,
+    layers: Vec<Layer>,
+    /// The document (generation) the objects come from.
+    origin: u64,
+    /// The document of the last paste and how many pastes it had: each paste is
+    /// offset once more, so copies do not pile up.
+    target: u64,
+    next: u32,
+}
+
 /// The session.
 #[derive(Debug, Clone, Default)]
 pub struct Session {
@@ -68,6 +84,9 @@ pub struct Session {
     dirty: bool,
     current_layer: Option<LayerId>,
     document_revision: u64,
+    clipboard: Clipboard,
+    /// Grows with every replaced document (new, opened).
+    generation: u64,
 }
 
 /// The state as a front end or an agent reads it (`session.snapshot`).
@@ -91,6 +110,8 @@ pub struct Snapshot {
     pub redo: Vec<String>,
     /// Layers and objects, without geometry.
     pub document: DocumentSummary,
+    /// Objects on the clipboard (`document.copy`, `document.cut`; `document.paste` adds them).
+    pub clipboard: usize,
 }
 
 /// A layer without its objects.
@@ -400,6 +421,7 @@ impl Session {
     /// again.
     pub fn replace_document(&mut self, doc: Document) {
         self.document = doc;
+        self.generation += 1;
         self.selection.clear();
         self.undo.clear();
         self.redo.clear();
@@ -408,6 +430,108 @@ impl Session {
         self.emit(Change::Document);
         self.emit(Change::Selection);
         self.emit(Change::History);
+    }
+
+    /// Puts copies of these objects (in drawing order) and their layers on the
+    /// clipboard (not an undo step) and returns how many. Nothing to copy leaves
+    /// the clipboard as it was. The first paste in this document is offset by one
+    /// step, or none with `in_place` (a cut).
+    pub fn copy(&mut self, ids: &BTreeSet<ObjectId>, in_place: bool) -> usize {
+        let objects: Vec<Object> = self
+            .document
+            .objects
+            .iter()
+            .filter(|o| ids.contains(&o.id))
+            .cloned()
+            .collect();
+        if objects.is_empty() {
+            return 0;
+        }
+        let layers = self
+            .document
+            .layers
+            .iter()
+            .filter(|l| objects.iter().any(|o| o.layer == l.id))
+            .cloned()
+            .collect();
+        let n = objects.len();
+        self.clipboard = Clipboard {
+            objects,
+            layers,
+            origin: self.generation,
+            target: self.generation,
+            next: u32::from(!in_place),
+        };
+        self.emit(Change::Clipboard);
+        n
+    }
+
+    /// Objects on the clipboard.
+    #[must_use]
+    pub const fn clipboard_len(&self) -> usize {
+        self.clipboard.objects.len()
+    }
+
+    /// Adds the clipboard's objects as one undo step, selects them and returns
+    /// their ids. Each goes to the layer of its colour (the one it came from when it
+    /// still has that colour), created with the copied settings when missing. They
+    /// are offset by `offset_mm`, or centred on `at_mm`, or else offset by `step_mm`
+    /// once more for every paste in this document (none for the first paste in
+    /// another document or after a cut).
+    ///
+    /// # Errors
+    /// A layer could not be found (the document is left as it was).
+    pub fn paste(
+        &mut self,
+        step_mm: [f64; 2],
+        offset_mm: Option<[f64; 2]>,
+        at_mm: Option<[f64; 2]>,
+    ) -> Result<Vec<ObjectId>, DocumentError> {
+        if self.clipboard.objects.is_empty() {
+            return Ok(Vec::new());
+        }
+        if self.clipboard.target != self.generation {
+            self.clipboard.target = self.generation;
+            self.clipboard.next = u32::from(self.generation == self.clipboard.origin);
+        }
+        let centred = at_mm.and_then(|[x, y]| {
+            let mut b = self.clipboard.objects.first()?.bounds();
+            for o in &self.clipboard.objects {
+                b.union(&o.bounds());
+            }
+            (!b.is_empty()).then(|| [x - (b.min_x + b.max_x) / 2.0, y - (b.min_y + b.max_y) / 2.0])
+        });
+        let [dx, dy] = offset_mm.or(centred).unwrap_or_else(|| {
+            let n = f64::from(self.clipboard.next);
+            [step_mm[0] * n, step_mm[1] * n]
+        });
+        let Clipboard { objects, layers, .. } = self.clipboard.clone();
+        let mut new = Vec::new();
+        self.edit("paste", |d, sel| {
+            for mut o in objects {
+                let Some(from) = layers.iter().find(|l| l.id == o.layer) else {
+                    continue;
+                };
+                let layer = match d.layer(from.id) {
+                    Some(l) if l.color == from.color => l.id,
+                    _ => match d.layer_by_color(from.color) {
+                        Some(l) => l.id,
+                        None => d.add_layer(from.clone()),
+                    },
+                };
+                o.translate(dx, dy);
+                let id = d.add_object_with(layer, o.kind, o.name, o.source)?;
+                if let Some(added) = d.object_mut(id) {
+                    added.text = o.text;
+                    added.transform = o.transform;
+                }
+                new.push(id);
+            }
+            *sel = new.iter().copied().collect();
+            Ok(!new.is_empty())
+        })?;
+        self.clipboard.next += 1;
+        Ok(new)
     }
 
     /// Undoes the last step. Returns its label.
@@ -509,6 +633,7 @@ impl Session {
             undo: self.undo.iter().map(|s| s.label.clone()).collect(),
             redo: self.redo.iter().rev().map(|s| s.label.clone()).collect(),
             document: summary(&self.document),
+            clipboard: self.clipboard_len(),
         }
     }
 }

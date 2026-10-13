@@ -24,6 +24,9 @@ export const DEFAULT_SIZE = { rect: [40, 30], ellipse: [30, 30], text: 10 } as c
 /** A drag box smaller than this (mm) is a click. */
 const MIN_BOX_MM = 1;
 
+/** Commands on the selection and the clipboard (keys and the context menu). */
+export type EditCommand = 'copy' | 'cut' | 'paste' | 'duplicate' | 'delete';
+
 export interface EditorHost {
   doc(): DocumentSummary | null;
   tool(): Tool;
@@ -184,6 +187,29 @@ export class DesignEditor {
       }
     });
     this.host.selectTool();
+  };
+
+  /**
+   * Runs an edit command on the selection. `at` (world, mm) centres a paste there
+   * (the context menu); keys paste offset from the copied objects.
+   */
+  edit = (cmd: EditCommand, at?: Point): Promise<void> => {
+    const s = this.host.service;
+    const ids = this.host.doc()?.selection ?? [];
+    if (cmd === 'paste') {
+      return this.host.run(() => s.dispatch('document.paste', at ? { at_mm: at } : {}));
+    }
+    if (!ids.length) return Promise.resolve();
+    switch (cmd) {
+      case 'copy':
+        return this.host.run(() => s.dispatch('document.copy', { ids }));
+      case 'cut':
+        return this.host.run(() => s.dispatch('document.cut', { ids }));
+      case 'duplicate':
+        return this.host.run(() => s.dispatch('document.duplicate', { ids }));
+      case 'delete':
+        return this.host.run(() => s.dispatch('document.delete', { ids }));
+    }
   };
 
   /** Moves the selection by a step (arrow keys): 1 mm, Shift 10 mm, Alt 0.1 mm. */

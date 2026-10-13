@@ -14,7 +14,7 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 | Head interpolation between status reports along the tool path | status reports arrive a few times per second; the head jumps between them | M4b |
 | Thick lines in the canvas (selection emphasis, kerf width) | WebGL lines are 1 px; needs quads in the vertex shader | M4b |
 | Drop a file on the window to open it | Tauri intercepts drops; done with the import flow | M4b |
-| Material picker in the layer editor, context menu, z-order, node editing, trace | need `freekerf-materials` and more of the geometry | M4b |
+| Material picker in the layer editor, z-order, node editing, trace | need `freekerf-materials` and more of the geometry | M4b |
 | Macro editor with `api.d.ts` completion, disconnecting one agent from the window | the editor needs a code-editor component (licence, bundle size); agents detach when their MCP client ends | M5 |
 | Material library in the Design mode ("Apply material…" on a layer) and "save as material" from a material test cell | no library package is published yet, and user materials need a store in the data folder | v1 (with the library packages) |
 | Gestures: no hover cursor feedback over handles; the rotation handle sits above the box and can leave the view on small selections near the top edge; trackpad pinch on WebKitGTK arrives as Ctrl+wheel only | found while building the Design mode | M4b |

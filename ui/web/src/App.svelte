@@ -201,10 +201,11 @@
         else if (ids.length) void run(() => d.service.dispatch('document.clear_selection', {}));
         return;
       case 'delete':
-        if (ids.length) void run(() => d.service.dispatch('document.delete', { ids }));
-        return;
       case 'duplicate':
-        if (ids.length) void run(() => d.service.dispatch('document.duplicate', { ids }));
+      case 'copy':
+      case 'cut':
+      case 'paste':
+        void stage?.edit(c);
         return;
       case 'nudge-left':
         void stage?.nudge(-1, 0, mods);
@@ -223,7 +224,8 @@
 
   function keydown(e: KeyboardEvent): void {
     const c = shortcut(e, {
-      typing: isTyping(e.target),
+      // the context menu keeps its keys (only STOP and the function keys pass)
+      typing: isTyping(e.target) || !!(e.target as Element | null)?.closest?.('[role="menu"]'),
       dialogOpen: view.dialogs.length > 0,
       running: machine.visual === 'run',
       design: mode === 'design',

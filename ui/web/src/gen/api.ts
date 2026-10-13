@@ -169,7 +169,7 @@ export type CenterlineSettings = {
 };
 
 /** What changed (events for the front ends, carried with the revision). */
-export type Change = "document" | "selection" | "view" | "history";
+export type Change = "document" | "selection" | "view" | "history" | "clipboard";
 
 export type Changed = {
   /** Whether anything changed. */
@@ -231,6 +231,11 @@ export type ConsoleRow = {
     /** Text as received. */
     text: string;
   };
+};
+
+export type Copied = {
+  /** Objects now on the clipboard (0: nothing was copied, the clipboard is unchanged). */
+  objects: number;
 };
 
 /**
@@ -1148,6 +1153,20 @@ export type PanelParams = {
   name: Panel;
 };
 
+export type PasteParams = {
+  /**
+   * Centre of the pasted objects, `[x, y]` mm (e.g. where the context menu was
+   * opened; `offset_mm` wins when both are given).
+   */
+  at_mm?: [number, number] | null;
+  /**
+   * Offset of the copies, `[dx, dy]` mm (default: `[5, -5]` once more for every
+   * paste in the document copied from; none for the first paste in another
+   * document or after a cut).
+   */
+  offset_mm?: [number, number] | null;
+};
+
 /** A connected sequence of segments. */
 export type Path = {
   /** The last segment ends on `start` and the shape is meant to be closed. */
@@ -1397,6 +1416,8 @@ export type ShapeKind = "rect" | "ellipse";
 
 /** The state as a front end or an agent reads it (`session.snapshot`). */
 export type Snapshot = {
+  /** Objects on the clipboard (`document.copy`, `document.cut`; `document.paste` adds them). */
+  clipboard: number;
   /** The layer new objects go to (see [`Session::current_layer`]). */
   current_layer?: number | null;
   /** Unsaved changes. */
@@ -1851,6 +1872,18 @@ export interface Actions {
     result: Changed;
     tier: "ui";
   };
+  /** Puts copies of objects (default: the selection) and their layers on the session's clipboard, which survives opening another document. Not an undo step. */
+  "document.copy": {
+    params: IdsParams;
+    result: Copied;
+    tier: "ui";
+  };
+  /** Puts objects (default: the selection) on the clipboard like `document.copy` and deletes them; the next paste puts them back in place. One undo step. */
+  "document.cut": {
+    params: IdsParams;
+    result: Copied;
+    tier: "edit";
+  };
   /** Deletes objects (default: the selection). One undo step. */
   "document.delete": {
     params: IdsParams;
@@ -1927,6 +1960,12 @@ export interface Actions {
   "document.open": {
     params: LoadParams;
     result: FilePath;
+    tier: "edit";
+  };
+  /** Adds the clipboard's objects (`document.copy`, `document.cut`) and selects them: each on the layer of its colour, created with the copied settings when missing. Offset by `offset_mm`, or centred on `at_mm`, by default `[5, -5]` mm once more for every paste in the document they were copied from. One undo step. */
+  "document.paste": {
+    params: PasteParams;
+    result: NewIds;
     tier: "edit";
   };
   /** The bitmap an image object's raster settings (or the ones given) make: grey levels, or black and white when dithered; a PNG, base64. */
@@ -2331,6 +2370,8 @@ export const ACTION_TIERS = {
   "document.array": "edit",
   "document.boolean": "edit",
   "document.clear_selection": "ui",
+  "document.copy": "ui",
+  "document.cut": "edit",
   "document.delete": "edit",
   "document.duplicate": "edit",
   "document.from_fkproj": "edit",
@@ -2344,6 +2385,7 @@ export const ACTION_TIERS = {
   "document.new": "edit",
   "document.offset": "edit",
   "document.open": "edit",
+  "document.paste": "edit",
   "document.raster_preview": "read",
   "document.raster_settings": "read",
   "document.remove_layer": "edit",
