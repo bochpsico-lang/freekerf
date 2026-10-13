@@ -22,7 +22,7 @@ memory, for development in a browser and component tests).
 | Inspector (Object panel) | X/Y of the centre, width, height (keep proportions), rotation (read from the object's transform), text and its size, layer swatches, align (2+ objects), combine (weld, subtract, intersect; 2+ objects), offset outline (distance), array (columns, rows, gap), duplicate, delete | `document.transform`, `document.set_text`, `document.align`, `document.boolean`, `document.offset`, `document.array`, `document.duplicate`, `document.delete` |
 | Raster dialog (an image selected: *Image engraving…* in the inspector) | method (grey levels, dithering with the 9 algorithms, as it is, trace outlines), resolution, brightness, contrast, threshold, direction, speed, minimum and maximum power; a preview of the bitmap the settings make (computed in Rust); Apply is one undo step | `document.raster_settings`, `document.raster_preview`, `document.set_raster` |
 | Material test dialog | filled cells (engraving) or outlines (lines, cuts); power from / to / steps by row, speed from / to / steps by column (1 to 20 steps each), cell size; `S` of 100 % is the board's `$30` | `document.material_test` |
-| Context menu (right click or long press on the canvas) | copy, cut, paste (centred where the menu opened), duplicate, delete; a right click on an object outside the selection selects it first; keys ↑ ↓ Home End, Esc | `document.copy`, `document.cut`, `document.paste`, `document.duplicate`, `document.delete`, `document.select` |
+| Context menu (right click or long press on the canvas) | copy, cut, paste (centred where the menu opened), duplicate, join, split, delete; a right click on an object outside the selection selects it first; keys ↑ ↓ Home End, Esc | `document.copy`, `document.cut`, `document.paste`, `document.duplicate`, `document.combine`, `document.split`, `document.delete`, `document.select` |
 | Import dialog | a file (SVG, DXF, image) and its colours: keep (one layer per colour) or put everything on the current layer; the bytes cross as base64; the report comes back as a toast | `document.import_data` |
 | Welcome dialog | set up the machine (opens Settings), import from LaserGRBL (scan, choose, report; the LaserGRBL files are only read), explore with the emulator; opens by itself on the first run (until it is closed once: `ui.welcomed`), reopened from Settings | `migrate.detect`, `migrate.run`, `machine.connect`, `settings.set` |
 
@@ -63,6 +63,7 @@ drawn in this mode.
 | Ctrl+I | import |
 | Ctrl+Z · Ctrl+Y / Ctrl+Shift+Z | undo · redo |
 | Ctrl+A · Ctrl+D · Del / Backspace | select all · duplicate · delete |
+| Ctrl+G · Ctrl+Shift+G | join the selected shapes into one object per layer (open paths whose ends touch become continuous, closed when they come back to their start: an imported DXF outline can be filled and cut in one move) · split an object into one per path |
 | Ctrl+C · Ctrl+X · Ctrl+V | copy · cut · paste (offset 5 mm more on every paste; in place after a cut or in another document). Text fields keep their own copy and paste |
 | Arrows | move the selection 1 mm (Shift 10 mm, Alt 0.1 mm) |
 | Esc | back to the select tool, else clear the selection |

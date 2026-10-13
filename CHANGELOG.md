@@ -89,6 +89,13 @@ All notable changes to FreeKerf are documented here. The format follows
   session's clipboard keeps the objects and their layers across documents (a
   missing layer is made with the copied settings); not an undo step.
 
+- Design mode: join (Ctrl+G, context menu) the selected shapes into one object
+  per layer, so an imported drawing moves as one piece; open paths whose ends
+  touch become continuous (closed when they come back to their start), so a DXF
+  outline of loose lines can be filled and is cut in one move. Split
+  (Ctrl+Shift+G) gives one object per path. Actions `document.combine`,
+  `document.split`; `freekerf_geometry::join_paths`, `Path::reversed`.
+
 ### Fixed
 
 - Custom code: `[jogstep]` and `[jogspeed]` are evaluated (the jog settings), as in

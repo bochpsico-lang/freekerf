@@ -31,6 +31,8 @@
     ['cut', 'kb-cut', 'Ctrl+X'],
     ['paste', 'kb-paste', 'Ctrl+V'],
     ['duplicate', 'kb-dup', 'Ctrl+D'],
+    ['combine', 'kb-combine', 'Ctrl+G'],
+    ['split', 'kb-split', 'Ctrl+Shift+G'],
     ['delete', 'kb-del', 'Del'],
   ];
   const enabled = (c: EditCommand) => (c === 'paste' ? canPaste : selected);

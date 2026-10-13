@@ -287,9 +287,181 @@ fn arc_steps(sweep: f64, step: f64) -> i32 {
     (n.min(10000.0) as i32).max(1)
 }
 
+/// Distance under which path ends are taken as touching ([`join_paths`]), mm.
+pub const JOIN_TOLERANCE_MM: f64 = 0.01;
+
+impl Path {
+    /// The same path drawn the other way (lines, arcs and curves reversed).
+    #[must_use]
+    pub fn reversed(&self) -> Self {
+        // the start of each segment, then the path's end becomes the new start
+        let mut starts = Vec::with_capacity(self.segments.len());
+        let mut at = self.start;
+        for s in &self.segments {
+            starts.push(at);
+            at = s.end();
+        }
+        let mut out = Self::new(at);
+        for (s, from) in self.segments.iter().zip(starts).rev() {
+            out.segments.push(match *s {
+                Segment::Line { .. } => Segment::Line { end: from },
+                Segment::Arc { center, ccw, .. } => Segment::Arc {
+                    end: from,
+                    center,
+                    ccw: !ccw,
+                },
+                Segment::Cubic { c1, c2, .. } => Segment::Cubic {
+                    c1: c2,
+                    c2: c1,
+                    end: from,
+                },
+            });
+        }
+        out.closed = self.closed;
+        out
+    }
+}
+
+/// Joins open paths whose ends touch (within `tolerance` mm) into continuous
+/// paths, reversing some when needed; a joined path whose ends meet is closed.
+/// Closed paths and paths drawn from the current point are kept as they are.
+/// Deterministic: paths are taken in order, each one extended at its end, then
+/// at its start, by the first path that fits.
+#[must_use]
+pub fn join_paths(paths: Vec<Path>, tolerance: f64) -> Vec<Path> {
+    let near = |a: Point, b: Point| a.distance(b) <= tolerance;
+    let mut open: Vec<Option<Path>> = Vec::new();
+    let mut out = Vec::new();
+    for p in paths {
+        if p.closed || p.from_current || p.segments.is_empty() {
+            out.push(p);
+        } else {
+            open.push(Some(p));
+        }
+    }
+    for i in 0..open.len() {
+        let Some(mut chain) = open[i].take() else {
+            continue;
+        };
+        loop {
+            let (start, end) = (chain.start, chain.end());
+            if near(start, end) && chain.segments.len() > 1 {
+                break;
+            }
+            let next = open.iter().position(|o| {
+                o.as_ref().is_some_and(|o| {
+                    [o.start, o.end()]
+                        .into_iter()
+                        .any(|q| near(q, end) || near(q, start))
+                })
+            });
+            let Some(j) = next else {
+                break;
+            };
+            let Some(other) = open[j].take() else {
+                break;
+            };
+            if near(other.start, end) {
+                chain.segments.extend(other.segments);
+            } else if near(other.end(), end) {
+                chain.segments.extend(other.reversed().segments);
+            } else {
+                // it touches the chain's start: prepend it, drawn towards the start
+                let head = if near(other.end(), start) {
+                    other
+                } else {
+                    other.reversed()
+                };
+                let mut segments = head.segments;
+                segments.extend(chain.segments);
+                chain = Path {
+                    start: head.start,
+                    segments,
+                    closed: false,
+                    from_current: false,
+                };
+            }
+        }
+        if chain.segments.len() > 1 && near(chain.start, chain.end()) {
+            chain.closed = true;
+        }
+        out.push(chain);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reversing_and_joining_paths() {
+        let pt = Point::new;
+        // a square drawn as four loose lines, two of them backwards
+        let line = |a: Point, b: Point| Path::polyline(&[a, b], false);
+        let sides = vec![
+            line(pt(0.0, 0.0), pt(10.0, 0.0)),
+            line(pt(10.0, 10.0), pt(10.0, 0.0)),
+            line(pt(0.0, 10.0), pt(10.0, 10.0)),
+            line(pt(0.0, 0.0), pt(0.0, 10.0)),
+        ];
+        let joined = join_paths(sides, JOIN_TOLERANCE_MM);
+        assert_eq!(joined.len(), 1);
+        let sq = &joined[0];
+        assert!(sq.closed);
+        assert_eq!(sq.segments.len(), 4);
+        assert!(sq.end().distance(sq.start) < 1e-9);
+        assert!((sq.length() - 40.0).abs() < 1e-9);
+        // ends within the tolerance join; farther ones do not
+        let near = join_paths(
+            vec![
+                line(pt(0.0, 0.0), pt(5.0, 0.0)),
+                line(pt(5.005, 0.0), pt(9.0, 0.0)),
+            ],
+            JOIN_TOLERANCE_MM,
+        );
+        assert_eq!(near.len(), 1);
+        assert!(!near[0].closed);
+        let apart = join_paths(
+            vec![line(pt(0.0, 0.0), pt(5.0, 0.0)), line(pt(6.0, 0.0), pt(9.0, 0.0))],
+            JOIN_TOLERANCE_MM,
+        );
+        assert_eq!(apart.len(), 2);
+        // a path touching the chain's start is put before it
+        let before = join_paths(
+            vec![line(pt(5.0, 0.0), pt(9.0, 0.0)), line(pt(0.0, 0.0), pt(5.0, 0.0))],
+            JOIN_TOLERANCE_MM,
+        );
+        assert_eq!(before.len(), 1);
+        assert_eq!((before[0].start, before[0].end()), (pt(0.0, 0.0), pt(9.0, 0.0)));
+        // closed paths are kept
+        let closed = Path::polyline(&[pt(0.0, 0.0), pt(1.0, 0.0), pt(1.0, 1.0)], true);
+        assert_eq!(join_paths(vec![closed.clone()], JOIN_TOLERANCE_MM), vec![closed]);
+        // reversing keeps arcs and curves on the same points
+        let mut p = Path::new(pt(0.0, 0.0));
+        p.segments.push(Segment::Line { end: pt(10.0, 0.0) });
+        p.segments.push(Segment::Arc {
+            end: pt(10.0, 10.0),
+            center: pt(10.0, 5.0),
+            ccw: true,
+        });
+        p.segments.push(Segment::Cubic {
+            c1: pt(8.0, 12.0),
+            c2: pt(2.0, 12.0),
+            end: pt(0.0, 10.0),
+        });
+        let r = p.reversed();
+        assert_eq!((r.start, r.end()), (pt(0.0, 10.0), pt(0.0, 0.0)));
+        assert!((r.length() - p.length()).abs() < 1e-6);
+        assert_eq!(r.reversed(), p);
+        let (a, b) = (p.to_polyline(0.001), r.to_polyline(0.001));
+        assert!(
+            (p.bounds().max_x - r.bounds().max_x).abs() < 1e-6,
+            "{:?} {:?}",
+            a.len(),
+            b.len()
+        );
+    }
 
     #[test]
     fn sweep_never_a_full_turn_unless_closed() {

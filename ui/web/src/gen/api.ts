@@ -1862,6 +1862,12 @@ export interface Actions {
     result: Changed;
     tier: "ui";
   };
+  /** Joins shapes (default: the selection) into one object per layer, so they move together; open paths whose ends touch (0.01 mm) become one continuous path, closed when it comes back to its start. Texts and images are left as they are. The results are selected. One undo step. */
+  "document.combine": {
+    params: IdsParams;
+    result: NewIds;
+    tier: "edit";
+  };
   /** Puts copies of objects (default: the selection) and their layers on the session's clipboard, which survives opening another document. Not an undo step. */
   "document.copy": {
     params: IdsParams;
@@ -2010,6 +2016,12 @@ export interface Actions {
   "document.set_text": {
     params: SetTextParams;
     result: Changed;
+    tier: "edit";
+  };
+  /** Splits shapes (default: the selection) made of several paths into one object per path, on the same layer; texts and images are left as they are. The pieces are selected. One undo step. */
+  "document.split": {
+    params: IdsParams;
+    result: NewIds;
     tier: "edit";
   };
   /** The document as `.fkproj` text. */
@@ -2360,6 +2372,7 @@ export const ACTION_TIERS = {
   "document.array": "edit",
   "document.boolean": "edit",
   "document.clear_selection": "ui",
+  "document.combine": "edit",
   "document.copy": "ui",
   "document.cut": "edit",
   "document.delete": "edit",
@@ -2385,6 +2398,7 @@ export const ACTION_TIERS = {
   "document.set_current_layer": "ui",
   "document.set_raster": "edit",
   "document.set_text": "edit",
+  "document.split": "edit",
   "document.to_fkproj": "read",
   "document.transform": "edit",
   "document.translate": "edit",

@@ -72,6 +72,8 @@ describe('shortcuts', () => {
     expect(shortcut(key('c', { ctrl: true }), design)).toBe('copy');
     expect(shortcut(key('X', { ctrl: true }), design)).toBe('cut');
     expect(shortcut(key('v', { meta: true }), design)).toBe('paste');
+    expect(shortcut(key('g', { ctrl: true }), design)).toBe('combine');
+    expect(shortcut(key('G', { ctrl: true, shift: true }), design)).toBe('split');
     expect(shortcut(key('v', { ctrl: true }), { ...design, typing: true })).toBeNull();
     expect(shortcut(key('v', { ctrl: true }), idle)).toBeNull();
     expect(shortcut(key('a', { meta: true }), design)).toBe('select-all');

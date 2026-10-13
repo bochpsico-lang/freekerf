@@ -184,5 +184,12 @@ describe('DesignEditor', () => {
     await editor.edit('duplicate');
     await editor.edit('delete');
     expect(summary().objects).toHaveLength(2);
+    // join the two rectangles into one object, split it again
+    await service.dispatch('document.select_all', {});
+    await refresh();
+    await editor.edit('combine');
+    expect(summary().objects).toHaveLength(1);
+    await editor.edit('split');
+    expect(summary().objects).toHaveLength(2);
   });
 });

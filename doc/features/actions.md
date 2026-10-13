@@ -17,6 +17,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `document.array` | edit | Copies objects (default: the selection) in a grid of `columns` × `rows` (the originals are the top-left cell; rows go down), `gap_mm` apart; selects the originals and the copies. One undo step. |
 | `document.boolean` | edit | Combines shapes (default: the selection, at least two) into one: union (weld), difference (the first in drawing order minus the others), intersection or xor. The result takes the first one's layer and is selected. One undo step. |
 | `document.clear_selection` | ui | Selects nothing. |
+| `document.combine` | edit | Joins shapes (default: the selection) into one object per layer, so they move together; open paths whose ends touch (0.01 mm) become one continuous path, closed when it comes back to its start. Texts and images are left as they are. The results are selected. One undo step. |
 | `document.copy` | ui | Puts copies of objects (default: the selection) and their layers on the session's clipboard, which survives opening another document. Not an undo step. |
 | `document.cut` | edit | Puts objects (default: the selection) on the clipboard like `document.copy` and deletes them; the next paste puts them back in place. One undo step. |
 | `document.delete` | edit | Deletes objects (default: the selection). One undo step. |
@@ -42,6 +43,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `document.set_current_layer` | ui | Chooses the layer new shapes and text go to. |
 | `document.set_raster` | edit | Changes the raster dialog's settings of an image object. One undo step. |
 | `document.set_text` | edit | Changes a text object's text or font height (its position, rotation and scale stay). One undo step. |
+| `document.split` | edit | Splits shapes (default: the selection) made of several paths into one object per path, on the same layer; texts and images are left as they are. The pieces are selected. One undo step. |
 | `document.to_fkproj` | read | The document as `.fkproj` text. |
 | `document.transform` | edit | Moves, scales, mirrors or rotates objects (default: the selection): `{translate}`, `{scale, pivot}`, `{rotate_deg, pivot}` or `{matrix}`. Images only move and scale. One undo step. |
 | `document.translate` | edit | Moves objects (default: the selection) by `dx`, `dy` mm. One undo step. |
@@ -203,6 +205,14 @@ Combines shapes (default: the selection, at least two) into one: union (weld), d
 Selects nothing.
 
 No parameters.
+
+### `document.combine`
+
+Joins shapes (default: the selection) into one object per layer, so they move together; open paths whose ends touch (0.01 mm) become one continuous path, closed when it comes back to its start. Texts and images are left as they are. The results are selected. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `ids` | no | Object ids (default: the selection). |
 
 ### `document.copy`
 
@@ -421,6 +431,14 @@ Changes a text object's text or font height (its position, rotation and scale st
 | `height_mm` | no | New height of the font, mm. |
 | `id` | yes | Id of a text object. |
 | `text` | no | New text. |
+
+### `document.split`
+
+Splits shapes (default: the selection) made of several paths into one object per path, on the same layer; texts and images are left as they are. The pieces are selected. One undo step.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `ids` | no | Object ids (default: the selection). |
 
 ### `document.to_fkproj`
 
