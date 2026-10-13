@@ -205,6 +205,8 @@
       case 'copy':
       case 'cut':
       case 'paste':
+      case 'combine':
+      case 'split':
         void stage?.edit(c);
         return;
       case 'nudge-left':

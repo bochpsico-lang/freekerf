@@ -75,6 +75,12 @@ interface AppDocument {
    */
   clearSelection(params?: Record<string, unknown>): { changed: boolean };
   /**
+   * Joins shapes (default: the selection) into one object per layer, so they move together; open paths whose ends touch (0.01 mm) become one continuous path, closed when it comes back to its start. Texts and images are left as they are. The results are selected. One undo step.
+   *
+   * Action `document.combine`, tier `edit`.
+   */
+  combine(params?: { ids?: number[] | null }): { ids: number[] };
+  /**
    * Puts copies of objects (default: the selection) and their layers on the session's clipboard, which survives opening another document. Not an undo step.
    *
    * Action `document.copy`, tier `ui`.
@@ -224,6 +230,12 @@ interface AppDocument {
    * Action `document.set_text`, tier `edit`.
    */
   setText(params: { height_mm?: number | null; id: number; text?: string | null }): { changed: boolean };
+  /**
+   * Splits shapes (default: the selection) made of several paths into one object per path, on the same layer; texts and images are left as they are. The pieces are selected. One undo step.
+   *
+   * Action `document.split`, tier `edit`.
+   */
+  split(params?: { ids?: number[] | null }): { ids: number[] };
   /**
    * The document as `.fkproj` text.
    *

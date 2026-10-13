@@ -28,5 +28,5 @@ mod path;
 mod point;
 
 pub use matrix::Matrix;
-pub use path::{Path, Segment, arc_sweep};
+pub use path::{JOIN_TOLERANCE_MM, Path, Segment, arc_sweep, join_paths};
 pub use point::{Point, Rect};

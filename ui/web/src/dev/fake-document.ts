@@ -533,6 +533,54 @@ export class FakeDocument {
     },
     // stand-ins for the real geometry: union and xor merge the outlines, difference
     // keeps the first, intersection is the overlap of the boxes; offsets are boxes
+    // simplified: paths are merged, not joined end to end
+    'document.combine': (p) => {
+      const world = (o: FakeObject) => o.paths.map((path) => path.map(([x, y]) => apply(o.transform, x, y)));
+      const chosen = this.doc.objects.filter(
+        (o) => this.targets(p.ids).includes(o.id) && o.kind === 'shape' && !o.text,
+      );
+      const layers = [...new Set(chosen.map((o) => o.layer))];
+      const ids = this.edit('combine', (d) => {
+        const out: number[] = [];
+        for (const layer of layers) {
+          const group = chosen.filter((o) => o.layer === layer);
+          if (group.length < 2) continue;
+          d.objects = d.objects.filter((o) => !group.includes(o));
+          const o: FakeObject = {
+            id: d.next_id++,
+            layer,
+            name: group[0]!.name,
+            kind: 'shape',
+            paths: group.flatMap(world),
+            transform: [1, 0, 0, 1, 0, 0],
+          };
+          d.objects.push(o);
+          out.push(o.id);
+        }
+        if (out.length) d.selection = out;
+        return out;
+      });
+      return { ids };
+    },
+    'document.split': (p) => {
+      const chosen = this.doc.objects.filter(
+        (o) => this.targets(p.ids).includes(o.id) && o.kind === 'shape' && !o.text && o.paths.length > 1,
+      );
+      const ids = this.edit('split', (d) => {
+        const out: number[] = [];
+        for (const o of chosen) {
+          d.objects = d.objects.filter((x) => x !== o);
+          for (const path of o.paths) {
+            const piece: FakeObject = { ...structuredClone(o), id: d.next_id++, paths: [path] };
+            d.objects.push(piece);
+            out.push(piece.id);
+          }
+        }
+        if (out.length) d.selection = out;
+        return out;
+      });
+      return { ids };
+    },
     'document.boolean': (p) => {
       const chosen = this.doc.objects.filter((o) => this.targets(p.ids).includes(o.id));
       if (chosen.length < 2) throw invalid('document.boolean', 'choose at least two shapes');

@@ -25,7 +25,7 @@ export const DEFAULT_SIZE = { rect: [40, 30], ellipse: [30, 30], text: 10 } as c
 const MIN_BOX_MM = 1;
 
 /** Commands on the selection and the clipboard (keys and the context menu). */
-export type EditCommand = 'copy' | 'cut' | 'paste' | 'duplicate' | 'delete';
+export type EditCommand = 'copy' | 'cut' | 'paste' | 'duplicate' | 'delete' | 'combine' | 'split';
 
 export interface EditorHost {
   doc(): DocumentSummary | null;
@@ -209,6 +209,10 @@ export class DesignEditor {
         return this.host.run(() => s.dispatch('document.duplicate', { ids }));
       case 'delete':
         return this.host.run(() => s.dispatch('document.delete', { ids }));
+      case 'combine':
+        return this.host.run(() => s.dispatch('document.combine', { ids }));
+      case 'split':
+        return this.host.run(() => s.dispatch('document.split', { ids }));
     }
   };
 

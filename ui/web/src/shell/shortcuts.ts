@@ -24,6 +24,8 @@ export type Command =
   | 'copy'
   | 'cut'
   | 'paste'
+  | 'combine'
+  | 'split'
   | 'select-all'
   | 'deselect'
   | 'undo'
@@ -91,6 +93,7 @@ export function shortcut(e: KeyInput, c: KeyContext): Command | null {
     if (k === 'c') return 'copy';
     if (k === 'x') return 'cut';
     if (k === 'v') return 'paste';
+    if (k === 'g') return e.shiftKey ? 'split' : 'combine';
     if (k === 'a') return 'select-all';
     if (k === 'i') return 'import';
   }
@@ -136,6 +139,7 @@ export const SHORTCUT_TABLE: [string, string, string][] = [
   ['kb-g-edit', 'Ctrl+Y · Ctrl+Shift+Z', 'kb-redo'],
   ['kb-g-edit', 'Ctrl+C · Ctrl+X · Ctrl+V', 'kb-clipboard'],
   ['kb-g-edit', 'Ctrl+D', 'kb-dup'],
+  ['kb-g-edit', 'Ctrl+G · Ctrl+Shift+G', 'kb-combine-split'],
   ['kb-g-edit', 'Del', 'kb-del'],
   ['kb-g-edit', 'Ctrl+A', 'kb-all'],
   ['kb-g-edit', '← → ↑ ↓', 'kb-nudge'],

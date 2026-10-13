@@ -1477,6 +1477,113 @@ pub fn register_session_actions<C: SessionHost>(r: &mut Registry<C>) -> Result<(
         },
     )?;
     r.register(
+        "document.combine",
+        "Joins shapes (default: the selection) into one object per layer, so they move together; open paths whose ends touch (0.01 mm) become one continuous path, closed when it comes back to its start. Texts and images are left as they are. The results are selected. One undo step.",
+        Tier::Edit,
+        |c: &C, p: IdsParams| {
+            let mut s = lock(c);
+            let ids = targets(p.ids, &s);
+            let mut new = Vec::new();
+            s.edit("combine", |d, sel| {
+                let chosen: Vec<Object> = d
+                    .objects
+                    .iter()
+                    .filter(|o| ids.contains(&o.id) && o.text.is_none() && matches!(o.kind, ObjectKind::Shape { .. }))
+                    .cloned()
+                    .collect();
+                let mut layers: Vec<LayerId> = Vec::new();
+                for o in &chosen {
+                    if !layers.contains(&o.layer) {
+                        layers.push(o.layer);
+                    }
+                }
+                for layer in layers {
+                    let group: Vec<&Object> = chosen.iter().filter(|o| o.layer == layer).collect();
+                    let paths: Vec<Path> = group
+                        .iter()
+                        .flat_map(|o| match &o.kind {
+                            ObjectKind::Shape { paths } => paths.clone(),
+                            _ => Vec::new(),
+                        })
+                        .collect();
+                    let count = paths.len();
+                    let joined = freekerf_geometry::join_paths(paths, freekerf_geometry::JOIN_TOLERANCE_MM);
+                    // one object whose paths do not touch: nothing to do
+                    if group.len() < 2 && joined.len() == count {
+                        continue;
+                    }
+                    for o in &group {
+                        d.remove_object(o.id).map_err(failed)?;
+                    }
+                    // the first one's name and source (the source sets the writing style)
+                    let first = group[0];
+                    let id = d
+                        .add_object_with(
+                            layer,
+                            ObjectKind::Shape { paths: joined },
+                            first.name.clone(),
+                            first.source.clone(),
+                        )
+                        .map_err(failed)?;
+                    new.push(id);
+                }
+                if new.is_empty() {
+                    return Ok(false);
+                }
+                *sel = new.iter().copied().collect();
+                Ok::<_, ActionError>(true)
+            })?;
+            Ok(NewIds {
+                ids: new.into_iter().map(|i| i.0).collect(),
+            })
+        },
+    )?;
+    r.register(
+        "document.split",
+        "Splits shapes (default: the selection) made of several paths into one object per path, on the same layer; texts and images are left as they are. The pieces are selected. One undo step.",
+        Tier::Edit,
+        |c: &C, p: IdsParams| {
+            let mut s = lock(c);
+            let ids = targets(p.ids, &s);
+            let mut new = Vec::new();
+            s.edit("split", |d, sel| {
+                let chosen: Vec<Object> = d
+                    .objects
+                    .iter()
+                    .filter(|o| {
+                        ids.contains(&o.id)
+                            && o.text.is_none()
+                            && matches!(&o.kind, ObjectKind::Shape { paths } if paths.len() > 1)
+                    })
+                    .cloned()
+                    .collect();
+                for o in chosen {
+                    d.remove_object(o.id).map_err(failed)?;
+                    let ObjectKind::Shape { paths } = o.kind else {
+                        continue;
+                    };
+                    for path in paths {
+                        let id = d
+                            .add_object_with(o.layer, ObjectKind::Shape { paths: vec![path] }, o.name.clone(), o.source.clone())
+                            .map_err(failed)?;
+                        if let Some(piece) = d.object_mut(id) {
+                            piece.transform = o.transform;
+                        }
+                        new.push(id);
+                    }
+                }
+                if new.is_empty() {
+                    return Ok(false);
+                }
+                *sel = new.iter().copied().collect();
+                Ok::<_, ActionError>(true)
+            })?;
+            Ok(NewIds {
+                ids: new.into_iter().map(|i| i.0).collect(),
+            })
+        },
+    )?;
+    r.register(
         "document.boolean",
         "Combines shapes (default: the selection, at least two) into one: union (weld), difference (the first in drawing order minus the others), intersection or xor. The result takes the first one's layer and is selected. One undo step.",
         Tier::Edit,
@@ -2444,6 +2551,82 @@ mod tests {
             d("document.select", json!({"ids": [rect, ell], "mode": "toggle"})).unwrap(),
             json!([ell])
         );
+    }
+
+    #[test]
+    fn combine_and_split() {
+        let (r, h) = setup();
+        let user = Caller::user();
+        let d = |name: &str, p: Value| r.dispatch(&h, &user, name, p);
+        let objects = || d("session.snapshot", Value::Null).unwrap()["document"]["objects"].clone();
+        // a square drawn as four loose lines (like a DXF), and a circle elsewhere
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="20mm" viewBox="0 0 40 20">
+            <line x1="0" y1="0" x2="10" y2="0" stroke="black"/><line x1="10" y1="10" x2="10" y2="0" stroke="black"/>
+            <line x1="0" y1="10" x2="10" y2="10" stroke="black"/><line x1="0" y1="0" x2="0" y2="10" stroke="black"/>
+            <circle cx="30" cy="5" r="3" stroke="red" fill="none"/></svg>"##;
+        let ids = d(
+            "document.import_data",
+            json!({"format": "svg", "text": svg, "name": "s.svg"}),
+        )
+        .unwrap()["objects"]
+            .clone();
+        assert_eq!(ids.as_array().unwrap().len(), 5);
+        let undo = d("session.snapshot", Value::Null).unwrap()["undo"]
+            .as_array()
+            .unwrap()
+            .len();
+        // nothing to join on its own
+        assert_eq!(
+            d("document.combine", json!({"ids": [ids[4]]})).unwrap(),
+            json!({"ids": []})
+        );
+        // the lines become one closed square; the circle stays on its own layer
+        let joined = d("document.combine", json!({"ids": ids})).unwrap()["ids"].clone();
+        assert_eq!(joined.as_array().unwrap().len(), 1);
+        assert_eq!(objects().as_array().unwrap().len(), 2);
+        let snap = d("session.snapshot", Value::Null).unwrap();
+        assert_eq!(snap["selection"], joined);
+        assert_eq!(snap["undo"].as_array().unwrap().len(), undo + 1);
+        let doc = d("document.get", Value::Null).unwrap();
+        let square = doc["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|o| o["id"] == joined[0])
+            .cloned()
+            .unwrap();
+        assert_eq!(square["paths"].as_array().unwrap().len(), 1);
+        assert_eq!(square["paths"][0]["closed"], true);
+        assert_eq!(square["source"]["format"], "svg");
+        // split: one object per path (an object with one path is left as it is)
+        let a = d(
+            "document.add_shape",
+            json!({"shape": "rect", "x": 50, "y": 0, "width": 5, "height": 5}),
+        )
+        .unwrap()["id"]
+            .clone();
+        let b = d(
+            "document.add_shape",
+            json!({"shape": "rect", "x": 60, "y": 0, "width": 5, "height": 5}),
+        )
+        .unwrap()["id"]
+            .clone();
+        let both = d("document.combine", json!({"ids": [a, b]})).unwrap()["ids"].clone();
+        assert_eq!(both.as_array().unwrap().len(), 1);
+        assert_eq!(objects().as_array().unwrap().len(), 3);
+        let pieces = d("document.split", json!({"ids": [both[0], joined[0]]})).unwrap()["ids"].clone();
+        assert_eq!(pieces.as_array().unwrap().len(), 2);
+        assert_eq!(objects().as_array().unwrap().len(), 4);
+        assert_eq!(d("history.undo", Value::Null).unwrap(), json!({"step": "split"}));
+        assert_eq!(objects().as_array().unwrap().len(), 3);
+        // texts are left as they are
+        let t = d("document.add_text", json!({"text": "Hi", "x": 0, "y": 30})).unwrap()["id"].clone();
+        assert_eq!(
+            d("document.split", json!({"ids": [t]})).unwrap(),
+            json!({"ids": []})
+        );
+        let only = d("document.combine", json!({"ids": [t, both[0]]})).unwrap();
+        assert_eq!(only, json!({"ids": []}));
     }
 
     #[test]
