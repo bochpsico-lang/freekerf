@@ -28,6 +28,8 @@ export class SettingsProjection {
       density: ui.density ?? 'auto',
       units: ui.units ?? 'mm',
       welcomed: ui.welcomed ?? false,
+      dock_width_px: ui.dock_width_px ?? 0,
+      dock_layers_pct: ui.dock_layers_pct ?? 0,
     };
   }
 

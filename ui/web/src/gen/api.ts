@@ -1568,6 +1568,16 @@ export type TranslateParams = {
 export type UiSettings = {
   /** Density of the controls. */
   density?: Density;
+  /**
+   * Height of the layers panel in the wide Design dock, in percent of the dock;
+   * `0` is the default height. The app keeps it between 15 and 85.
+   */
+  dock_layers_pct?: number;
+  /**
+   * Width of the dock in the wide layout, in pixels; `0` is the default width.
+   * The app keeps it between a minimum and half the window.
+   */
+  dock_width_px?: number;
   /** High contrast (on top of the theme). */
   high_contrast?: boolean;
   /** Language: `auto` (the system's) or a locale of `ui/i18n` (`en`, `pt-BR`, `de`...). */

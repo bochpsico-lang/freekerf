@@ -56,6 +56,8 @@ panel-object = Objeto
 panel-machine = Máquina
 panel-console = Console
 panel-close = Fechar painel
+panel-resize-width = Arraste para redimensionar os painéis (duplo clique: tamanho padrão)
+panel-resize-layers = Arraste para redimensionar Camadas (duplo clique: tamanho padrão)
 
 ## layers
 layers-output = Enviar ao laser

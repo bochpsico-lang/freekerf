@@ -73,6 +73,8 @@
       "$ref": "#/$defs/UiSettings",
       "default": {
         "density": "auto",
+        "dock_layers_pct": 0,
+        "dock_width_px": 0,
         "high_contrast": false,
         "language": "auto",
         "theme": "dark",
@@ -488,6 +490,21 @@
           "description": "Density of the controls.",
           "$ref": "#/$defs/Density",
           "default": "auto"
+        },
+        "dock_layers_pct": {
+          "description": "Height of the layers panel in the wide Design dock, in percent of the dock;\n`0` is the default height. The app keeps it between 15 and 85.",
+          "type": "integer",
+          "format": "uint8",
+          "default": 0,
+          "maximum": 255,
+          "minimum": 0
+        },
+        "dock_width_px": {
+          "description": "Width of the dock in the wide layout, in pixels; `0` is the default width.\nThe app keeps it between a minimum and half the window.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 0,
+          "minimum": 0
         },
         "high_contrast": {
           "description": "High contrast (on top of the theme).",
