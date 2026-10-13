@@ -95,6 +95,8 @@ All notable changes to FreeKerf are documented here. The format follows
 
 ### Fixed
 
+- Design mode: a layer set to fill showed only the outlines on the canvas, as if
+  it would not be filled; the canvas now draws the hatch lines the job engraves.
 - Custom code: `[jogstep]` and `[jogspeed]` are evaluated (the jog settings), as in
   LaserGRBL; they were left unevaluated.
 - A startup block report (`>G54G20:ok`) or a well-formed `[...]` message containing
