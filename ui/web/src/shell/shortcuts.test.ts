@@ -76,6 +76,10 @@ describe('shortcuts', () => {
     expect(shortcut(key('G', { ctrl: true, shift: true }), design)).toBe('split');
     expect(shortcut(key('v', { ctrl: true }), { ...design, typing: true })).toBeNull();
     expect(shortcut(key('v', { ctrl: true }), idle)).toBeNull();
+    expect(shortcut(key('F2'), design)).toBe('edit-text');
+    expect(shortcut(key('F2'), idle)).toBeNull();
+    expect(shortcut(key('F2'), { ...design, typing: true })).toBeNull();
+    expect(shortcut(key('Enter'), design)).toBeNull(); // buttons keep Enter
     expect(shortcut(key('a', { meta: true }), design)).toBe('select-all');
     expect(shortcut(key('i', { ctrl: true }), design)).toBe('import');
     expect(shortcut(key('z', { ctrl: true }), design)).toBe('undo');

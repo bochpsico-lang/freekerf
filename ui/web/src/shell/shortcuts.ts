@@ -26,6 +26,7 @@ export type Command =
   | 'paste'
   | 'combine'
   | 'split'
+  | 'edit-text'
   | 'select-all'
   | 'deselect'
   | 'undo'
@@ -76,6 +77,7 @@ export function shortcut(e: KeyInput, c: KeyContext): Command | null {
   if (e.key === 'F7') return 'frame';
   if (e.key === 'F1') return 'shortcuts';
   if (c.typing) return null;
+  if (e.key === 'F2') return c.design && !c.dialogOpen ? 'edit-text' : null;
   const mod = e.ctrlKey || e.metaKey;
   if (e.key === 'Escape') {
     if (c.running) return 'pause';
@@ -140,6 +142,7 @@ export const SHORTCUT_TABLE: [string, string, string][] = [
   ['kb-g-edit', 'Ctrl+C · Ctrl+X · Ctrl+V', 'kb-clipboard'],
   ['kb-g-edit', 'Ctrl+D', 'kb-dup'],
   ['kb-g-edit', 'Ctrl+G · Ctrl+Shift+G', 'kb-combine-split'],
+  ['kb-g-edit', 'F2 · double click', 'kb-edit-text'],
   ['kb-g-edit', 'Del', 'kb-del'],
   ['kb-g-edit', 'Ctrl+A', 'kb-all'],
   ['kb-g-edit', '← → ↑ ↓', 'kb-nudge'],

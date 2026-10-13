@@ -200,6 +200,9 @@
         if (view.tool !== 'select') tool('select');
         else if (ids.length) void run(() => d.service.dispatch('document.clear_selection', {}));
         return;
+      case 'edit-text':
+        stage?.editText();
+        return;
       case 'delete':
       case 'duplicate':
       case 'copy':

@@ -505,6 +505,21 @@ textarea {
   color: var(--fk-color-text-muted);
 }
 
+/* a text edited on the canvas (TextEditor.svelte) */
+.text-editor {
+  position: absolute;
+  z-index: var(--fk-z-popover);
+  box-sizing: border-box;
+  padding: 0 var(--fk-space-2);
+  border: 1px solid var(--fk-color-accent);
+  border-radius: var(--fk-radius-sm);
+  background: color-mix(in srgb, var(--fk-color-surface-1) 92%, transparent);
+  color: var(--fk-color-text);
+  font-family: inherit;
+  box-shadow: var(--fk-elevation-2);
+  outline: none;
+}
+
 .canvas-tools {
   position: absolute;
   right: 10px;

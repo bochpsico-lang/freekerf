@@ -15,6 +15,7 @@
   import ContextMenu from '../design/ContextMenu.svelte';
   import { DesignEditor, type EditCommand } from '../design/editor';
   import Palette from '../design/Palette.svelte';
+  import TextEditor from '../design/TextEditor.svelte';
   import AlarmBanner from '../produce/AlarmBanner.svelte';
 
   let { mode = 'produce', onzoom }: { mode?: 'design' | 'produce'; onzoom?: (realSize: number) => void } =
@@ -35,7 +36,8 @@
         service: doc.service,
         run,
         selectTool: () => void run(() => service.dispatch('view.set_tool', { tool: 'select' })),
-        textPlaced: () => void run(() => service.dispatch('view.open_panel', { name: 'object' })),
+        // a new text is typed right where it was placed
+        textPlaced: (id) => (editing = id),
         changed: () => tick++,
       })
     : null;
@@ -123,6 +125,25 @@
     menu = { x, y, at: Camera.toWorld(cam, x, y) };
   }
 
+  // the text object being edited on the canvas
+  let editing: number | null = $state(null);
+  const editingText = $derived(
+    design && editing !== null
+      ? (doc?.objects.find((o) => o.id === editing && o.kind === 'text') ?? null)
+      : null,
+  );
+
+  /** Edits the selected text on the canvas (F2), when exactly one text is selected. */
+  export function editText() {
+    const sel = doc?.selected ?? [];
+    if (design && sel.length === 1 && sel[0]!.kind === 'text') editing = sel[0]!.id;
+  }
+
+  function doubleClick(_x: number, _y: number, id: string | null) {
+    const o = id === null ? null : doc?.objects.find((x) => x.id === Number(id));
+    if (o?.kind === 'text') editing = o.id;
+  }
+
   /** Zoom by a factor around the centre (buttons and keys). */
   export function zoom(factor: number) {
     canvas?.zoom(factor);
@@ -152,6 +173,7 @@
           placing: editor.placing,
           place: editor.place,
           contextMenu,
+          doubleClick,
         }
       : {}}
     head={preview.head}
@@ -177,6 +199,18 @@
       canPaste={(doc.summary?.clipboard ?? 0) > 0}
       onpick={(cmd) => void editor.edit(cmd, menu?.at)}
       onclose={() => (menu = null)}
+    />
+  {/if}
+  {#if editingText && cam}
+    <TextEditor
+      object={editingText}
+      camera={cam}
+      onsubmit={(text) => {
+        const id = editing;
+        editing = null;
+        if (id !== null) void run(() => service.dispatch('document.set_text', { id, text }));
+      }}
+      oncancel={() => (editing = null)}
     />
   {/if}
   <AlarmBanner />

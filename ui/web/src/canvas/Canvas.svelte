@@ -51,6 +51,7 @@
         select: (id, add, keep) => design.select?.(id, add, keep),
         selectArea: (r, crossing, add) => design.selectArea?.(r, crossing, add),
         contextMenu: (x, y, id) => design.contextMenu?.(x, y, id),
+        doubleClick: (x, y, id) => design.doubleClick?.(x, y, id),
         hitHandle: (x, y) => design.hitHandle?.(x, y) ?? null,
         drag: (phase, h, w, m) => design.drag?.(phase, h, w, m),
         placing: () => design.placing?.() ?? false,

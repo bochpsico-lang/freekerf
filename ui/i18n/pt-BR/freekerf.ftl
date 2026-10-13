@@ -414,6 +414,7 @@ kb-clipboard = Copiar · recortar · colar
 kb-combine = Unir
 kb-split = Separar
 kb-combine-split = Unir · separar
+kb-edit-text = Editar o texto
 kb-dup = Duplicar
 kb-del = Excluir
 kb-all = Selecionar tudo
