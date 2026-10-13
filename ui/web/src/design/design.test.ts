@@ -111,8 +111,21 @@ describe('Design mode', () => {
     speed.value = '2500';
     await fireEvent.change(speed);
     await waitFor(async () => expect((await summary()).layers[0]!.speed_mm_min).toBe(2500));
+    // lines per mm only for fillings
+    expect(within(rows[0]!).queryByTestId('layer-lines-per-mm')).toBeNull();
     await fireEvent.click(within(rows[0]!).getByRole('radio', { name: 'Fill' }));
     await waitFor(async () => expect((await summary()).layers[0]!.mode).toBe('fill'));
+    const density = (await within(rows[0]!).findByTestId('layer-lines-per-mm')) as HTMLInputElement;
+    expect(density.value).toBe('10');
+    expect(density.closest('label')!.title).toContain('0.10 mm');
+    density.value = '5';
+    await fireEvent.change(density);
+    await waitFor(async () => expect((await summary()).layers[0]!.fill.lines_per_mm).toBe(5));
+    const pattern = within(rows[0]!).getByTestId('layer-pattern') as HTMLSelectElement;
+    expect(pattern.value).toBe('horizontal');
+    expect(pattern.options).toHaveLength(12);
+    await fireEvent.change(pattern, { target: { value: 'diagonal_grid' } });
+    await waitFor(async () => expect((await summary()).layers[0]!.fill.pattern).toBe('diagonal_grid'));
     const power = within(rows[0]!).getByTestId('layer-power') as HTMLInputElement;
     power.value = '75';
     await fireEvent.change(power);

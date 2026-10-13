@@ -100,6 +100,9 @@ All notable changes to FreeKerf are documented here. The format follows
   (Ctrl+Shift+G) gives one object per path. Actions `document.combine`,
   `document.split`; `freekerf_geometry::join_paths`, `Path::reversed`.
 
+- Layers panel: the hatch pattern (12 patterns) and the lines per mm of fill
+  layers (fill density, with the spacing between hatch lines in its tooltip).
+
 ### Fixed
 
 - Design mode: a layer set to fill showed only the outlines on the canvas, as if
