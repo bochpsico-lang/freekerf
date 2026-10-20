@@ -26,6 +26,8 @@ describe('Design flows from scratch', () => {
     // both selected (Ctrl+A), then Subtract in the inspector: one plate with a hole
     await browser.keys(['Control', 'a']);
     await browser.waitUntil(async () => (await snapshot()).selection.length === 2);
+    // the text is no longer typed in the Object panel, so it is not open: open it
+    await $('.dock-tabs [data-panel="object"]').click();
     await byTestId('obj-difference').click();
     await browser.waitUntil(async () => (await count()) === 1, { timeout: 10_000 });
     // a 3 × 2 array
