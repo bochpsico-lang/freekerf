@@ -59,8 +59,10 @@ jobs:
         run: |
           $msi = Get-ChildItem target/release/bundle/msi/*.msi | Select-Object -First 1
           $nsis = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
-          ./.github/scripts/smoke-windows-installer.ps1 -Installer $nsis.FullName -Kind nsis
+          # the MSI first: both remember their folder in the same registry key, which the
+          # NSIS uninstaller leaves, and the MSI would reuse it instead of Program Files
           ./.github/scripts/smoke-windows-installer.ps1 -Installer $msi.FullName -Kind msi
+          ./.github/scripts/smoke-windows-installer.ps1 -Installer $nsis.FullName -Kind nsis
       - name: checksums
         shell: pwsh
         run: |

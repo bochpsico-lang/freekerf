@@ -20,7 +20,8 @@ function Invoke-Checked([string] $file, [string[]] $arguments) {
 
 Write-Host "install $Installer"
 if ($Kind -eq 'msi') {
-    # the MSI ignores INSTALLDIR on the command line: read where it went from its log
+    # the MSI ignores INSTALLDIR on the command line (it reuses a folder remembered in
+    # the registry, else Program Files): read where it went from its log
     $log = Join-Path $root 'install.log'
     Invoke-Checked msiexec.exe @('/i', "`"$Installer`"", '/qn', '/norestart', '/l*v', "`"$log`"")
     $line = Select-String -Path $log -Pattern 'Property\(S\): INSTALLDIR = (.+)$' | Select-Object -Last 1
