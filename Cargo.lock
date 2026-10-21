@@ -1649,6 +1649,7 @@ dependencies = [
  "freekerf-testkit",
  "nix 0.31.3",
  "serialport",
+ "tempfile",
  "thiserror 2.0.21",
  "tracing",
 ]

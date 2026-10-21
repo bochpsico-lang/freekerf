@@ -148,6 +148,9 @@ obj-dither = Pontilhado
 ## machine
 machine-emulator = Emulador FreeKerf (sem máquina)
 machine-refreshPorts = Procurar portas de novo
+machine-portDenied = Você não tem permissão para usar { $port }. Adicione-se ao grupo { $group } e depois saia e entre de novo na sessão.
+machine-portDeniedCopy = Copiar o comando
+machine-portDeniedCopied = Copiado
 machine-openGcode = Abrir G-code…
 machine-noProgram = Nenhum programa carregado
 machine-lines = Linhas

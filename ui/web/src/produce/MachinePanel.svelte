@@ -4,19 +4,23 @@
   // Machine-tier actions are dispatched directly; anything that can fire the laser
   // goes through `laser()` (fire confirmation).
   import { app } from '../context';
-  import type { Anchor, JobStart } from '../gen/api';
+  import type { Anchor, JobStart, SerialPortInfo } from '../gen/api';
   import type { IconName } from '../gen/icons';
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
   import { formatDuration, formatLength } from '../lib/format';
   import { JOG_STEPS, progress } from './job';
   import JogPad from './JogPad.svelte';
+  import PortPermissionWarning from './PortPermissionWarning.svelte';
+  import { ActionFailure } from '../service';
 
   const { machine, preview, settings, service, run, laser, doc } = app();
   const EMULATOR = '__emulator__';
 
-  let ports: string[] = $state([]);
+  let ports: SerialPortInfo[] = $state([]);
   let port = $state(EMULATOR);
+  /** The last connection refused for permissions (also when listing said `ok`). */
+  let refused: { port: string; group?: string | null } | null = $state(null);
   let fileInput: HTMLInputElement;
   /** How the job made from the design is placed: local choices of the panel. */
   let start: JobStart = $state('absolute');
@@ -52,20 +56,34 @@
   async function listPorts() {
     ports = await service.dispatch('machine.list_ports', {});
     const saved = settings.settings?.machine?.port;
-    if (saved && ports.includes(saved)) port = saved;
+    if (saved && ports.some((p) => p.path === saved)) port = saved;
   }
   $effect(() => {
     void listPorts().catch(() => undefined);
   });
 
+  /** The selected port when this user may not open it: the warning under the picker. */
+  const denied = $derived.by(() => {
+    if (connected || port === EMULATOR) return null;
+    if (refused?.port === port) return refused;
+    const info = ports.find((p) => p.path === port);
+    return info?.access === 'denied' ? { port, group: info.group } : null;
+  });
+
   function connect() {
-    return run(() =>
-      connected
-        ? service.dispatch('machine.disconnect', {})
-        : port === EMULATOR
-          ? service.dispatch('machine.connect', { emulator: true })
-          : service.dispatch('machine.connect', { port }),
-    );
+    return run(async () => {
+      if (connected) return service.dispatch('machine.disconnect', {});
+      if (port === EMULATOR) return service.dispatch('machine.connect', { emulator: true });
+      try {
+        refused = null;
+        return await service.dispatch('machine.connect', { port });
+      } catch (e) {
+        const cause = e instanceof ActionFailure && e.error.kind === 'failed' ? e.error.message.cause : null;
+        // the warning says it, with the fix: no toast
+        if (cause?.code === 'port_permission_denied') refused = { port: cause.port, group: cause.group };
+        else throw e;
+      }
+    });
   }
 
   async function openFile(e: Event & { currentTarget: HTMLInputElement }) {
@@ -93,7 +111,7 @@
       <label for="port">{t('machine-port')}</label>
       <select id="port" bind:value={port} disabled={connected} data-testid="port">
         <option value={EMULATOR}>{t('machine-emulator')}</option>
-        {#each ports as p (p)}<option value={p}>{p}</option>{/each}
+        {#each ports as p (p.path)}<option value={p.path}>{p.path}</option>{/each}
       </select>
       <button
         class="icon-btn"
@@ -105,6 +123,7 @@
         <Icon name="repeat" />
       </button>
     </div>
+    {#if denied}<PortPermissionWarning port={denied.port} group={denied.group} />{/if}
     <button class="btn wide" data-testid="connect" onclick={connect}>
       <Icon name={connected ? 'plugOff' : 'plug'} /><span
         >{t(connected ? 'machine-disconnect' : 'machine-connect')}</span
