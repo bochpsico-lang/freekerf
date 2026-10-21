@@ -402,9 +402,15 @@ fn document_session_actions_and_events() {
         s.dispatch(&user, "document.import", json!({"path": "/no/such.svg"}))
             .is_err()
     );
+    // a regular file used as a directory fails on every system
+    let under_a_file = svg.join("x.fkproj");
     assert!(
-        s.dispatch(&user, "document.save", json!({"path": "/proc/nope/x.fkproj"}))
-            .is_err()
+        s.dispatch(
+            &user,
+            "document.save",
+            json!({"path": under_a_file.to_string_lossy()})
+        )
+        .is_err()
     );
 }
 

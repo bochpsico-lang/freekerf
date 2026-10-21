@@ -2,9 +2,10 @@
 // or a development-only entry. Run after `npm run build` (CI does).
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const MARKER = 'freekerf-fake-service-do-not-ship';
-const dist = process.argv[2] ?? new URL('../dist/', import.meta.url).pathname;
+const dist = process.argv[2] ?? fileURLToPath(new URL('../dist/', import.meta.url));
 
 function files(dir) {
   return readdirSync(dir).flatMap((name) => {

@@ -4,11 +4,12 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { FAKE_SERVICE_MARKER } from '../../src/dev/fake-service';
 
-const script = new URL('../../scripts/check-bundle.mjs', import.meta.url).pathname;
+const script = fileURLToPath(new URL('../../scripts/check-bundle.mjs', import.meta.url));
 
 function check(files: Record<string, string>): boolean {
   const dir = mkdtempSync(join(tmpdir(), 'fk-bundle-'));
