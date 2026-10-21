@@ -462,6 +462,7 @@ Updated by every PR that delivers a milestone item.
 | M4b: the Design flows driven by an agent through run_script (flows 3, 5, 6; laser still refused); typed results in `api.d.ts` and `search_api` | `freekerf-mcp/tests/mcp.rs::design_flows_driven_by_an_agent`, `freekerf-script/src/dts.rs` | same, `dts.rs` tests | `doc/features/{mcp,scripting}.md`, `doc/scripting/api.d.ts` |
 | M4b: the flows of `design/ux.md` as end-to-end tests of the real app on the emulator (1–7; 8 is not in the MVP); STOP test made robust (the host reads `$$`/`$I` again after a reset) | `ui/web/tests/e2e/specs/{welcome,design-flows,job-flows,design,produce,safety}.e2e.ts`, `wdio.conf.ts` (first-run home, LaserGRBL fixtures) | same, `service.rs::stop_after_a_system_command_clears_the_console_and_resets` | `doc/features/desktop-app.md` |
 | M4b: user documentation drafted for `website` (en and pt-BR: getting started, LaserGRBL, designing, images, material test, running a job, safety, automation, troubleshooting) | `freekerf/website`: `src/content/docs/{en,pt-br}/` | — | `src/content/docs/README.md` there |
+| M5: Windows installers (MSI and NSIS, not signed yet) built by the release workflow on a `v*` tag, smoke-tested (silent install, the app stays up, silent uninstall) and attached to a draft GitHub release | `.github/workflows/release.yml`, `.github/scripts/smoke-windows-installer.ps1` | the workflow's smoke step | `doc/features/desktop-app.md` (Releases), roadmap |
 
 ## 14. Decisions already taken
 
