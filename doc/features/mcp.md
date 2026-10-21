@@ -23,14 +23,16 @@ actions never add tools (PLAN §9, [ADR 0012](../adr/0012-mcp-transport-and-secu
 
    Other agents take the same command (`"command": "freekerf", "args": ["mcp"]`).
 
-   The command depends on how FreeKerf is installed (the Linux packages ship the CLI;
-   [desktop-app.md](desktop-app.md#running-on-linux)):
+   The command depends on how FreeKerf is installed (the Linux packages and the macOS
+   app ship the CLI; [desktop-app.md](desktop-app.md#running-on-linux),
+   [macOS](desktop-app.md#running-on-macos)):
 
    | Installed as | Agent command |
    | --- | --- |
    | `.deb`, or built from source (`freekerf` on the `PATH`) | `freekerf mcp` |
    | AppImage | `<dir>/squashfs-root/usr/bin/freekerf mcp` after `--appimage-extract` |
    | Flatpak | `flatpak run --command=freekerf io.github.freekerf.FreeKerf mcp` |
+   | macOS disk image | `/Applications/FreeKerf.app/Contents/MacOS/freekerf mcp` |
 
    In a Flatpak every instance has its own `$XDG_RUNTIME_DIR`; the app and the CLI
    meet in `$XDG_RUNTIME_DIR/app/io.github.freekerf.FreeKerf/` (shared by the app's
