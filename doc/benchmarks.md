@@ -58,7 +58,8 @@ The drag leaves the cached area, so whole-scene redraws are part of the numbers
 | 2026-10-08 | 4 vCPU Xeon @ 2.8 GHz cloud container, **no GPU**: Xvfb + Mesa llvmpipe (software), WebKitGTK 2.52, 1280×800 | full scene, long drags (5 scene redraws per phase) | 18.3 / 20.7 | 2.2 / 3.0 | 452 ms | 17 / 12 ms | 157 MiB |
 | 2026-10-08 | same | full scene, drags inside the cached area (no redraw) | 26.4 / 24.6 | 19.6 / 17.9 | 56 ms | 1.2 ms | 156 MiB |
 | 2026-10-08 | same | **empty scene** (`paths=0&image=16x16`): ceiling of the software compositor | 24.0 / 24.7 | — | — | — | — |
-| — | **real Linux hardware with a GPU** | full scene (acceptance) | *pending: run the command above* | | | | |
+| 2026-10-20 | Intel Core i5-1235U, **Iris Xe (Alder Lake GT2)**, Ubuntu 26.04, GNOME 50 on Wayland, WebKitGTK 2.52.6, 60 Hz display, 1280×753 | full scene (acceptance), Wayland | **60 / 60** | 58.8 / 54.5 | 19 ms | 0.7 / 0.5 ms | 166 MiB |
+| 2026-10-20 | same, `GDK_BACKEND=x11` (XWayland), 1280×800 | full scene (acceptance), X11 | **59.8 / 59.0** | 41.7 / 34.1 | 34 ms | 0.8 / 0.8 ms | 150 MiB |
 
 Reading the software numbers: an empty scene pans at about the same 24–25 fps as the
 full one inside the cache, so on llvmpipe the limit is WebKitGTK's software compositing of a 1280×800
@@ -66,3 +67,7 @@ canvas, not the renderer (≈1 ms of CPU per cached frame). A whole-scene redraw
 600k segments + 12 tiles costs ~300–450 ms in software and happens once every half
 view of panning; on a GPU it is a single instanced draw per batch. The acceptance
 number has to come from a machine with a GPU (CI runners have none).
+
+On the Iris Xe laptop the pan holds the display's 60 Hz on both Wayland and X11, whole-scene
+redraws included (5–8 per phase): the acceptance passes. The mean is capped by vsync,
+so it does not show the headroom; the 1 % low and the worst frame do.
