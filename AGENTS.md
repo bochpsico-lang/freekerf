@@ -99,6 +99,18 @@ npm run check:bundle                         # after build: the fake service is 
 npm run licenses                             # npm license allow-list (GPL-3.0 compatible)
 ```
 
+To check a UI flow by hand, `npm run dev` and open http://localhost:5173/dev.html:
+the real UI on the fake service (`src/dev/main.ts`), which is exposed as
+`window.fkFake` in the browser console. Reproduce the flow there with real clicks and
+keys before changing it: the end-to-end tests (`test:e2e`) usually only run on CI.
+
+**Windows**: `.gitattributes` keeps every text file LF in the checkout, whatever
+`core.autocrlf` says (binaries are listed there as `binary`). A CRLF checkout makes
+`cargo xtask check-docs` report every generated file as stale and Prettier flag
+unchanged `.ts`, `.svelte` and `.css` files. A clone made before `.gitattributes`
+existed is converted once, with no local changes, by `git rm --cached -r -q .` then
+`git reset --hard`. A new binary extension goes in `.gitattributes`.
+
 Conformance (in a checkout of `freekerf/conformance`):
 `FREEKERF_BIN=/path/to/target/debug/freekerf make test-rust`.
 
@@ -181,6 +193,9 @@ A change is done when its tests and docs are updated in the same PR.
 | project (`.fkproj`) format | `doc/features/projects.md`, bump `freekerf_document::VERSION` with a migration in `from_fkproj` and its test, `cargo xtask gen-docs` |
 | crates, traits, data flow, layers | `doc/architecture.md`, this file, `tools/xtask/src/layers.rs` |
 | a type crossing to the UI (result, event, settings) | `cargo xtask gen-ts` (`ui/web/src/gen/api.ts`, checked in CI) |
+| an action the UI uses | the fake service (`ui/web/src/dev/fake-service.ts`, `fake-document.ts`): `dev.html` and the UI tests run on it |
+| a new action of tier `laser` | the guard lists in `ui/web/src/produce/fire.test.ts` ("knows the laser actions from the generated catalogue") and `crates/runtime/freekerf-service/tests/service.rs` (`laser_actions_run_only_after_a_confirmed_countdown`) |
+| visible UI behaviour (what opens, where the focus goes, shortcuts) | search `ui/web/tests/e2e/specs` for the old behaviour (when text stopped opening the Object panel, flow 5 of `design-flows.e2e.ts` broke) |
 | the design commit (tokens, icons, fonts) | `ui/tokens/design.lock`, `cargo xtask sync-tokens` |
 | a decision | a new ADR in `doc/adr/` |
 | something postponed | `doc/roadmap.md` |
@@ -217,5 +232,10 @@ never delete it or loosen it for the C# host.
 - Logging with `tracing`; no `println!` in libraries.
 - No telemetry.
 - Documentation, commit messages and PR descriptions in English; UI text goes
-  through i18n: `t('message-id')` with the id in `ui/i18n/en/freekerf.ftl` and
-  every other locale (a test checks the ids match).
+  through i18n: `t('message-id')` with the id in `ui/i18n/en/freekerf.ftl` (a test
+  checks every id used in the code is there) and in the complete locales `pt-BR` and
+  `de` (`COMPLETE` in `ui/web/src/i18n/i18n.test.ts` checks they have every English
+  id); the other locales may miss ids and fall back to English.
+- Svelte 5: in a handler that changes state and then uses values derived from it,
+  read those values first. A `{@const}` or `$derived` of state that was just cleared
+  is already `null` (the context menu read `menu.at` after `menu = null`).
