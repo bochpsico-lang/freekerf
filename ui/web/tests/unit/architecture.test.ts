@@ -1,9 +1,15 @@
 // @vitest-environment node
 // The architecture rules of eslint.config.js really fail on violations.
 import { ESLint } from 'eslint';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 const eslint = new ESLint({ cwd: process.cwd() });
+
+// Loading eslint.config.js once imports typescript-eslint and eslint-plugin-svelte
+// (the TypeScript and Svelte compilers): ~6 s warm, over 40 s on a cold disk with
+// the other test files running in parallel. That cost is the config's, not a rule's,
+// so it gets its own budget and the tests below time only the linting.
+beforeAll(() => eslint.calculateConfigForFile('src/lib/Thing.ts'), 180_000);
 
 async function errors(code: string, filePath: string): Promise<string[]> {
   const [result] = await eslint.lintText(code, { filePath });
