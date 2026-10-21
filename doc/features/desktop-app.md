@@ -71,7 +71,39 @@ Tokens (`ui/tokens/fk-tokens.css`), UI icons, fonts and app icons come from
 
 Linux (WebKitGTK 4.1) is the first target and runs the CI smoke test (the app
 starts on Xvfb and stays up). Windows (WebView2) and macOS (WKWebView) compile in
-CI on native runners (`native-check`, which checks the whole workspace); installers come with M5.
+CI on native runners (`native-check`, which checks the whole workspace).
+
+## Releases
+
+`.github/workflows/release.yml` builds the installers with the Tauri CLI
+(`cargo tauri build`, version pinned in the workflow). Windows today: an MSI
+(WiX, installs for every user in Program Files) and an NSIS `-setup.exe` (installs
+for the current user in `%LOCALAPPDATA%`, no administrator rights); both install the
+WebView2 runtime when it is missing (bootstrapper, needs the internet). They are not
+signed yet (roadmap). Each installer is smoke-tested on the runner by
+`.github/scripts/smoke-windows-installer.ps1`: silent install (NSIS into a
+temporary folder, MSI into Program Files), the installed app starts on a fresh `FREEKERF_HOME` and stays up for 15 s,
+silent uninstall removes it.
+
+- A tag `v<version>` (the version of `tauri.conf.json`, checked) builds, tests and
+  attaches the installers and `SHA256SUMS-windows.txt` to a **draft** GitHub release;
+  a maintainer writes the notes and publishes it.
+- A manual run (*Run workflow*) or a pull request that touches the workflow, the smoke
+  script, `tauri.conf.json` or the icons builds and tests them; the installers are the
+  run's `freekerf-windows` artifact.
+
+To release: bump `version` in `Cargo.toml` (`[workspace.package]`) and
+`apps/desktop/src-tauri/tauri.conf.json`, merge, then `git tag v<version>` on `main`
+and push the tag. The MSI needs a numeric version (`1.2.3`, or a numeric
+pre-release such as `1.2.3-1`); a tag such as `v1.2.3-beta` fails the MSI build.
+
+Locally (Windows, after `npm ci` in `ui/web`):
+
+```bash
+cargo install tauri-cli --version 2.12.3 --locked   # once
+cd apps/desktop && cargo tauri build --bundles msi,nsis
+# installers in target/release/bundle/{msi,nsis}/
+```
 
 ## Tests
 
@@ -113,4 +145,4 @@ CI on native runners (`native-check`, which checks the whole workspace); install
   WebKitWebDriver cannot type into file inputs: the tests set the program with a
   `DataTransfer` on the panel's own input (the native picker is not driven).
 - CI jobs `ui` (with coverage in the job summary), `desktop` (smoke run and the
-  end-to-end tests), `native-check` (Windows, macOS).
+  end-to-end tests), `native-check` (Windows, macOS); workflow `release` (installers, above).
