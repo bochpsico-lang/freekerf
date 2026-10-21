@@ -81,8 +81,8 @@ CI on native runners (`native-check`, which checks the whole workspace).
 for the current user in `%LOCALAPPDATA%`, no administrator rights); both install the
 WebView2 runtime when it is missing (bootstrapper, needs the internet). They are not
 signed yet (roadmap). Each installer is smoke-tested on the runner by
-`.github/scripts/smoke-windows-installer.ps1`: silent install into a temporary
-folder, the installed app starts on a fresh `FREEKERF_HOME` and stays up for 15 s,
+`.github/scripts/smoke-windows-installer.ps1`: silent install (NSIS into a
+temporary folder, MSI into Program Files), the installed app starts on a fresh `FREEKERF_HOME` and stays up for 15 s,
 silent uninstall removes it.
 
 - A tag `v<version>` (the version of `tauri.conf.json`, checked) builds, tests and

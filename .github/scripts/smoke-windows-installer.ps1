@@ -1,6 +1,7 @@
-# Smoke test of a Windows installer (release workflow): silent install into a
-# temporary folder, the installed app starts and stays up for 15 s on a fresh
-# FREEKERF_HOME, then a silent uninstall removes it.
+# Smoke test of a Windows installer (release workflow): silent install (NSIS into a
+# temporary folder, MSI where it installs for users: Program Files), the installed
+# app starts and stays up for 15 s on a fresh FREEKERF_HOME, then a silent
+# uninstall removes it.
 param(
     [Parameter(Mandatory)] [string] $Installer,
     [Parameter(Mandatory)] [ValidateSet('msi', 'nsis')] [string] $Kind
@@ -17,16 +18,22 @@ function Invoke-Checked([string] $file, [string[]] $arguments) {
     if ($p.ExitCode -ne 0) { throw "$file $arguments exited with $($p.ExitCode)" }
 }
 
-Write-Host "install $Installer into $dir"
+Write-Host "install $Installer"
 if ($Kind -eq 'msi') {
-    Invoke-Checked msiexec.exe @('/i', "`"$Installer`"", '/qn', '/norestart', "INSTALLDIR=`"$dir`"", '/l*v', "`"$root\install.log`"")
+    # the MSI ignores INSTALLDIR on the command line: read where it went from its log
+    $log = Join-Path $root 'install.log'
+    Invoke-Checked msiexec.exe @('/i', "`"$Installer`"", '/qn', '/norestart', '/l*v', "`"$log`"")
+    $line = Select-String -Path $log -Pattern 'Property\(S\): INSTALLDIR = (.+)$' | Select-Object -Last 1
+    if (-not $line) { Get-Content $log -Tail 60; throw "no INSTALLDIR in $log" }
+    $dir = $line.Matches[0].Groups[1].Value.Trim()
+    Write-Host "installed into $dir"
 } else {
     # /D must be the last argument, unquoted
     Invoke-Checked $Installer @('/S', "/D=$dir")
 }
 
 $app = Get-ChildItem $dir -Filter *.exe -Recurse | Where-Object Name -notlike 'uninstall*' | Select-Object -First 1
-if (-not $app) { Get-ChildItem $root -Recurse | Format-Table FullName; throw "no app executable under $dir" }
+if (-not $app) { Get-ChildItem $root, $dir -Recurse -ErrorAction SilentlyContinue | Format-Table FullName; throw "no app executable under $dir" }
 Write-Host "start $($app.FullName)"
 $p = Start-Process $app.FullName -PassThru
 Start-Sleep -Seconds 15
