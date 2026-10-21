@@ -55,11 +55,11 @@ impl Tracer for ExternalAutotrace {
     }
 }
 
-#[cfg(test)]
+// the only test needs `echo` as a program, so the module is Unix only
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
     #[test]
     fn external_program() {
         let dir = tempfile::tempdir().unwrap();

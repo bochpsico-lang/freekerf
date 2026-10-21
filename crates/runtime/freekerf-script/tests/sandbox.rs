@@ -118,8 +118,21 @@ fn limits_stop_runaway_scripts() {
         &small,
         &flag,
     );
-    assert!(
-        out.error.as_deref().unwrap().contains("memory") || out.error.as_deref().unwrap().contains("stopped"),
+    assert_eq!(
+        out.error.as_deref(),
+        Some("script stopped: memory limit"),
+        "{out:?}"
+    );
+    // inside a function, the memory is freed again when the error unwinds
+    let out = run(
+        "(function () { const b = []; for (;;) b.push({ x: 1, y: 'abc' + b.length }); })()",
+        Arc::new(Counter::default()),
+        &small,
+        &flag,
+    );
+    assert_eq!(
+        out.error.as_deref(),
+        Some("script stopped: memory limit"),
         "{out:?}"
     );
 

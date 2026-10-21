@@ -1,0 +1,11 @@
+# Text files are LF in the index and in every checkout, whatever core.autocrlf says:
+# generated files and Prettier compare bytes, so a CRLF checkout looks stale.
+* text=auto eol=lf
+
+# Binary files (images, icons, fonts, LaserGRBL and toolpath fixtures)
+*.png binary
+*.ico binary
+*.icns binary
+*.woff2 binary
+*.bin binary
+*.zbn binary

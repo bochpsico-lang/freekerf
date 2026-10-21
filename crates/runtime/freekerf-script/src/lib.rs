@@ -155,6 +155,13 @@ fn js_error_text(ctx: &Ctx<'_>, err: rquickjs::Error) -> String {
         if let Some(s) = v.as_string().and_then(|s| s.to_string().ok()) {
             return s;
         }
+        if v.is_null() {
+            // QuickJS throws `null` when even its "out of memory" error cannot be
+            // allocated (`JS_ThrowError2`). How close to the limit an allocation gets
+            // depends on the platform's allocator (`_msize` on Windows,
+            // `malloc_usable_size` on Linux), so either form can reach us.
+            return "out of memory".into();
+        }
         return format!("{v:?}");
     }
     err.to_string()

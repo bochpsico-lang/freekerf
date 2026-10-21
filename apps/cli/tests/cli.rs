@@ -181,6 +181,8 @@ fn console_session_on_the_emulator() {
         );
 }
 
+// `host --stdio` driven over pipes; only the PTY test (Unix) uses it
+#[cfg(unix)]
 struct Host {
     child: std::process::Child,
     stdin: std::process::ChildStdin,
@@ -188,6 +190,7 @@ struct Host {
     next: u64,
 }
 
+#[cfg(unix)]
 impl Host {
     fn start(home: &std::path::Path) -> Self {
         let mut child = StdCommand::new(assert_cmd::cargo::cargo_bin("freekerf"))
