@@ -1,6 +1,6 @@
 # 0014. Canvas renderer: WebGL2, own code, scene cache
 
-- Status: accepted (M4a), measurement on real hardware pending (`doc/benchmarks.md`)
+- Status: accepted (M4a), measured on real hardware: 60 fps with a GPU (`doc/benchmarks.md`)
 - Date: 2026-10-08
 - Context: ADR 0006 (Tauri 2, canvas risk on WebKitGTK), ADR 0013 (Svelte)
 

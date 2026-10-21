@@ -62,6 +62,10 @@ doc/               documentation (below)
 
 ## Commands
 
+Toolchains come from [mise](https://mise.jdx.dev): `mise.toml` pins Rust (same as
+`rust-toolchain.toml`) and Node (same as `NODE` in CI). `mise install` once; without
+mise activated in the shell, prefix commands with `mise exec --`.
+
 ```bash
 cargo test --workspace                       # all tests (no hardware, no network)
 cargo clippy --workspace --all-targets -- -D warnings

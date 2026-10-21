@@ -10,7 +10,6 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 | Fuzzing (`cargo-fuzz` targets for G-code) | planned with the importers' parsers | M2 |
 | The permission dialog (`Prompter`), "agent connected" and running-script indicators in the desktop app (the fire confirmation is done: M4a) | need the desktop UI; headless refuses permission requests today | M4b |
 | Sounds, notifications | UI concerns (hotkeys and the safety countdown are done in M4a) | M5 |
-| Canvas ≥ 50 fps measurement on Linux with a GPU (`freekerf-desktop --bench-canvas`) | the cloud CI and dev containers have no GPU; only the software floor is recorded | before M4a is closed |
 | Head interpolation between status reports along the tool path | status reports arrive a few times per second; the head jumps between them | M4b |
 | Thick lines in the canvas (selection emphasis, kerf width) | WebGL lines are 1 px; needs quads in the vertex shader | M4b |
 | Drop a file on the window to open it | Tauri intercepts drops; done with the import flow | M4b |
