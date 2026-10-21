@@ -28,9 +28,11 @@ What was postponed, and open decisions. Milestones are in [PLAN.md](../PLAN.md) 
 | --- | --- | --- |
 | Image rotation and skew in the document (objects record their transform since M4b, but images only move and scale) | the raster pipeline takes axis-aligned images | M5 |
 | More single-stroke and outline fonts for text objects (M4b has the Hershey font of the generators) | the editor needs text first | M5 |
-| Bundling `autotrace` with the desktop app (built per platform from a pinned commit, source published with each release) | needs the installers (Windows ones exist since M5: `release.yml`); M2 runs it from the `PATH` (ADR 0010) | M5 |
+| Bundling `autotrace` with the desktop app (built per platform from a pinned commit, source published with each release) | needs the installers (Windows and Linux ones exist since M5: `release.yml`); M2 runs it from the `PATH` (ADR 0010) | M5 |
 | Signed Windows installers (PLAN M5: signed MSI) | needs a code-signing certificate (for example SignPath Foundation for open source) kept as a CI secret; until then Windows SmartScreen warns on first run | M5 |
-| Installers for Linux (`.deb`, AppImage, Flatpak) and macOS (signed, notarized DMG) in `release.yml` | Windows first; macOS needs an Apple Developer ID | M5 |
+| macOS installer (signed, notarized DMG) in `release.yml` (Windows and Linux are done: MSI, NSIS, `.deb`, AppImage, Flatpak) | needs an Apple Developer ID | M5 |
+| Flathub submission of `io.github.freekerf.FreeKerf` | the Flatpak builds and is smoke-tested in `release.yml`; publishing needs a maintainer: a PR to `flathub/flathub` (branch `new-pr`) with the manifest pointing at a release tag (`type: git`, `tag`, `commit` instead of `type: dir`) plus `cargo-sources.json` and `node-sources.json`, and the `freekerf` GitHub organisation verified on Flathub (ADR 0016) | after the first tagged release |
+| The CLI in the AppImage needs `--appimage-extract` to run (`freekerf mcp`) | the AppImage runs only its main binary; a multi-call entry (`freekerf-desktop mcp`) would avoid extracting | when AppImage users ask |
 | Keeping imported LaserGRBL user materials; downloading library packages | come with the material library UI | v1 |
 | MCP: Streamable HTTP transport (`127.0.0.1`, token, `Origin` check), screenshots | optional transport; screenshots need the desktop window | M4/M5 |
 | Zipped project container (`.fkproj` with images as separate entries) | JSON with base64 images is enough until projects with many large images appear | when needed |

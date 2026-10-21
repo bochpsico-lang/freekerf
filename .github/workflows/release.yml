@@ -1,6 +1,7 @@
 name: release
 
-# Installers of the desktop app (PLAN.md M5). A tag `v<version>` builds them,
+# Installers of the desktop app (PLAN.md M5): Windows (MSI, NSIS), Linux (.deb,
+# AppImage) and Flatpak. A tag `v<version>` builds them,
 # smoke-tests each one and attaches them to a draft GitHub release; a manual run
 # or a pull request touching the packaging only builds and tests them (artifacts).
 on:
@@ -11,8 +12,10 @@ on:
     paths:
       - .github/workflows/release.yml
       - .github/scripts/smoke-windows-installer.ps1
+      - .github/scripts/smoke-linux-installer.sh
       - apps/desktop/src-tauri/tauri.conf.json
       - apps/desktop/src-tauri/icons/**
+      - packaging/**
 
 permissions:
   contents: read
@@ -78,10 +81,118 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  linux:
+    # the oldest supported Ubuntu: the .deb and the AppImage need its glibc or newer
+    runs-on: ubuntu-22.04
+    env:
+      # linuxdeploy (AppImage) is itself an AppImage: no FUSE needed
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: the tag matches the app version (tauri.conf.json)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME, app version $version"; exit 1; }
+      - name: metainfo and desktop entry are valid (AppStream 1.x of Ubuntu 24.04)
+        run: |
+          docker run --rm -v "$PWD/packaging/linux:/p:ro" ubuntu:24.04 bash -euc '
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq appstream desktop-file-utils ca-certificates >/dev/null
+            appstreamcli validate --explain /p/io.github.freekerf.FreeKerf.metainfo.xml
+            sed "s/{{exec}}/freekerf-desktop/g; s/{{icon}}/io.github.freekerf.FreeKerf/" \
+              /p/io.github.freekerf.FreeKerf.desktop.in > /tmp/io.github.freekerf.FreeKerf.desktop
+            desktop-file-validate /tmp/io.github.freekerf.FreeKerf.desktop'
+      - uses: ./.github/actions/tauri-deps
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE }}
+          cache: npm
+          cache-dependency-path: ui/web/package-lock.json
+      - run: npm ci
+        working-directory: ui/web
+      - name: Tauri CLI
+        run: cargo install tauri-cli --version ${{ env.TAURI_CLI }} --locked
+      # the .deb and the AppImage ship it as /usr/bin/freekerf (bundle.linux.*.files)
+      - name: the freekerf CLI
+        run: cargo build --release --locked -p freekerf-cli
+      - name: .deb and AppImage
+        working-directory: apps/desktop
+        run: cargo tauri build --ci --bundles deb,appimage
+      - name: the .deb installs, the app starts and stays up, it uninstalls (Ubuntu 24.04)
+        run: |
+          deb=$(ls target/release/bundle/deb/*.deb | head -n1)
+          docker run --rm -v "$PWD:/w:ro" -w /w ubuntu:24.04 \
+            .github/scripts/smoke-linux-installer.sh deb "$deb"
+      - name: the AppImage starts and stays up (Ubuntu 24.04)
+        run: |
+          appimage=$(ls target/release/bundle/appimage/*.AppImage | head -n1)
+          docker run --rm -v "$PWD:/w:ro" -w /w ubuntu:24.04 bash -euc '
+            cp "$1" /tmp/app.AppImage
+            .github/scripts/smoke-linux-installer.sh appimage /tmp/app.AppImage' _ "$appimage"
+      # another distribution's WebKit/EGL stack: reported, not blocking (see the PR)
+      - name: the AppImage on Fedora
+        continue-on-error: true
+        run: |
+          appimage=$(ls target/release/bundle/appimage/*.AppImage | head -n1)
+          docker run --rm -v "$PWD:/w:ro" -w /w fedora:latest bash -euc '
+            cp "$1" /tmp/app.AppImage
+            .github/scripts/smoke-linux-installer.sh appimage /tmp/app.AppImage' _ "$appimage"
+      - name: checksums
+        run: |
+          mkdir dist
+          cp target/release/bundle/deb/*.deb target/release/bundle/appimage/*.AppImage dist/
+          (cd dist && sha256sum -- * > SHA256SUMS-linux.txt && cat SHA256SUMS-linux.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: freekerf-linux
+          path: dist/
+          if-no-files-found: error
+
+  flatpak:
+    runs-on: ubuntu-latest
+    container:
+      # keep the tag in step with runtime-version in the manifest
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: the offline sources match the lock files (packaging/flatpak/update-sources.sh)
+        run: |
+          dnf install -y -q python3 git >/dev/null
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          packaging/flatpak/update-sources.sh
+          git diff --stat --exit-code -- packaging/flatpak/
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: FreeKerf.flatpak
+          manifest-path: packaging/flatpak/io.github.freekerf.FreeKerf.yml
+          cache-key: flatpak-builder-${{ hashFiles('packaging/flatpak/*.json') }}
+          upload-artifact: false
+      - name: the bundle installs, the app starts and stays up, the CLI attaches over MCP, it uninstalls
+        run: .github/scripts/smoke-linux-installer.sh flatpak FreeKerf.flatpak
+      - name: checksums
+        run: |
+          mkdir dist
+          version=$(python3 -c "import json; print(json.load(open('apps/desktop/src-tauri/tauri.conf.json'))['version'])")
+          cp FreeKerf.flatpak "dist/FreeKerf_${version}_x86_64.flatpak"
+          (cd dist && sha256sum -- * > SHA256SUMS-flatpak.txt && cat SHA256SUMS-flatpak.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: freekerf-flatpak
+          path: dist/
+          if-no-files-found: error
+
   publish:
     # a draft: a maintainer writes the notes from CHANGELOG.md and publishes it
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows]
+    needs: [windows, linux, flatpak]
     runs-on: ubuntu-latest
     permissions:
       contents: write

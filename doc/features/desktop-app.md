@@ -76,34 +76,106 @@ CI on native runners (`native-check`, which checks the whole workspace).
 ## Releases
 
 `.github/workflows/release.yml` builds the installers with the Tauri CLI
-(`cargo tauri build`, version pinned in the workflow). Windows today: an MSI
-(WiX, installs for every user in Program Files) and an NSIS `-setup.exe` (installs
-for the current user in `%LOCALAPPDATA%`, no administrator rights); both install the
-WebView2 runtime when it is missing (bootstrapper, needs the internet). They are not
-signed yet (roadmap). Each installer is smoke-tested on the runner by
-`.github/scripts/smoke-windows-installer.ps1`: silent install (NSIS into a
-temporary folder, MSI into Program Files), the installed app starts on a fresh `FREEKERF_HOME` and stays up for 15 s,
-silent uninstall removes it.
+(`cargo tauri build`, version pinned in the workflow) and `flatpak-builder`, and
+smoke-tests each one. Nothing is signed yet (roadmap).
+
+| Format | Job | Built on | What the smoke test checks |
+| --- | --- | --- | --- |
+| MSI (WiX, every user, Program Files) and NSIS `-setup.exe` (current user, `%LOCALAPPDATA%`, no administrator rights) | `windows` | `windows-latest` | `.github/scripts/smoke-windows-installer.ps1`: silent install, the app starts on a fresh `FREEKERF_HOME` and stays up 15 s, silent uninstall |
+| `.deb` (Debian, Ubuntu; package `free-kerf`, which Tauri derives from the product name; `/usr/bin/freekerf-desktop` and the CLI `/usr/bin/freekerf`) | `linux` | `ubuntu-22.04` (its glibc is the oldest supported) | `.github/scripts/smoke-linux-installer.sh deb` in a clean `ubuntu:24.04` container: `apt install`, `freekerf --version`, the app up 15 s under Xvfb, `apt remove` |
+| AppImage (any distribution with glibc ≥ 2.35; the CLI is inside) | `linux` | `ubuntu-22.04` | `smoke-linux-installer.sh appimage` with `--appimage-extract-and-run` in `ubuntu:24.04`, and in `fedora:latest` (reported, not blocking) |
+| Flatpak bundle (`io.github.freekerf.FreeKerf`, GNOME runtime; the CLI is inside) | `flatpak` | the `ghcr.io/flathub-infra/flatpak-github-actions:gnome-51` container | `smoke-linux-installer.sh flatpak`: bundle install, the app up 15 s, `freekerf mcp` in a second sandbox attaches to it, uninstall |
+
+The WebView2 runtime (Windows) is installed by the installers when it is missing
+(bootstrapper, needs the internet); WebKitGTK comes from the distribution (`.deb`
+dependencies), the AppImage or the GNOME runtime (Flatpak).
 
 - A tag `v<version>` (the version of `tauri.conf.json`, checked) builds, tests and
-  attaches the installers and `SHA256SUMS-windows.txt` to a **draft** GitHub release;
-  a maintainer writes the notes and publishes it.
-- A manual run (*Run workflow*) or a pull request that touches the workflow, the smoke
-  script, `tauri.conf.json` or the icons builds and tests them; the installers are the
-  run's `freekerf-windows` artifact.
+  attaches the installers and `SHA256SUMS-{windows,linux,flatpak}.txt` to a
+  **draft** GitHub release; a maintainer writes the notes and publishes it.
+- A manual run (*Run workflow*) or a pull request that touches the workflow, a smoke
+  script, `tauri.conf.json`, the icons or `packaging/` builds and tests them; the
+  installers are the run's `freekerf-windows`, `freekerf-linux` and
+  `freekerf-flatpak` artifacts.
 
 To release: bump `version` in `Cargo.toml` (`[workspace.package]`) and
-`apps/desktop/src-tauri/tauri.conf.json`, merge, then `git tag v<version>` on `main`
-and push the tag. The MSI needs a numeric version (`1.2.3`, or a numeric
-pre-release such as `1.2.3-1`); a tag such as `v1.2.3-beta` fails the MSI build.
+`apps/desktop/src-tauri/tauri.conf.json`, add a `<release>` to
+`packaging/linux/io.github.freekerf.FreeKerf.metainfo.xml`, merge, then
+`git tag v<version>` on `main` and push the tag. The MSI needs a numeric version
+(`1.2.3`, or a numeric pre-release such as `1.2.3-1`); a tag such as `v1.2.3-beta`
+fails the MSI build.
 
-Locally (Windows, after `npm ci` in `ui/web`):
+### Linux packaging files
+
+- `packaging/linux/io.github.freekerf.FreeKerf.metainfo.xml`: AppStream metainfo
+  (description, screenshots from `packaging/linux/screenshots/` on `main`, OARS,
+  releases, links), shared by the three formats; checked with `appstreamcli
+  validate` in the `linux` job.
+- `packaging/linux/io.github.freekerf.FreeKerf.desktop.in`: the desktop entry, a
+  template (`{{exec}}`, `{{icon}}`): Tauri fills it for the `.deb` and the AppImage
+  (`bundle.linux.deb.desktopTemplate`, installed as `FreeKerf.desktop`), the Flatpak
+  manifest fills it with `sed` (`io.github.freekerf.FreeKerf.desktop`).
+- `packaging/flatpak/io.github.freekerf.FreeKerf.yml`: the manifest. It builds
+  offline from `cargo-sources.json` and `node-sources.json`, generated from
+  `Cargo.lock` and `ui/web/package-lock.json` by `packaging/flatpak/update-sources.sh`
+  (flatpak-builder-tools at a pinned commit; Playwright's browsers are left out).
+  After changing either lock file:
+
+  ```bash
+  mise exec python@3.13 -- packaging/flatpak/update-sources.sh   # then commit the two .json
+  ```
+
+  The `flatpak` job runs it again and fails when the committed files differ.
+  Permissions: `--share=ipc --socket=wayland --socket=fallback-x11 --device=all`
+  (serial ports and the GPU) `--filesystem=/run/udev:ro` (port enumeration).
+
+### Building them locally
+
+Linux, after `npm ci` in `ui/web` and the WebKitGTK packages of
+`.github/actions/tauri-deps`:
+
+```bash
+cargo install tauri-cli --version 2.12.3 --locked   # once
+cargo build --release --locked -p freekerf-cli      # the .deb and the AppImage ship it
+cd apps/desktop && cargo tauri build --bundles deb,appimage
+# packages in target/release/bundle/{deb,appimage}/
+```
+
+Flatpak (with `flatpak-builder` and the Flathub remote):
+
+```bash
+flatpak-builder --user --install-deps-from=flathub --install --force-clean \
+  build-dir packaging/flatpak/io.github.freekerf.FreeKerf.yml
+flatpak run io.github.freekerf.FreeKerf
+```
+
+Windows:
 
 ```bash
 cargo install tauri-cli --version 2.12.3 --locked   # once
 cd apps/desktop && cargo tauri build --bundles msi,nsis
 # installers in target/release/bundle/{msi,nsis}/
 ```
+
+### Running on Linux
+
+- **Serial ports**: the user must be in the group that owns them, `dialout`
+  (Debian, Ubuntu, Fedora) or `uucp` (Arch, openSUSE): `sudo usermod -aG dialout
+  $USER`, then log out and back in. The Machine panel says so when a port is denied
+  ([connection.md](connection.md#permissions-on-linux)).
+- **MCP agents** run the `freekerf` CLI of the same package
+  ([mcp.md](mcp.md#setup)):
+
+  | Format | Agent command |
+  | --- | --- |
+  | `.deb` | `freekerf mcp` |
+  | AppImage | `<dir>/squashfs-root/usr/bin/freekerf mcp`, after `FreeKerf_<version>_amd64.AppImage --appimage-extract` in `<dir>` |
+  | Flatpak | `flatpak run --command=freekerf io.github.freekerf.FreeKerf mcp` |
+
+- **Blank or flickering window on Nvidia** (WebKitGTK's DMA-BUF renderer with the
+  proprietary driver): start it with `WEBKIT_DISABLE_DMABUF_RENDERER=1`, for example
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1 freekerf-desktop`, or for the Flatpak
+  `flatpak override --user --env=WEBKIT_DISABLE_DMABUF_RENDERER=1 io.github.freekerf.FreeKerf`.
 
 ## Tests
 
