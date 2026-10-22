@@ -34,6 +34,8 @@ export function describeError(error: ActionError): string {
   switch (error.kind) {
     case 'permission_denied':
       return `permission denied (needs tier ${error.message.needed})`;
+    case 'failed':
+      return error.message.reason;
     default:
       return error.message;
   }

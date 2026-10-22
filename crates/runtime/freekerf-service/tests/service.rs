@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use freekerf_machine::MachineEvent;
 use freekerf_protocol::Event;
 use freekerf_service::{FileStore, Service, ServiceEvent, Stores};
-use freekerf_session::{ActionError, Caller, CallerKind, Tier, valid_name};
+use freekerf_session::{ActionError, Caller, CallerKind, Failure, FailureCause, Tier, valid_name};
 use serde_json::{Value, json};
 
 fn user() -> Caller {
@@ -251,6 +251,46 @@ fn refusals_and_permissions() {
     ));
     assert!(s.dispatch(&user(), "nope.nope", Value::Null).is_err());
     assert_eq!(call(&s, "job.info", Value::Null), Value::Null);
+}
+
+/// A port this user may not open fails with a cause the window recognises. A
+/// temporary file with mode 000 stands for the device (no real serial port).
+#[cfg(unix)]
+#[test]
+fn a_denied_port_fails_with_its_cause() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let port = dir.path().join("ttyFAKE0");
+    std::fs::write(&port, b"").unwrap();
+    std::fs::set_permissions(&port, std::fs::Permissions::from_mode(0o000)).unwrap();
+    if std::fs::File::open(&port).is_ok() {
+        return; // root opens anything
+    }
+    let path = port.to_string_lossy().into_owned();
+    let s = Service::in_memory().unwrap();
+    let e = s
+        .dispatch(&user(), "machine.connect", json!({"port": path}))
+        .unwrap_err();
+    let ActionError::Failed(f) = &e else {
+        panic!("expected a failure, got {e:?}")
+    };
+    let Some(FailureCause::PortPermissionDenied { port: p, group }) = &f.cause else {
+        panic!("expected PortPermissionDenied, got {f:?}")
+    };
+    assert_eq!(p, &path);
+    // the temporary file belongs to this user's group, which has a name
+    assert!(group.is_some());
+    assert!(e.to_string().contains("permission denied"));
+    let wire = serde_json::to_value(&e).unwrap();
+    assert_eq!(wire["kind"], "failed");
+    assert_eq!(wire["message"]["cause"]["code"], "port_permission_denied");
+    assert_eq!(wire["message"]["cause"]["port"], path.as_str());
+    // other failures carry no cause
+    let e = s
+        .dispatch(&user(), "machine.connect", json!({"port": "/nonexistent/fk"}))
+        .unwrap_err();
+    assert!(matches!(e, ActionError::Failed(Failure { cause: None, .. })));
+    s.stop();
 }
 
 #[test]

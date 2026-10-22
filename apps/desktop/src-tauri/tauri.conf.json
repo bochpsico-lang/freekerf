@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "FreeKerf",
   "version": "0.1.0",
-  "identifier": "org.freekerf.FreeKerf",
+  "identifier": "io.github.freekerf.FreeKerf",
   "build": {
     "frontendDist": "../../../ui/web/dist",
     "devUrl": "http://localhost:5173",
@@ -35,8 +35,25 @@
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
+      "icons/icon.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "linux": {
+      "deb": {
+        "section": "electronics",
+        "desktopTemplate": "../../../packaging/linux/io.github.freekerf.FreeKerf.desktop.in",
+        "files": {
+          "/usr/bin/freekerf": "../../../target/release/freekerf",
+          "/usr/share/metainfo/io.github.freekerf.FreeKerf.metainfo.xml": "../../../packaging/linux/io.github.freekerf.FreeKerf.metainfo.xml"
+        }
+      },
+      "appimage": {
+        "files": {
+          "/usr/bin/freekerf": "../../../target/release/freekerf",
+          "/usr/share/metainfo/io.github.freekerf.FreeKerf.metainfo.xml": "../../../packaging/linux/io.github.freekerf.FreeKerf.metainfo.xml"
+        }
+      }
+    }
   }
 }

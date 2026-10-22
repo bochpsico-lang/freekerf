@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metainfo shared by the .deb, the AppImage and the Flatpak
+     (doc/features/desktop-app.md "Releases"). Check: appstreamcli validate.
+     The desktop entry is io.github.freekerf.FreeKerf.desktop.in: a template
+     ({{exec}}, {{icon}}) that Tauri fills for the .deb and the AppImage and the
+     Flatpak manifest fills with sed. -->
+<component type="desktop-application">
+  <id>io.github.freekerf.FreeKerf</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>FreeKerf</name>
+  <summary>Design jobs and drive laser machines</summary>
+  <developer id="io.github.freekerf">
+    <name>The FreeKerf contributors</name>
+  </developer>
+
+  <description>
+    <p>
+      FreeKerf designs jobs for laser engravers and cutters and drives the machine
+      that runs them. It is the free successor of LaserGRBL, rewritten in Rust.
+    </p>
+    <ul>
+      <li>Import SVG, DXF and images; draw shapes and text, combine them with booleans and arrays</li>
+      <li>Colour layers with their own cut and raster settings, a material test generator, preview and time estimate</li>
+      <li>Connect to Grbl, grblHAL, Smoothie, Marlin and VigoWork boards, or to the built-in emulator</li>
+      <li>Jog, frame, run, pause and override the job; recover an interrupted one; STOP is always visible</li>
+      <li>A confirmation before anything turns the laser on</li>
+      <li>LaserGRBL settings and custom buttons are imported on first start</li>
+      <li>Scripts and AI agents (MCP) drive the same actions as the window</li>
+    </ul>
+  </description>
+
+  <!-- the Flatpak's entry; the .deb and the AppImage install the one Tauri names
+       after the product (the Flatpak build removes that line) -->
+  <launchable type="desktop-id">io.github.freekerf.FreeKerf.desktop</launchable>
+  <launchable type="desktop-id">FreeKerf.desktop</launchable>
+  <provides>
+    <binary>freekerf-desktop</binary>
+    <binary>freekerf</binary>
+  </provides>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Design mode: layers, shapes and the canvas</caption>
+      <image>https://raw.githubusercontent.com/freekerf/freekerf/main/packaging/linux/screenshots/design.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Produce mode: connected to the built-in emulator with a job from the design</caption>
+      <image>https://raw.githubusercontent.com/freekerf/freekerf/main/packaging/linux/screenshots/produce.png</image>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://github.com/freekerf/freekerf</url>
+  <url type="bugtracker">https://github.com/freekerf/freekerf/issues</url>
+  <url type="vcs-browser">https://github.com/freekerf/freekerf</url>
+  <url type="contribute">https://github.com/freekerf/freekerf/blob/main/AGENTS.md</url>
+
+  <categories>
+    <category>Graphics</category>
+    <category>Engineering</category>
+  </categories>
+  <keywords>
+    <keyword>laser</keyword>
+    <keyword>engraver</keyword>
+    <keyword>grbl</keyword>
+    <keyword>gcode</keyword>
+    <keyword>LaserGRBL</keyword>
+  </keywords>
+
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.1.0" date="2026-10-21" type="development">
+      <description>
+        <p>First packages for Linux: .deb, AppImage and Flatpak.</p>
+      </description>
+    </release>
+  </releases>
+</component>

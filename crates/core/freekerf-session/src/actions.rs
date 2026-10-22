@@ -33,7 +33,7 @@ fn lock<C: SessionHost>(c: &C) -> MutexGuard<'_, Session> {
 }
 
 fn failed(e: impl std::fmt::Display) -> ActionError {
-    ActionError::Failed(e.to_string())
+    ActionError::failed(e.to_string())
 }
 
 /// Applies a view command to the session's view; returns a new toast's id.
@@ -725,7 +725,7 @@ fn closed_paths(polys: Vec<Vec<Point>>) -> Vec<Path> {
 }
 
 fn geometry_failed(e: impl std::fmt::Display) -> ActionError {
-    ActionError::Failed(format!("geometry: {e}"))
+    ActionError::failed(format!("geometry: {e}"))
 }
 
 #[derive(Deserialize, JsonSchema)]

@@ -41,6 +41,8 @@ jobs:
         run: cargo xtask check-layers
       - name: generated docs and TypeScript types are up to date
         run: cargo xtask check-docs
+      - name: the Flatpak's offline sources match Cargo.lock and package-lock.json
+        run: python3 -I packaging/flatpak/check-sources.py
       - name: design commit pinned in ui/tokens/design.lock
         id: design
         run: echo "commit=$(grep -v '^#' ui/tokens/design.lock | head -n1)" >> "$GITHUB_OUTPUT"

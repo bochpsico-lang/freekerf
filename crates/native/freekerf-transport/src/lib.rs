@@ -29,6 +29,15 @@ pub enum TransportError {
         /// Why it failed.
         reason: String,
     },
+    /// The device exists but this user may not open it (Linux: not in the group
+    /// that owns it, usually `dialout` or `uucp`).
+    #[error("permission denied opening {target}")]
+    PermissionDenied {
+        /// What was opened.
+        target: String,
+        /// Group that owns the device, when known.
+        group: Option<String>,
+    },
     /// The other side hung up or the device disappeared.
     #[error("connection closed")]
     Closed,

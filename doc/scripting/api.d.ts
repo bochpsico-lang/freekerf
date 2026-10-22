@@ -403,7 +403,7 @@ interface AppMachine {
    *
    * Action `machine.list_ports`, tier `read`.
    */
-  listPorts(params?: Record<string, unknown>): string[];
+  listPorts(params?: Record<string, unknown>): ({ access: "ok" | "denied"; group?: string | null; path: string })[];
   /**
    * Sets the override targets; the host steps the board towards them.
    *

@@ -145,9 +145,69 @@ pub enum ActionError {
     /// Not possible in the current state.
     #[error("{0}")]
     Refused(String),
-    /// Something failed while doing it.
+    /// Something failed while doing it; [`Failure::cause`] says what, when a
+    /// front end can do better than show the text.
     #[error("{0}")]
-    Failed(String),
+    Failed(Failure),
+}
+
+impl ActionError {
+    /// A failure with only a reason.
+    #[must_use]
+    pub fn failed(reason: impl Into<String>) -> Self {
+        Self::Failed(Failure::new(reason))
+    }
+}
+
+/// What [`ActionError::Failed`] carries: the text, and a cause front ends can
+/// recognise.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Failure {
+    /// What went wrong, for people.
+    pub reason: String,
+    /// What it was, for front ends (absent: nothing more specific is known).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cause: Option<FailureCause>,
+}
+
+impl Failure {
+    /// A failure with only a reason.
+    #[must_use]
+    pub fn new(reason: impl Into<String>) -> Self {
+        Self {
+            reason: reason.into(),
+            cause: None,
+        }
+    }
+
+    /// A failure with a cause.
+    #[must_use]
+    pub fn with_cause(reason: impl Into<String>, cause: FailureCause) -> Self {
+        Self {
+            reason: reason.into(),
+            cause: Some(cause),
+        }
+    }
+}
+
+impl fmt::Display for Failure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.reason)
+    }
+}
+
+/// Failures a front end recognises (`code`), with what it needs to explain them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "code", rename_all = "snake_case")]
+pub enum FailureCause {
+    /// The serial port exists but this user may not open it (Linux: not in the
+    /// group that owns the device).
+    PortPermissionDenied {
+        /// The port.
+        port: String,
+        /// Group that owns the device (`dialout`, `uucp`), when known.
+        group: Option<String>,
+    },
 }
 
 /// Registration error.
@@ -268,7 +328,7 @@ impl<C> Registry<C> {
             let p: P =
                 serde_json::from_value(value).map_err(|e| ActionError::InvalidParams(e.to_string()))?;
             let r = f(ctx, p)?;
-            serde_json::to_value(r).map_err(|e| ActionError::Failed(e.to_string()))
+            serde_json::to_value(r).map_err(|e| ActionError::failed(e.to_string()))
         });
         let spec = ActionSpec {
             name: name.into(),

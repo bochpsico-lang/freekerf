@@ -13,6 +13,7 @@ import type {
   LogEntry,
   EventMessage,
   MachineStatus,
+  SerialPortInfo,
   Settings,
   State,
   ViewState,
@@ -118,11 +119,26 @@ export class FakeService implements AppService {
   private revision = 0;
   /** How the last `job.from_document` was placed (tests). */
   lastJobPlacement: { start: string; anchor: string } | null = null;
+  /** Serial ports: one this user may not open, so dev.html shows the permission warning. */
+  ports: SerialPortInfo[] = [
+    { path: '/dev/ttyUSB0', access: 'ok', group: 'dialout' },
+    { path: '/dev/ttyACM0', access: 'denied', group: 'dialout' },
+  ];
   /** Tool path returned by `toolpath()` (set by `job.load_text`, or by tests). */
   toolpathSegments: SegmentRecord[] = [];
   private handlers: Partial<Record<ActionName, Handler>> = {
     'state.get': () => structuredClone(this.state),
-    'machine.connect': () => {
+    'machine.connect': (p) => {
+      const { port } = p as Params<'machine.connect'>;
+      const info = this.ports.find((x) => x.path === port);
+      if (info?.access === 'denied')
+        throw new ActionFailure('machine.connect', {
+          kind: 'failed',
+          message: {
+            reason: `permission denied opening ${info.path}`,
+            cause: { code: 'port_permission_denied', port: info.path, group: info.group },
+          },
+        });
       this.setStatus('Idle', true);
       this.emit({ event: 'connected', transport: 'emulator' });
       return null;
@@ -242,7 +258,7 @@ export class FakeService implements AppService {
       laser_life: [],
       laser_in_use: null,
     }),
-    'machine.list_ports': () => ['/dev/ttyUSB0'],
+    'machine.list_ports': () => structuredClone(this.ports),
     // machine actions without a model: recorded in `calls`, accepted
     'machine.jog': () => null,
     'machine.jog_stop': () => null,

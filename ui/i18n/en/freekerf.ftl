@@ -148,6 +148,9 @@ obj-dither = Dithering
 ## machine
 machine-emulator = FreeKerf emulator (no machine)
 machine-refreshPorts = Look for ports again
+machine-portDenied = You don't have permission to use { $port }. Add yourself to the { $group } group, then log out and back in.
+machine-portDeniedCopy = Copy the command
+machine-portDeniedCopied = Copied
 machine-openGcode = Open G-code…
 machine-noProgram = No program loaded
 machine-lines = Lines
