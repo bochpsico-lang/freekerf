@@ -6,6 +6,16 @@ All notable changes to FreeKerf are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-22
+
+### Fixed
+
+- Design mode: a click picks the object whose lines are under the pointer, else
+  the smallest one around it (a text inside a frame or on a circle's path was
+  hidden behind the shape's bounds).
+- Texts in single-line fonts on a filling layer: their strokes are engraved as
+  lines instead of being closed and filled (an S or an e became filled blobs).
+
 ## [0.1.1] - 2026-10-22
 
 The first installers: Windows (.exe, .msi), macOS (universal .dmg) and Linux

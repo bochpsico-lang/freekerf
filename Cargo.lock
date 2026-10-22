@@ -1357,7 +1357,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1377,7 +1377,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-desktop"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "freekerf-service",
  "serde",
@@ -1390,7 +1390,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-document"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "freekerf-geometry",
@@ -1403,7 +1403,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-emulator"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "freekerf-gcode",
  "proptest",
@@ -1412,7 +1412,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-gcode"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "criterion",
  "proptest",
@@ -1424,7 +1424,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-geometry"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proptest",
  "schemars 1.2.2",
@@ -1435,7 +1435,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-import"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "freekerf-document",
  "freekerf-geometry",
@@ -1447,7 +1447,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-ipc"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "crossbeam-channel",
  "getrandom 0.3.4",
@@ -1462,7 +1462,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-it"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "freekerf-document",
  "freekerf-emulator",
@@ -1501,7 +1501,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-machine"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "crossbeam-channel",
  "freekerf-emulator",
@@ -1515,7 +1515,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-materials"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "freekerf-document",
  "freekerf-library",
@@ -1527,7 +1527,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-mcp"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "crossbeam-channel",
  "freekerf-ipc",
@@ -1540,7 +1540,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-migrate"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "freekerf-protocol",
  "freekerf-settings",
@@ -1553,7 +1553,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-planner"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "freekerf-document",
  "freekerf-gcode",
@@ -1570,7 +1570,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-platform"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "directories",
  "fontdb",
@@ -1582,7 +1582,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-protocol"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "freekerf-emulator",
  "freekerf-gcode",
@@ -1596,7 +1596,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-raster"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "freekerf-document",
  "freekerf-gcode",
@@ -1611,7 +1611,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-script"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "freekerf-session",
  "rquickjs",
@@ -1622,7 +1622,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-service"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "crossbeam-channel",
  "freekerf-document",
@@ -1654,7 +1654,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-session"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "freekerf-document",
@@ -1671,7 +1671,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-settings"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "freekerf-protocol",
  "freekerf-session",
@@ -1684,7 +1684,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-testkit"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "freekerf-emulator",
  "freekerf-gcode",
@@ -1693,7 +1693,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-text"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "freekerf-document",
  "freekerf-gcode",
@@ -1707,7 +1707,7 @@ dependencies = [
 
 [[package]]
 name = "freekerf-transport"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "crossbeam-channel",
  "freekerf-emulator",
@@ -6249,7 +6249,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "freekerf-document",
