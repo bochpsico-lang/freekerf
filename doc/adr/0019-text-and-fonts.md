@@ -15,8 +15,9 @@ text. The core must keep building for wasm and must not do I/O.
 
 - A core crate, `freekerf-text`: fonts, shaping, layout, effects, text on a path.
   The Hershey code of the generators moves there (the planner re-exports it).
-- **Libraries:** `ttf-parser` (outlines and metrics) and `rustybuzz` (shaping:
-  kerning, ligatures, marks, right-to-left) in the core, pure Rust, MIT/Apache,
+- **Libraries:** `skrifa` (outlines and metrics, Google Fonts' fontations) and
+  `harfrust` (shaping: kerning, ligatures, marks, right-to-left; the HarfBuzz
+  project's port) in the core, on the same `read-fonts`, pure Rust, MIT/Apache,
   wasm-ready; `fontdb` (installed fonts through fontconfig's folders, no memory
   maps) in `freekerf-platform`, the native layer. The core gets fonts through a
   `FontSource` trait, so the session takes them from the host like it takes stores.
@@ -42,8 +43,9 @@ text. The core must keep building for wasm and must not do I/O.
 
 ## Alternatives
 
-- `skrifa` + `harfrust` (Google's fontations): newer, less used today; the same
-  layering would let us switch.
+- `ttf-parser` + `rustybuzz`: the first choice, dropped before merging when both
+  were declared unmaintained (RUSTSEC-2026-0192, RUSTSEC-2026-0206, which name
+  `skrifa` and `harfrust` as their successors).
 - `usvg` for SVG text: it lays text out but would replace the LaserGRBL-exact SVG
   converter; only the text part was needed.
 - A copied path instead of a live link: simpler, but the user expects the text to

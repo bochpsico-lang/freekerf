@@ -85,9 +85,10 @@ proptest = "1"
 rayon = "1"
 regex = "1"
 roxmltree = "0.21"
-# text shaping (kerning, ligatures, marks) and font outlines (freekerf-text)
-rustybuzz = "0.20"
-ttf-parser = "0.25"
+# text shaping (kerning, ligatures, marks) and font outlines (freekerf-text):
+# HarfBuzz's and Google Fonts' crates, on the same read-fonts (ADR 0019)
+harfrust = "0.15"
+skrifa = "0.49"
 rust_decimal = { version = "1", default-features = false, features = ["std"] }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }

@@ -26,7 +26,7 @@ crates/core/       pure logic, no I/O, builds for wasm32
   freekerf-document    project model (layers, objects, cut/raster settings), .fkproj
   freekerf-import      SVG / DXF bytes -> document (colour layers)
   freekerf-raster      bitmaps: image operations, dithering, Line2Line, Potrace vectorize
-  freekerf-text        text: built-in single-line fonts, TrueType/OpenType (ttf-parser, rustybuzz),
+  freekerf-text        text: built-in single-line fonts, TrueType/OpenType (skrifa, harfrust),
                        layout, styles, text on a path, effects; Hershey text of the generators
   freekerf-planner     document -> G-code (LaserGRBL writer, images), generators, Hershey
   freekerf-protocol    sans-IO host state machine (port of GrblCore) + firmware variants

@@ -47,7 +47,7 @@ only the fields given ([actions.md](actions.md)).
 | `arc_radius_mm` | the text bends on a circle of this radius, centred on its top (negative: on its bottom, reading along it) |
 
 Shaping (kerning, ligatures, marks, right-to-left scripts) comes from the fonts'
-OpenType tables (`rustybuzz`); SVG fonts are kerned with their `hkern` pairs.
+OpenType tables (`harfrust`, outlines and metrics with `skrifa`); SVG fonts are kerned with their `hkern` pairs.
 Effects of outline fonts work on polygons within 0.01 mm; without effects the
 letters keep their curves.
 

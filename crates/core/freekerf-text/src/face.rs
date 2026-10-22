@@ -1,10 +1,13 @@
 //! Font faces: single-line ([`StrokeFont`]) or outline (TrueType / OpenType, read
-//! with `ttf-parser` and shaped with `rustybuzz`), behind one interface: metrics
-//! and the glyphs of a line of text, in font units, Y up.
+//! with `skrifa` and shaped with `harfrust`), behind one interface: metrics and
+//! the glyphs of a line of text, in font units, Y up.
 
 use std::sync::Arc;
 
 use freekerf_geometry::{Path, Point, Segment};
+use skrifa::instance::{LocationRef, Size};
+use skrifa::outline::{DrawSettings, OutlinePen};
+use skrifa::{FontRef, GlyphId, MetadataProvider};
 
 use crate::TextError;
 use crate::svgfont::StrokeFont;
@@ -47,11 +50,23 @@ pub(crate) struct ShapedGlyph {
 }
 
 /// A TrueType or OpenType font (or one face of a collection).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OutlineFont {
     data: Arc<[u8]>,
     index: u32,
+    /// The same font for the shaper (`read-fonts`' model, shared by clones).
+    shaping: harfrust::Font,
     metrics: Metrics,
+}
+
+impl std::fmt::Debug for OutlineFont {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OutlineFont")
+            .field("bytes", &self.data.len())
+            .field("index", &self.index)
+            .field("metrics", &self.metrics)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Default)]
@@ -78,7 +93,7 @@ fn pt(x: f32, y: f32) -> Point {
     Point::new(f64::from(x), f64::from(y))
 }
 
-impl ttf_parser::OutlineBuilder for Outline {
+impl OutlinePen for Outline {
     fn move_to(&mut self, x: f32, y: f32) {
         self.finish();
         self.current = Some(Path::new(pt(x, y)));
@@ -88,9 +103,9 @@ impl ttf_parser::OutlineBuilder for Outline {
         self.path().segments.push(Segment::line(pt(x, y)));
     }
 
-    fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
+    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
         let p = self.path();
-        let (p0, c, end) = (p.end(), pt(x1, y1), pt(x, y));
+        let (p0, c, end) = (p.end(), pt(cx0, cy0), pt(x, y));
         p.segments.push(Segment::Cubic {
             c1: p0 + (c - p0) * (2.0 / 3.0),
             c2: end + (c - end) * (2.0 / 3.0),
@@ -98,10 +113,10 @@ impl ttf_parser::OutlineBuilder for Outline {
         });
     }
 
-    fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
+    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
         self.path().segments.push(Segment::Cubic {
-            c1: pt(x1, y1),
-            c2: pt(x2, y2),
+            c1: pt(cx0, cy0),
+            c2: pt(cx1, cy1),
             end: pt(x, y),
         });
     }
@@ -118,54 +133,76 @@ impl ttf_parser::OutlineBuilder for Outline {
     }
 }
 
+/// The outline of a glyph in font units (empty for `.notdef` or a glyph without one).
+fn outline(font: &FontRef<'_>, glyph: GlyphId) -> Vec<Path> {
+    let mut pen = Outline::default();
+    if glyph != GlyphId::NOTDEF
+        && let Some(g) = font.outline_glyphs().get(glyph)
+    {
+        let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::default());
+        if g.draw(settings, &mut pen).is_err() {
+            return Vec::new();
+        }
+    }
+    pen.finish();
+    pen.paths
+}
+
 impl OutlineFont {
     /// Reads face `index` of a font file.
     ///
     /// # Errors
     /// Not a font this reader understands.
     pub fn new(data: Arc<[u8]>, index: u32) -> Result<Self, TextError> {
-        let face = ttf_parser::Face::parse(&data, index).map_err(|e| TextError::Font(e.to_string()))?;
-        let upem = f64::from(face.units_per_em());
+        let font = FontRef::from_index(&data, index).map_err(|e| TextError::Font(e.to_string()))?;
+        let m = font.metrics(Size::unscaled(), LocationRef::default());
+        let upem = f64::from(m.units_per_em);
         let measured = |c: char| {
-            face.glyph_index(c)
-                .and_then(|g| face.glyph_bounding_box(g))
-                .map(|r| f64::from(r.y_max))
-                .filter(|h| *h > 0.0)
+            let glyph = font.charmap().map(c)?;
+            let mut r = freekerf_geometry::Rect::EMPTY;
+            for p in outline(&font, glyph) {
+                r.union(&p.bounds());
+            }
+            Some(r.max_y).filter(|h| h.is_finite() && *h > 0.0)
         };
-        let cap_height = face
-            .capital_height()
-            .map(f64::from)
-            .filter(|h| *h > 0.0)
+        let positive = |v: Option<f32>| v.map(f64::from).filter(|h| *h > 0.0);
+        let cap_height = positive(m.cap_height)
             .or_else(|| measured('H'))
             .unwrap_or(upem * 0.7);
-        let x_height = face
-            .x_height()
-            .map(f64::from)
-            .filter(|h| *h > 0.0)
+        let x_height = positive(m.x_height)
             .or_else(|| measured('x'))
             .unwrap_or(cap_height * 0.65);
-        let underline = face.underline_metrics();
-        let strikeout = face.strikeout_metrics();
+        // a decoration's offset is to its top: the layout wants its middle
+        let decoration = |d: Option<skrifa::metrics::Decoration>, middle: f64| {
+            d.filter(|d| d.thickness > 0.0)
+                .map_or((middle, upem * 0.05), |d| {
+                    let t = f64::from(d.thickness);
+                    (f64::from(d.offset) - t / 2.0, t)
+                })
+        };
+        let (underline_position, underline_thickness) = decoration(m.underline, -upem * 0.1);
+        let (strikeout_position, strikeout_thickness) = decoration(m.strikeout, x_height / 2.0);
         let metrics = Metrics {
             units_per_em: upem,
-            ascent: f64::from(face.ascender()),
-            descent: f64::from(face.descender()),
-            line_gap: f64::from(face.line_gap()),
+            ascent: f64::from(m.ascent),
+            descent: f64::from(m.descent),
+            line_gap: f64::from(m.leading),
             cap_height,
             drawn_cap_height: cap_height,
             x_height,
-            underline_position: underline.map_or(-upem * 0.1, |m| f64::from(m.position)),
-            underline_thickness: underline
-                .map(|m| f64::from(m.thickness))
-                .filter(|t| *t > 0.0)
-                .unwrap_or(upem * 0.05),
-            strikeout_position: strikeout.map_or(x_height / 2.0, |m| f64::from(m.position)),
-            strikeout_thickness: strikeout
-                .map(|m| f64::from(m.thickness))
-                .filter(|t| *t > 0.0)
-                .unwrap_or(upem * 0.05),
+            underline_position,
+            underline_thickness,
+            strikeout_position,
+            strikeout_thickness,
         };
-        Ok(Self { data, index, metrics })
+        let shaping = harfrust::Font::new(data.to_vec(), index)
+            .ok_or_else(|| TextError::Font("not a font the shaper can read".into()))?;
+        Ok(Self {
+            data,
+            index,
+            shaping,
+            metrics,
+        })
     }
 
     pub(crate) const fn metrics(&self) -> &Metrics {
@@ -175,41 +212,34 @@ impl OutlineFont {
     /// Whether the font has a glyph for `c`.
     #[must_use]
     pub fn covers(&self, c: char) -> bool {
-        ttf_parser::Face::parse(&self.data, self.index).is_ok_and(|f| f.glyph_index(c).is_some())
+        FontRef::from_index(&self.data, self.index).is_ok_and(|f| f.charmap().map(c).is_some())
     }
 
     /// The glyphs of one line: kerning, ligatures, marks and right-to-left scripts
     /// as the font's OpenType tables say.
     pub(crate) fn shape(&self, text: &str) -> Vec<ShapedGlyph> {
-        let (Ok(face), Some(shaper)) = (
-            ttf_parser::Face::parse(&self.data, self.index),
-            rustybuzz::Face::from_slice(&self.data, self.index),
-        ) else {
+        let Ok(font) = FontRef::from_index(&self.data, self.index) else {
             return Vec::new();
         };
-        let mut buffer = rustybuzz::UnicodeBuffer::new();
+        let mut buffer = harfrust::Buffer::new();
         buffer.push_str(text);
         buffer.guess_segment_properties();
-        let shaped = rustybuzz::shape(&shaper, &[], buffer);
-        shaped
+        let shaper = harfrust::ShaperFont::new(&self.shaping);
+        if harfrust::shape(&shaper, &mut buffer, harfrust::ShapeOptions::new()).is_err() {
+            return Vec::new();
+        }
+        buffer
             .glyph_infos()
             .iter()
-            .zip(shaped.glyph_positions())
+            .zip(buffer.glyph_positions())
             .map(|(info, pos)| {
-                let mut outline = Outline::default();
-                if let Ok(id) = u16::try_from(info.glyph_id)
-                    && id != 0
-                {
-                    face.outline_glyph(ttf_parser::GlyphId(id), &mut outline);
-                }
-                outline.finish();
                 let space = usize::try_from(info.cluster)
                     .ok()
                     .and_then(|i| text.get(i..))
                     .and_then(|s| s.chars().next())
                     .is_some_and(char::is_whitespace);
                 ShapedGlyph {
-                    paths: outline.paths,
+                    paths: outline(&font, GlyphId::new(info.glyph_id)),
                     x_advance: f64::from(pos.x_advance),
                     x_offset: f64::from(pos.x_offset),
                     y_offset: f64::from(pos.y_offset),

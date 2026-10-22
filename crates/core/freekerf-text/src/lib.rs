@@ -4,7 +4,7 @@
 //!   SingleLine, the Hershey families, the EMS fonts, LaserGRBL's Hershey) and the
 //!   installed TrueType / OpenType fonts a host gives as a [`FontSource`];
 //! - [`layout`]: a [`TextSpec`] to paths: kerning, ligatures and marks
-//!   (`rustybuzz`), lines and alignment, letter and line spacing, width, bold and
+//!   (`harfrust`), lines and alignment, letter and line spacing, width, bold and
 //!   italic (the family's faces, else drawn), underline and strikethrough, text
 //!   bent on a circle or along a path, and for outline fonts weld, stencil bridges
 //!   and an outline;

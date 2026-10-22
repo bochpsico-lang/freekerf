@@ -13,10 +13,10 @@ publish.workspace = true
 freekerf-document.workspace = true
 freekerf-gcode.workspace = true
 freekerf-geometry.workspace = true
+harfrust.workspace = true
 roxmltree.workspace = true
-rustybuzz.workspace = true
+skrifa.workspace = true
 thiserror.workspace = true
-ttf-parser.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
