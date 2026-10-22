@@ -125,7 +125,9 @@ fails the MSI build.
   mise exec python@3.13 -- packaging/flatpak/update-sources.sh   # then commit the two .json
   ```
 
-  The `flatpak-test` job runs it again and fails when the committed files differ.
+  `packaging/flatpak/check-sources.py` compares them with the lock files, offline
+  (crates by name, version and checksum, npm packages by URL and sha512); the
+  `flatpak-test` job runs it and fails when they differ.
   Permissions: `--share=ipc --socket=wayland --socket=fallback-x11 --device=all`
   (serial ports and the GPU) `--filesystem=/run/udev:ro` (port enumeration).
 

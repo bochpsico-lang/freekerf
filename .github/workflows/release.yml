@@ -182,10 +182,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: the offline sources match the lock files (packaging/flatpak/update-sources.sh)
-        run: |
-          packaging/flatpak/update-sources.sh
-          git diff --stat --exit-code -- packaging/flatpak/
+      # offline: comparing the lock files needs no registry (a 502 from npm failed
+      # the regeneration here once)
+      - name: the offline sources match the lock files
+        run: python3 -I packaging/flatpak/check-sources.py
       - uses: actions/download-artifact@v4
         with:
           name: flatpak-bundle
