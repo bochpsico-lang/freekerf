@@ -159,6 +159,7 @@ export class FakeService implements AppService {
         estimated_ms: lines * 100,
         drawing_range: [0, 0, 50, 50],
         quadrant: 'Q1',
+        from_document: null,
       };
       this.emit({ event: 'program_loaded' });
       return this.state.program;
@@ -180,6 +181,11 @@ export class FakeService implements AppService {
         estimated_ms: n * 250,
         drawing_range: [0, 0, 50, 50],
         quadrant: 'Q1',
+        from_document: {
+          document_revision: this.document.revisionOfDocument,
+          start: start ?? 'absolute',
+          anchor: anchor ?? 'bottom_left',
+        },
       };
       this.emit({ event: 'program_loaded' });
       return this.state.program;

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import App from '../App.svelte';
 import { FakeService } from '../dev/fake-service';
 import { projections } from '../start';
+import { designJob } from './design-job.svelte';
 
 async function mountConnected() {
   const service = new FakeService();
@@ -51,6 +52,41 @@ describe('Produce mode', () => {
     await props.machine.refresh();
     await waitFor(() => expect(screen.getByTestId('program-name').textContent).toContain('document'));
     expect(screen.getByTestId('job-estimate').textContent).not.toBe('—');
+  });
+
+  it('offers to make the job from the design, then to update it when the design changes', async () => {
+    const { service, props } = await mountConnected();
+    await service.dispatch('view.set_mode', { mode: 'produce' });
+    await props.view.refresh();
+    expect(screen.queryByTestId('job-banner')).toBeNull(); // nothing designed
+    await service.dispatch('document.add_shape', { shape: 'rect', x: 0, y: 0, width: 20, height: 10 });
+    await props.doc.refresh();
+    const banner = await screen.findByTestId('job-banner');
+    expect(banner.dataset.offer).toBe('none');
+    // made with the machine panel's choices
+    await fireEvent.click(screen.getByTestId('job-banner-go'));
+    await waitFor(() =>
+      expect(service.lastJobPlacement).toEqual({ start: designJob.start, anchor: designJob.anchor }),
+    );
+    await props.machine.refresh();
+    await waitFor(() => expect(screen.queryByTestId('job-banner')).toBeNull());
+    // the design changes: update it, placed as it was
+    const placed = service.lastJobPlacement;
+    designJob.start = 'absolute';
+    await service.dispatch('document.add_shape', { shape: 'rect', x: 30, y: 0, width: 5, height: 5 });
+    await props.doc.refresh();
+    await waitFor(() => expect(screen.getByTestId('job-banner').dataset.offer).toBe('stale'));
+    service.lastJobPlacement = null;
+    await fireEvent.click(screen.getByTestId('job-banner-go'));
+    await waitFor(() => expect(service.lastJobPlacement).toEqual(placed));
+    await props.machine.refresh();
+    await waitFor(() => expect(screen.queryByTestId('job-banner')).toBeNull());
+    // a G-code file is not the design's job: no offer
+    await service.dispatch('document.add_shape', { shape: 'rect', x: 40, y: 0, width: 5, height: 5 });
+    await service.dispatch('job.load_text', { name: 'part.nc', gcode: 'G0 X1\n' });
+    await Promise.all([props.doc.refresh(), props.machine.refresh()]);
+    await waitFor(() => expect(screen.getByTestId('program-name').textContent).toContain('part.nc'));
+    expect(screen.queryByTestId('job-banner')).toBeNull();
   });
 
   it('jogs one step per press with the selected step', async () => {

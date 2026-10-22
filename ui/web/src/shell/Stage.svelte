@@ -17,6 +17,7 @@
   import Palette from '../design/Palette.svelte';
   import TextEditor from '../design/TextEditor.svelte';
   import AlarmBanner from '../produce/AlarmBanner.svelte';
+  import JobBanner from '../produce/JobBanner.svelte';
 
   let { mode = 'produce', onzoom }: { mode?: 'design' | 'produce'; onzoom?: (realSize: number) => void } =
     $props();
@@ -215,6 +216,7 @@
     />
   {/if}
   <AlarmBanner />
+  {#if mode === 'produce'}<JobBanner />{/if}
   {#if design && doc}<Palette {doc} />{/if}
   <div class="canvas-tools" aria-label="View">
     <button

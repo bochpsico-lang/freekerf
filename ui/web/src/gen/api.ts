@@ -551,6 +551,19 @@ export type FrameParams = {
   feed_mm_min?: number | null;
 };
 
+/** The document a job was planned from. */
+export type FromDocument = {
+  /** Which point of its box goes to the start point. */
+  anchor: Anchor;
+  /**
+   * The document's revision then (`session.snapshot`'s `document_revision`):
+   * another one now means the job is out of date.
+   */
+  document_revision: number;
+  /** Where it starts. */
+  start: JobStart;
+};
+
 /** `job.from_document`. */
 export type FromDocumentParams = {
   /** Which point of the job's box goes to the start point (not used when absolute). */
@@ -1320,6 +1333,11 @@ export type ProgramInfo = {
   drawing_range?: [number, number, number, number] | null;
   /** Estimated time, ms. */
   estimated_ms: number;
+  /**
+   * Planned from the document (`job.from_document`): from which revision and
+   * placed how; `None` for G-code loaded as such.
+   */
+  from_document?: FromDocument | null;
   /** Commands. */
   lines: number;
   /** Name. */

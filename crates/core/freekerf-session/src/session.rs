@@ -281,6 +281,13 @@ impl Session {
         self.revision
     }
 
+    /// The revision of the last change to the document (not to the selection or
+    /// the view).
+    #[must_use]
+    pub const fn document_revision(&self) -> u64 {
+        self.document_revision
+    }
+
     /// Unsaved changes since the last [`Session::mark_saved`].
     #[must_use]
     pub const fn is_dirty(&self) -> bool {

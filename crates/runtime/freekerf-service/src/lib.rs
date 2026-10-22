@@ -263,6 +263,8 @@ impl SettingsStore for FileStore {
 struct Loaded {
     name: String,
     program: Program,
+    /// The document it was planned from (`job.from_document`).
+    from_document: Option<FromDocument>,
     /// Tool path buffer ([`preview`]), built on the first request.
     preview: Option<Arc<Vec<u8>>>,
 }
@@ -1063,6 +1065,21 @@ pub struct ProgramInfo {
     pub drawing_range: Option<[f64; 4]>,
     /// Quadrant of the drawing.
     pub quadrant: String,
+    /// Planned from the document (`job.from_document`): from which revision and
+    /// placed how; `None` for G-code loaded as such.
+    pub from_document: Option<FromDocument>,
+}
+
+/// The document a job was planned from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct FromDocument {
+    /// The document's revision then (`session.snapshot`'s `document_revision`):
+    /// another one now means the job is out of date.
+    pub document_revision: u64,
+    /// Where it starts.
+    pub start: JobStart,
+    /// Which point of its box goes to the start point.
+    pub anchor: freekerf_planner::origin::Anchor,
 }
 
 /// Result of `state.get`.
@@ -1088,6 +1105,7 @@ fn program_info(l: &Loaded) -> ProgramInfo {
         estimated_ms: l.program.estimated_ms(),
         drawing_range: r.drawing_range,
         quadrant: r.quadrant,
+        from_document: l.from_document,
     }
 }
 
@@ -1488,7 +1506,10 @@ fn build_registry() -> Registry<Inner> {
         "Plans the document (vectors, then images; centerline uses the `autotrace` program) and loads it as the job, placed by `start` (absolute coordinates, the head's current position, or the user origin 0,0) and `anchor` (which point of the job's box goes there).",
         Tier::Edit,
         |s: &Inner, p: FromDocumentParams| {
-            let mut doc = lock(&s.session).document().clone();
+            let (mut doc, revision) = {
+                let session = lock(&s.session);
+                (session.document().clone(), session.document_revision())
+            };
             let at = match p.start {
                 JobStart::Absolute => None,
                 JobStart::UserOrigin => Some((0.0, 0.0)),
@@ -1508,7 +1529,12 @@ fn build_registry() -> Registry<Inner> {
             let tracer = autotrace::ExternalAutotrace::default();
             let job = freekerf_planner::plan_with(&doc, &s.planner_options(), Some(&tracer))
                 .map_err(|e| ActionError::failed(e.to_string()))?;
-            load_program(s, "document".into(), job.lines.join("\n").as_bytes())
+            let from = FromDocument {
+                document_revision: revision,
+                start: p.start,
+                anchor: p.anchor,
+            };
+            load_program(s, "document".into(), job.lines.join("\n").as_bytes(), Some(from))
         },
     ));
     add(r.register(
@@ -1521,14 +1547,14 @@ fn build_registry() -> Registry<Inner> {
             let name = Path::new(&p.path)
                 .file_name()
                 .map_or_else(|| p.path.clone(), |n| n.to_string_lossy().into_owned());
-            load_program(s, name, &bytes)
+            load_program(s, name, &bytes, None)
         },
     ));
     add(r.register(
         "job.load_text",
         "Loads and analyzes G-code given as text.",
         Tier::Edit,
-        |s: &Inner, p: LoadTextParams| load_program(s, p.name, p.gcode.as_bytes()),
+        |s: &Inner, p: LoadTextParams| load_program(s, p.name, p.gcode.as_bytes(), None),
     ));
     add(r.register(
         "job.info",
@@ -1697,13 +1723,19 @@ fn decimal_to_f64(d: freekerf_gcode::Decimal) -> f64 {
     freekerf_gcode::number::f64_from_decimal(d)
 }
 
-fn load_program(s: &Inner, name: String, bytes: &[u8]) -> Result<ProgramInfo, ActionError> {
+fn load_program(
+    s: &Inner,
+    name: String,
+    bytes: &[u8],
+    from_document: Option<FromDocument>,
+) -> Result<ProgramInfo, ActionError> {
     let program = Program::parse_bytes(bytes, &s.analysis_options());
     let copy = program.clone();
     s.host_result(move |h, _| h.set_program(copy))?;
     let loaded = Loaded {
         name,
         program,
+        from_document,
         preview: None,
     };
     let info = program_info(&loaded);

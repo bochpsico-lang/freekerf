@@ -320,6 +320,11 @@ export class FakeDocument {
   private pastes = 0;
   private redoStack: Step[] = [];
   private documentRevision = 0;
+
+  /** The revision of the last change to the document (a job made from it records it). */
+  get revisionOfDocument(): number {
+    return this.documentRevision;
+  }
   readonly calls: { action: string; params: unknown }[] = [];
   /** What `migrate.detect` finds (tests change it). */
   migration = { found: true, path: '/home/user/.wine/drive_c/users/user/AppData/Roaming/LaserGRBL' };

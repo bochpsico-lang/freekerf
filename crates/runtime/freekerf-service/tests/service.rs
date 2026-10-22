@@ -175,7 +175,8 @@ fn manual_commands_settings_and_jog() {
 fn hold_resume_stop_and_abort() {
     let s = connected();
     let moves: String = (0..60).map(|i| format!("G1 X{} F600\n", (i % 2) * 2)).collect();
-    call(&s, "job.load_text", json!({"name": "long.nc", "gcode": moves}));
+    let info = call(&s, "job.load_text", json!({"name": "long.nc", "gcode": moves}));
+    assert_eq!(info["from_document"], Value::Null, "G-code loaded as such");
     call(&s, "job.run", Value::Null);
     wait_state(&s, |st| st["machine"]["status"] == "Run", 10);
     call(&s, "machine.feed_hold", Value::Null);
@@ -417,6 +418,16 @@ fn document_session_actions_and_events() {
             json!({"start": "user_origin", "anchor": "center"}),
         )
         .unwrap();
+    // the job records the document's revision and how it was placed
+    let revision = s.dispatch(&user, "session.snapshot", Value::Null).unwrap()["document_revision"].clone();
+    assert_eq!(
+        centred["from_document"],
+        json!({"document_revision": revision, "start": "user_origin", "anchor": "center"})
+    );
+    assert_eq!(
+        s.dispatch(&user, "state.get", Value::Null).unwrap()["program"]["from_document"]["anchor"],
+        "center"
+    );
     let r: [f64; 4] = serde_json::from_value(centred["drawing_range"].clone()).unwrap();
     assert!((r[0] + r[2]).abs() < 0.01 && (r[1] + r[3]).abs() < 0.01, "{r:?}");
     let absolute: [f64; 4] = serde_json::from_value(info["drawing_range"].clone()).unwrap();

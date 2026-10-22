@@ -6,6 +6,13 @@ All notable changes to FreeKerf are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Produce mode: a banner over the canvas offers to make the job from the design
+  when none is loaded, or to update it when the design changed since it was made
+  (placed as before); the job records the document revision it was planned from
+  (`ProgramInfo.from_document`).
+
 ## [0.1.2] - 2026-10-22
 
 ### Fixed

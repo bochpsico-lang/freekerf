@@ -343,25 +343,25 @@ interface AppJob {
    *
    * Action `job.from_document`, tier `edit`.
    */
-  fromDocument(params?: { anchor?: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; start?: "absolute" | "current_position" | "user_origin" }): { drawing_range?: number[] | null; estimated_ms: number; lines: number; name: string; quadrant: string };
+  fromDocument(params?: { anchor?: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; start?: "absolute" | "current_position" | "user_origin" }): { drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; document_revision: number; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string };
   /**
    * The loaded program (name, lines, estimated time, range).
    *
    * Action `job.info`, tier `read`.
    */
-  info(params?: Record<string, unknown>): { drawing_range?: number[] | null; estimated_ms: number; lines: number; name: string; quadrant: string } | null;
+  info(params?: Record<string, unknown>): { drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; document_revision: number; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string } | null;
   /**
    * Loads and analyzes a G-code file.
    *
    * Action `job.load`, tier `edit`.
    */
-  load(params: { path: string }): { drawing_range?: number[] | null; estimated_ms: number; lines: number; name: string; quadrant: string };
+  load(params: { path: string }): { drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; document_revision: number; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string };
   /**
    * Loads and analyzes G-code given as text.
    *
    * Action `job.load_text`, tier `edit`.
    */
-  loadText(params: { gcode: string; name: string }): { drawing_range?: number[] | null; estimated_ms: number; lines: number; name: string; quadrant: string };
+  loadText(params: { gcode: string; name: string }): { drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; document_revision: number; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string };
   /**
    * Runs the loaded program from a position, rebuilding position, power and modes first. Fires the laser.
    *
@@ -550,7 +550,7 @@ interface AppState {
    *
    * Action `state.get`, tier `read`.
    */
-  get(params?: Record<string, unknown>): { firmware_version?: string | null; issues: ("Unknown" | "ManualReset" | "ManualDisconnect" | "ManualAbort" | "StopResponding" | "UnexpectedReset" | "UnexpectedDisconnect" | "MachineAlarm")[]; machine: { buffer_size: number; connected: boolean; detected_ip?: string | null; failed_connections: number; feed: number; firmware: "Grbl" | "Smoothie" | "Marlin" | "VigoWork"; grbl_blocks: number; grbl_buffer: number; in_program: boolean; job_errors: number; job_executed: number; job_sent: number; job_target: number; job_time_ms: number; jog_enabled: boolean; last_issue: "Unknown" | "ManualReset" | "ManualDisconnect" | "ManualAbort" | "StopResponding" | "UnexpectedReset" | "UnexpectedDisconnect" | "MachineAlarm"; loop_count: number; machine_position: { x: number; y: number; z: number }; override_targets: number[]; overrides: number[]; pending: number; power: number; program_estimated_ms: number; program_lines: number; projected_ms: number; queued: number; ready: boolean; status: "Disconnected" | "Connecting" | "Idle" | "Run" | "Hold" | "Door" | "Home" | "Alarm" | "Check" | "Jog" | "Queue" | "Cooling" | "AutoHold" | "Tool"; used_buffer: number; version?: { build?: string | null; hal: boolean; major: number; minor: number; vendor_info?: string | null; vendor_version?: string | null } | null; work_offset: { x: number; y: number; z: number }; work_position: { x: number; y: number; z: number } }; program?: { drawing_range?: number[] | null; estimated_ms: number; lines: number; name: string; quadrant: string } | null; resume?: { executed: number; homing: boolean; issue: "Unknown" | "ManualReset" | "ManualDisconnect" | "ManualAbort" | "StopResponding" | "UnexpectedReset" | "UnexpectedDisconnect" | "MachineAlarm"; sent: number; set_wco: boolean; target: number } | null };
+  get(params?: Record<string, unknown>): { firmware_version?: string | null; issues: ("Unknown" | "ManualReset" | "ManualDisconnect" | "ManualAbort" | "StopResponding" | "UnexpectedReset" | "UnexpectedDisconnect" | "MachineAlarm")[]; machine: { buffer_size: number; connected: boolean; detected_ip?: string | null; failed_connections: number; feed: number; firmware: "Grbl" | "Smoothie" | "Marlin" | "VigoWork"; grbl_blocks: number; grbl_buffer: number; in_program: boolean; job_errors: number; job_executed: number; job_sent: number; job_target: number; job_time_ms: number; jog_enabled: boolean; last_issue: "Unknown" | "ManualReset" | "ManualDisconnect" | "ManualAbort" | "StopResponding" | "UnexpectedReset" | "UnexpectedDisconnect" | "MachineAlarm"; loop_count: number; machine_position: { x: number; y: number; z: number }; override_targets: number[]; overrides: number[]; pending: number; power: number; program_estimated_ms: number; program_lines: number; projected_ms: number; queued: number; ready: boolean; status: "Disconnected" | "Connecting" | "Idle" | "Run" | "Hold" | "Door" | "Home" | "Alarm" | "Check" | "Jog" | "Queue" | "Cooling" | "AutoHold" | "Tool"; used_buffer: number; version?: { build?: string | null; hal: boolean; major: number; minor: number; vendor_info?: string | null; vendor_version?: string | null } | null; work_offset: { x: number; y: number; z: number }; work_position: { x: number; y: number; z: number } }; program?: { drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; document_revision: number; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string } | null; resume?: { executed: number; homing: boolean; issue: "Unknown" | "ManualReset" | "ManualDisconnect" | "ManualAbort" | "StopResponding" | "UnexpectedReset" | "UnexpectedDisconnect" | "MachineAlarm"; sent: number; set_wco: boolean; target: number } | null };
 }
 
 interface AppView {

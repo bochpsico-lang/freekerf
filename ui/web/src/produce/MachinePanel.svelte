@@ -9,6 +9,7 @@
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
   import { formatDuration, formatLength } from '../lib/format';
+  import { designJob } from './design-job.svelte';
   import { JOG_STEPS, progress } from './job';
   import JogPad from './JogPad.svelte';
   import PortPermissionWarning from './PortPermissionWarning.svelte';
@@ -22,9 +23,6 @@
   /** The last connection refused for permissions (also when listing said `ok`). */
   let refused: { port: string; group?: string | null } | null = $state(null);
   let fileInput: HTMLInputElement;
-  /** How the job made from the design is placed: local choices of the panel. */
-  let start: JobStart = $state('absolute');
-  let anchor: Anchor = $state('bottom_left');
   const STARTS: JobStart[] = ['absolute', 'current_position', 'user_origin'];
   /** The 3×3 grid, top row first. */
   const ANCHORS: Anchor[] = [
@@ -172,8 +170,11 @@
         <span class="mini">{t('job-start')}</span>
         <div class="seg" role="radiogroup" aria-label={t('job-start')}>
           {#each STARTS as s (s)}
-            <button role="radio" aria-checked={start === s} data-start={s} onclick={() => (start = s)}
-              >{t(`job-start-${s}`)}</button
+            <button
+              role="radio"
+              aria-checked={designJob.start === s}
+              data-start={s}
+              onclick={() => (designJob.start = s)}>{t(`job-start-${s}`)}</button
             >
           {/each}
         </div>
@@ -183,20 +184,22 @@
               <button
                 class="anchor"
                 role="radio"
-                aria-checked={anchor === a}
+                aria-checked={designJob.anchor === a}
                 aria-label={t(`job-anchor-${a}`)}
                 title={t(`job-anchor-${a}`)}
                 data-anchor={a}
-                disabled={start === 'absolute'}
-                onclick={() => (anchor = a)}
+                disabled={designJob.start === 'absolute'}
+                onclick={() => (designJob.anchor = a)}
               ></button>
             {/each}
           </div>
           <button
             class="btn"
             data-testid="design-job-go"
-            onclick={() => run(() => service.dispatch('job.from_document', { start, anchor }))}
-            ><Icon name="output" /><span>{t('job-design-go')}</span></button
+            disabled={designJob.busy}
+            onclick={() => designJob.make(service, run)}
+            ><Icon name="output" /><span>{designJob.busy ? t('job-design-busy') : t('job-design-go')}</span
+            ></button
           >
         </div>
       </div>

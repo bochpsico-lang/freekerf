@@ -626,6 +626,13 @@ textarea {
 .banner-ico {
   color: var(--fk-color-state-alarm);
 }
+.banner.info {
+  border-color: var(--fk-color-accent);
+  background: color-mix(in srgb, var(--fk-color-accent) 12%, var(--fk-color-surface-1));
+}
+.banner.info .banner-ico {
+  color: var(--fk-color-accent);
+}
 .banner-ico .ico {
   width: 28px;
   height: 28px;
