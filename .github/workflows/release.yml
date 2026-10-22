@@ -1,7 +1,7 @@
 name: release
 
 # Installers of the desktop app (PLAN.md M5): Windows (MSI, NSIS), Linux (.deb,
-# AppImage) and Flatpak. A tag `v<version>` builds them,
+# AppImage), Flatpak and macOS (universal disk image). A tag `v<version>` builds them,
 # smoke-tests each one and attaches them to a draft GitHub release; a manual run
 # or a pull request touching the packaging only builds and tests them (artifacts).
 on:
@@ -13,6 +13,7 @@ on:
       - .github/workflows/release.yml
       - .github/scripts/smoke-windows-installer.ps1
       - .github/scripts/smoke-linux-installer.sh
+      - .github/scripts/smoke-macos-installer.sh
       - apps/desktop/src-tauri/tauri.conf.json
       - apps/desktop/src-tauri/icons/**
       - packaging/**
@@ -155,6 +156,68 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  macos:
+    # Apple Silicon runner; one universal disk image (arm64 + x86_64), signed ad hoc
+    # (no Developer ID yet: not notarized, see the roadmap)
+    runs-on: macos-latest
+    env:
+      TARGETS: aarch64-apple-darwin x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - name: the tag matches the app version (tauri.conf.json)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME, app version $version"; exit 1; }
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE }}
+          cache: npm
+          cache-dependency-path: ui/web/package-lock.json
+      - run: npm ci
+        working-directory: ui/web
+      - name: Tauri CLI
+        run: cargo install tauri-cli --version ${{ env.TAURI_CLI }} --locked
+      # the app ships it as Contents/MacOS/freekerf, a Tauri sidecar (signed with the
+      # app): packaging/macos/tauri.cli.json wants target/sidecar/freekerf-<triple>,
+      # one per architecture for the build and the universal one for the bundle
+      - name: the freekerf CLI (universal)
+        run: |
+          mkdir -p target/sidecar
+          for t in $TARGETS; do
+            cargo build --release --locked -p freekerf-cli --target "$t"
+            cp "target/$t/release/freekerf" "target/sidecar/freekerf-$t"
+          done
+          lipo -create -output target/sidecar/freekerf-universal-apple-darwin \
+            target/aarch64-apple-darwin/release/freekerf target/x86_64-apple-darwin/release/freekerf
+          lipo -info target/sidecar/freekerf-universal-apple-darwin
+      - name: .app and disk image
+        working-directory: apps/desktop
+        run: |
+          cargo tauri build --ci --target universal-apple-darwin --bundles app,dmg \
+            --config ../../packaging/macos/tauri.cli.json
+      - name: the disk image mounts, the app is universal and signed, starts and stays up, the CLI attaches over MCP
+        run: |
+          dmg=$(ls target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -n1)
+          .github/scripts/smoke-macos-installer.sh "$dmg"
+      - name: checksums
+        run: |
+          mkdir dist
+          cp target/universal-apple-darwin/release/bundle/dmg/*.dmg dist/
+          (cd dist && shasum -a 256 -- * > SHA256SUMS-macos.txt && cat SHA256SUMS-macos.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: freekerf-macos
+          path: dist/
+          if-no-files-found: error
+
   flatpak:
     # the build only: the container is the freedesktop SDK image (no package
     # manager, no Xvfb); flatpak-test installs and runs the bundle
@@ -210,7 +273,7 @@ jobs:
   publish:
     # a draft: a maintainer writes the notes from CHANGELOG.md and publishes it
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, linux, flatpak-test]
+    needs: [windows, linux, macos, flatpak-test]
     runs-on: ubuntu-latest
     permissions:
       contents: write

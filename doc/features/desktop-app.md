@@ -77,13 +77,15 @@ CI on native runners (`native-check`, which checks the whole workspace).
 
 `.github/workflows/release.yml` builds the installers with the Tauri CLI
 (`cargo tauri build`, version pinned in the workflow) and `flatpak-builder`, and
-smoke-tests each one. Nothing is signed yet (roadmap).
+smoke-tests each one. Nothing is signed with a publisher certificate yet (roadmap);
+the macOS app is signed ad hoc.
 
 | Format | Job | Built on | What the smoke test checks |
 | --- | --- | --- | --- |
 | MSI (WiX, every user, Program Files) and NSIS `-setup.exe` (current user, `%LOCALAPPDATA%`, no administrator rights) | `windows` | `windows-latest` | `.github/scripts/smoke-windows-installer.ps1`: silent install, the app starts on a fresh `FREEKERF_HOME` and stays up 15 s, silent uninstall |
 | `.deb` (Debian, Ubuntu; package `free-kerf`, which Tauri derives from the product name; `/usr/bin/freekerf-desktop` and the CLI `/usr/bin/freekerf`) | `linux` | `ubuntu-22.04` (its glibc is the oldest supported) | `.github/scripts/smoke-linux-installer.sh deb` in a clean `ubuntu:24.04` container: `apt install`, `freekerf --version`, the app up 15 s under Xvfb, `apt remove` |
 | AppImage (any distribution with glibc ≥ 2.35; the CLI is inside) | `linux` | `ubuntu-22.04` | `smoke-linux-installer.sh appimage` with `--appimage-extract-and-run` in `ubuntu:24.04`, and in `fedora:latest` (reported, not blocking) |
+| Disk image `FreeKerf_<version>_universal.dmg` (one app for Apple Silicon and Intel, macOS 11 or newer, signed ad hoc, not notarized; the CLI is `FreeKerf.app/Contents/MacOS/freekerf`) | `macos` | `macos-latest` (Apple Silicon; the Intel slice is cross-compiled) | `.github/scripts/smoke-macos-installer.sh`: mounts the image, copies the app out, `codesign --verify`, both architectures in the app and the CLI, `freekerf --version`, the app up 15 s on a fresh `FREEKERF_HOME` with `freekerf mcp` attached to it |
 | Flatpak bundle (`io.github.freekerf.FreeKerf`, GNOME runtime; the CLI is inside) | `flatpak` (build), `flatpak-test` | the `ghcr.io/flathub-infra/flatpak-github-actions:gnome-51` container (the freedesktop SDK image: no package manager, no Xvfb), then `ubuntu-24.04` | `smoke-linux-installer.sh flatpak` on the runner: bundle install, the app up 15 s, `freekerf mcp` in a second sandbox attaches to it, uninstall |
 
 The WebView2 runtime (Windows) is installed by the installers when it is missing
@@ -91,12 +93,12 @@ The WebView2 runtime (Windows) is installed by the installers when it is missing
 dependencies), the AppImage or the GNOME runtime (Flatpak).
 
 - A tag `v<version>` (the version of `tauri.conf.json`, checked) builds, tests and
-  attaches the installers and `SHA256SUMS-{windows,linux,flatpak}.txt` to a
+  attaches the installers and `SHA256SUMS-{windows,linux,macos,flatpak}.txt` to a
   **draft** GitHub release; a maintainer writes the notes and publishes it.
 - A manual run (*Run workflow*) or a pull request that touches the workflow, a smoke
   script, `tauri.conf.json`, the icons or `packaging/` builds and tests them; the
-  installers are the run's `freekerf-windows`, `freekerf-linux` and
-  `freekerf-flatpak` artifacts.
+  installers are the run's `freekerf-windows`, `freekerf-linux`, `freekerf-macos`
+  and `freekerf-flatpak` artifacts.
 
 To release: bump `version` in `Cargo.toml` (`[workspace.package]`) and
 `apps/desktop/src-tauri/tauri.conf.json`, add a `<release>` to
@@ -160,6 +162,43 @@ cargo install tauri-cli --version 2.12.3 --locked   # once
 cd apps/desktop && cargo tauri build --bundles msi,nsis
 # installers in target/release/bundle/{msi,nsis}/
 ```
+
+macOS (Xcode command line tools; both Rust targets):
+
+```bash
+cargo install tauri-cli --version 2.12.3 --locked   # once
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+mkdir -p target/sidecar                             # the CLI, as a sidecar per target
+for t in aarch64-apple-darwin x86_64-apple-darwin; do
+  cargo build --release --locked -p freekerf-cli --target $t
+  cp target/$t/release/freekerf target/sidecar/freekerf-$t
+done
+lipo -create -output target/sidecar/freekerf-universal-apple-darwin \
+  target/{aarch64,x86_64}-apple-darwin/release/freekerf
+cd apps/desktop && cargo tauri build --target universal-apple-darwin --bundles app,dmg \
+  --config ../../packaging/macos/tauri.cli.json
+# disk image in target/universal-apple-darwin/release/bundle/dmg/
+```
+
+`packaging/macos/tauri.cli.json` adds the CLI as a Tauri sidecar (`externalBin`),
+so it is signed with the app; it is not in `tauri.conf.json` because the sidecar
+must exist whenever the desktop crate builds with it. `bundle.macOS` in
+`tauri.conf.json` sets macOS 11 as the minimum and the ad hoc signature
+(`signingIdentity: "-"`), which Apple Silicon needs to run the app at all.
+
+### Running on macOS
+
+- **First start**: the app is not notarized (no Apple Developer ID yet, see the
+  roadmap). Drag `FreeKerf.app` to Applications and open it; macOS refuses it the
+  first time (*"FreeKerf" Not Opened*: choose *Done*). Open *System Settings →
+  Privacy & Security*, choose *Open Anyway* next to "FreeKerf" was blocked, choose
+  *Open Anyway* again and enter an administrator's name and password (macOS 26).
+  Later starts open normally, and so does the bundled CLI. Or, in a terminal:
+  `xattr -dr com.apple.quarantine /Applications/FreeKerf.app`.
+- **Serial ports** are `/dev/cu.*` and need no group membership.
+- **MCP agents** run `/Applications/FreeKerf.app/Contents/MacOS/freekerf mcp`
+  ([mcp.md](mcp.md#setup)); to have `freekerf` on the `PATH`:
+  `sudo ln -s /Applications/FreeKerf.app/Contents/MacOS/freekerf /usr/local/bin/freekerf`.
 
 ### Running on Linux
 
