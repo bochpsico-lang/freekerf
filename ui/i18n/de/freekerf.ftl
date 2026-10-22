@@ -148,6 +148,9 @@ obj-dither = Rasterung
 ## machine
 machine-emulator = FreeKerf-Emulator (ohne Maschine)
 machine-refreshPorts = Erneut nach Anschlüssen suchen
+machine-portDenied = Sie haben keine Berechtigung für { $port }. Fügen Sie sich der Gruppe { $group } hinzu, melden Sie sich dann ab und wieder an.
+machine-portDeniedCopy = Befehl kopieren
+machine-portDeniedCopied = Kopiert
 machine-openGcode = G-Code öffnen…
 machine-noProgram = Kein Programm geladen
 machine-lines = Zeilen

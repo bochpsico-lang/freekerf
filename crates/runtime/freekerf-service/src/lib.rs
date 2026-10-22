@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use freekerf_gcode::{AnalysisOptions, Program};
-use freekerf_machine::{Machine, MachineEvent, SystemClock};
+use freekerf_machine::{Machine, MachineError, MachineEvent, SystemClock};
 use freekerf_protocol::Clock;
 use freekerf_protocol::host::decimal;
 use freekerf_protocol::{
@@ -26,7 +26,7 @@ use freekerf_session::session::{Change, Session, SessionEvent};
 use freekerf_session::view::ViewCommand;
 use freekerf_session::{NoParams, Registry};
 use freekerf_settings::{MachineCache, Settings, SettingsStore};
-use freekerf_transport::{EmulatorTransport, SerialTransport, Transport};
+use freekerf_transport::{EmulatorTransport, SerialTransport, Transport, TransportError};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -41,7 +41,7 @@ pub mod preview;
 pub mod remote;
 pub mod script;
 
-pub use freekerf_session::{ActionError, ActionSpec, Caller, CallerKind, Tier};
+pub use freekerf_session::{ActionError, ActionSpec, Caller, CallerKind, Failure, FailureCause, Tier};
 
 /// Rows kept in the console history.
 pub const CONSOLE_ROWS: usize = 5000;
@@ -658,7 +658,7 @@ impl Inner {
         if let Some(store) = &self.stores.settings {
             lock(&self.settings)
                 .save(store.as_ref())
-                .map_err(|e| ActionError::Failed(e.to_string()))?;
+                .map_err(|e| ActionError::failed(e.to_string()))?;
         }
         Ok(())
     }
@@ -669,7 +669,7 @@ impl Inner {
     ) -> Result<R, ActionError> {
         self.machine
             .call(f)
-            .map_err(|e| ActionError::Failed(e.to_string()))
+            .map_err(|e| ActionError::failed(e.to_string()))
     }
 
     fn host_result(
@@ -690,13 +690,13 @@ impl Inner {
         while let Some(left) = end.checked_duration_since(Instant::now()) {
             match events.recv_timeout(left) {
                 Ok(MachineEvent::Host(Event::SystemOpFinished { id: i, result, .. })) if i == id => {
-                    return result.map_err(ActionError::Failed);
+                    return result.map_err(ActionError::failed);
                 }
                 Ok(_) => {}
                 Err(_) => break,
             }
         }
-        Err(ActionError::Failed("no answer from the machine".into()))
+        Err(ActionError::failed("no answer from the machine"))
     }
 
     fn analysis_options(&self) -> AnalysisOptions {
@@ -709,13 +709,29 @@ impl Inner {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)] // used as `map_err(connect_err)`
+fn connect_err(e: MachineError) -> ActionError {
+    match &e {
+        MachineError::Transport(TransportError::PermissionDenied { target, group }) => {
+            ActionError::Failed(Failure::with_cause(
+                e.to_string(),
+                FailureCause::PortPermissionDenied {
+                    port: target.clone(),
+                    group: group.clone(),
+                },
+            ))
+        }
+        _ => ActionError::failed(e.to_string()),
+    }
+}
+
 #[allow(clippy::needless_pass_by_value)] // used as `map_err(host_err)`
 fn host_err(e: HostError) -> ActionError {
     match e {
         HostError::NotConnected | HostError::NotAllowed(_) | HostError::NoProgram | HostError::Busy => {
             ActionError::Refused(e.to_string())
         }
-        HostError::Unsupported(_) => ActionError::Failed(e.to_string()),
+        HostError::Unsupported(_) => ActionError::failed(e.to_string()),
     }
 }
 
@@ -998,6 +1014,42 @@ pub struct FireCancelParams {
 
 // ====================================================================== results
 
+/// A serial port of `machine.list_ports`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct SerialPortInfo {
+    /// Port name or path (`/dev/ttyUSB0`, `COM3`).
+    pub path: String,
+    /// Whether this user may open it (Linux checks without opening; elsewhere
+    /// always `ok`, and `machine.connect` says when it is not).
+    pub access: PortAccess,
+    /// Group that owns the device (Unix), when known: the group to join when
+    /// access is denied.
+    pub group: Option<String>,
+}
+
+/// Access to a serial port.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PortAccess {
+    /// May be opened.
+    Ok,
+    /// This user may not read and write it.
+    Denied,
+}
+
+impl From<freekerf_transport::serial::PortInfo> for SerialPortInfo {
+    fn from(p: freekerf_transport::serial::PortInfo) -> Self {
+        Self {
+            path: p.path,
+            access: match p.access {
+                freekerf_transport::serial::PortAccess::Ok => PortAccess::Ok,
+                freekerf_transport::serial::PortAccess::Denied => PortAccess::Denied,
+            },
+            group: p.group,
+        }
+    }
+}
+
 /// Summary of the loaded program.
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct ProgramInfo {
@@ -1087,7 +1139,7 @@ fn build_registry() -> Registry<Inner> {
             let st = lock(&s.settings);
             match p.key {
                 Some(k) => st.get(&k).map_err(|e| ActionError::InvalidParams(e.to_string())),
-                None => serde_json::to_value(&*st).map_err(|e| ActionError::Failed(e.to_string())),
+                None => serde_json::to_value(&*st).map_err(|e| ActionError::failed(e.to_string())),
             }
         },
     ));
@@ -1140,7 +1192,7 @@ fn build_registry() -> Registry<Inner> {
         Tier::Read,
         |s: &Inner, p: MigrateDetectParams| {
             let from = p.path.map(std::path::PathBuf::from).or_else(|| s.stores.lasergrbl.clone());
-            migrate::scan(from.as_deref(), &s.stores).map_err(ActionError::Failed)
+            migrate::scan(from.as_deref(), &s.stores).map_err(ActionError::failed)
         },
     ));
     add(r.register(
@@ -1154,10 +1206,10 @@ fn build_registry() -> Registry<Inner> {
                 .macros
                 .clone()
                 .ok_or_else(|| ActionError::Refused("this instance has no macro folder".into()))?;
-            let r = migrate::run(from.as_deref(), &s.stores, &macros, &p.items).map_err(ActionError::Failed)?;
+            let r = migrate::run(from.as_deref(), &s.stores, &macros, &p.items).map_err(ActionError::failed)?;
             // the settings file changed under the service: read it again
             if let Some(store) = &s.stores.settings {
-                let fresh = Settings::load(store.as_ref()).map_err(|e| ActionError::Failed(e.to_string()))?;
+                let fresh = Settings::load(store.as_ref()).map_err(|e| ActionError::failed(e.to_string()))?;
                 *lock(&s.settings) = fresh;
                 s.publish(&ServiceEvent::SettingsChanged);
             }
@@ -1170,7 +1222,12 @@ fn build_registry() -> Registry<Inner> {
         "machine.list_ports",
         "Serial ports found on this computer.",
         Tier::Read,
-        |_: &Inner, _: NoParams| Ok(freekerf_transport::serial::available_ports()),
+        |_: &Inner, _: NoParams| {
+            Ok(freekerf_transport::serial::available_ports()
+                .into_iter()
+                .map(SerialPortInfo::from)
+                .collect::<Vec<_>>())
+        },
     ));
     add(r.register(
         "machine.connect",
@@ -1206,9 +1263,7 @@ fn build_registry() -> Registry<Inner> {
                     h.set_laser_life(life);
                 }
             })?;
-            s.machine
-                .connect(transport)
-                .map_err(|e| ActionError::Failed(e.to_string()))
+            s.machine.connect(transport).map_err(connect_err)
         },
     ));
     add(r.register(
@@ -1218,7 +1273,7 @@ fn build_registry() -> Registry<Inner> {
         |s: &Inner, _: NoParams| {
             s.machine
                 .disconnect()
-                .map_err(|e| ActionError::Failed(e.to_string()))
+                .map_err(|e| ActionError::failed(e.to_string()))
         },
     ));
 
@@ -1398,9 +1453,9 @@ fn build_registry() -> Registry<Inner> {
         Tier::Edit,
         |s: &Inner, p: LoadParams| {
             let bytes = freekerf_platform::read(Path::new(&p.path))
-                .map_err(|e| ActionError::Failed(e.to_string()))?;
+                .map_err(|e| ActionError::failed(e.to_string()))?;
             let doc = freekerf_document::Document::from_fkproj(&bytes)
-                .map_err(|e| ActionError::Failed(e.to_string()))?;
+                .map_err(|e| ActionError::failed(e.to_string()))?;
             lock(&s.session).replace_document(doc);
             Ok(FilePath { path: p.path })
         },
@@ -1412,7 +1467,7 @@ fn build_registry() -> Registry<Inner> {
         |s: &Inner, p: LoadParams| {
             let text = lock(&s.session).document().to_fkproj();
             freekerf_platform::write_atomic(Path::new(&p.path), text.as_bytes())
-                .map_err(|e| ActionError::Failed(e.to_string()))?;
+                .map_err(|e| ActionError::failed(e.to_string()))?;
             lock(&s.session).mark_saved();
             Ok(FilePath { path: p.path })
         },
@@ -1423,7 +1478,7 @@ fn build_registry() -> Registry<Inner> {
         Tier::Edit,
         |s: &Inner, p: LoadParams| {
             let bytes = freekerf_platform::read(Path::new(&p.path))
-                .map_err(|e| ActionError::Failed(e.to_string()))?;
+                .map_err(|e| ActionError::failed(e.to_string()))?;
             let ids = freekerf_session::actions::import_file(&mut lock(&s.session), &p.path, &bytes)?;
             Ok(ImportedFile { objects: ids })
         },
@@ -1452,7 +1507,7 @@ fn build_registry() -> Registry<Inner> {
             }
             let tracer = autotrace::ExternalAutotrace::default();
             let job = freekerf_planner::plan_with(&doc, &s.planner_options(), Some(&tracer))
-                .map_err(|e| ActionError::Failed(e.to_string()))?;
+                .map_err(|e| ActionError::failed(e.to_string()))?;
             load_program(s, "document".into(), job.lines.join("\n").as_bytes())
         },
     ));
@@ -1462,7 +1517,7 @@ fn build_registry() -> Registry<Inner> {
         Tier::Edit,
         |s: &Inner, p: LoadParams| {
             let bytes = freekerf_platform::read(Path::new(&p.path))
-                .map_err(|e| ActionError::Failed(e.to_string()))?;
+                .map_err(|e| ActionError::failed(e.to_string()))?;
             let name = Path::new(&p.path)
                 .file_name()
                 .map_or_else(|| p.path.clone(), |n| n.to_string_lossy().into_owned());
@@ -1596,7 +1651,7 @@ fn describe_results(r: &mut Registry<Inner>) {
     };
     add(r.describe_result::<State>("state.get"));
     add(r.describe_result::<Vec<ConsoleRow>>("console.get"));
-    add(r.describe_result::<Vec<String>>("machine.list_ports"));
+    add(r.describe_result::<Vec<SerialPortInfo>>("machine.list_ports"));
     add(r.describe_result::<ProgramInfo>("job.load"));
     add(r.describe_result::<ProgramInfo>("job.load_text"));
     add(r.describe_result::<Option<ProgramInfo>>("job.info"));

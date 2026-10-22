@@ -1,4 +1,4 @@
-# 0016. Text: fonts, shaping and text that follows a path
+# 0019. Text: fonts, shaping and text that follows a path
 
 - Status: accepted (M5)
 - Date: 2026-10-22

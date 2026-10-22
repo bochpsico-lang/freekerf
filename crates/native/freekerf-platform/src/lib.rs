@@ -49,7 +49,8 @@ pub struct Dirs {
     /// Data kept between runs (laser life counters, machine cache).
     pub data: PathBuf,
     /// Files of the running instance (the local endpoint and its token):
-    /// `$XDG_RUNTIME_DIR/freekerf` on Linux, the data directory elsewhere.
+    /// `$XDG_RUNTIME_DIR/freekerf` on Linux (`$XDG_RUNTIME_DIR/app/$FLATPAK_ID` in
+    /// a Flatpak), the data directory elsewhere.
     pub runtime: PathBuf,
 }
 
@@ -69,7 +70,11 @@ impl Dirs {
         Ok(Self {
             config: p.config_dir().to_path_buf(),
             data: p.data_dir().to_path_buf(),
-            runtime: p.runtime_dir().unwrap_or_else(|| p.data_dir()).to_path_buf(),
+            runtime: flatpak_runtime_dir(
+                std::env::var_os("FLATPAK_ID"),
+                std::env::var_os("XDG_RUNTIME_DIR"),
+            )
+            .unwrap_or_else(|| p.runtime_dir().unwrap_or_else(|| p.data_dir()).to_path_buf()),
         })
     }
 
@@ -184,9 +189,35 @@ pub fn remove_file(path: &Path) -> Result<(), PlatformError> {
     }
 }
 
+/// In a Flatpak, `$XDG_RUNTIME_DIR` is private to each sandbox instance, but
+/// `$XDG_RUNTIME_DIR/app/$FLATPAK_ID` is shared by every instance of the app: the
+/// window and `flatpak run --command=freekerf <id> mcp` meet there.
+fn flatpak_runtime_dir(
+    flatpak_id: Option<std::ffi::OsString>,
+    xdg_runtime_dir: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    let id = flatpak_id.filter(|v| !v.is_empty())?;
+    let base = xdg_runtime_dir.filter(|v| !v.is_empty())?;
+    Some(PathBuf::from(base).join("app").join(id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn flatpak_instances_share_the_app_runtime_dir() {
+        let id = Some("io.github.freekerf.FreeKerf".into());
+        let xdg = Some("/run/user/1000".into());
+        assert_eq!(
+            flatpak_runtime_dir(id.clone(), xdg.clone()),
+            Some(PathBuf::from("/run/user/1000/app/io.github.freekerf.FreeKerf"))
+        );
+        // not in a Flatpak, or no runtime directory: the usual one
+        assert_eq!(flatpak_runtime_dir(None, xdg.clone()), None);
+        assert_eq!(flatpak_runtime_dir(Some("".into()), xdg), None);
+        assert_eq!(flatpak_runtime_dir(id, None), None);
+    }
 
     #[cfg(unix)]
     #[test]

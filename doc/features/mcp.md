@@ -23,6 +23,24 @@ actions never add tools (PLAN §9, [ADR 0012](../adr/0012-mcp-transport-and-secu
 
    Other agents take the same command (`"command": "freekerf", "args": ["mcp"]`).
 
+   The command depends on how FreeKerf is installed (the Linux packages and the macOS
+   app ship the CLI; [desktop-app.md](desktop-app.md#running-on-linux),
+   [macOS](desktop-app.md#running-on-macos)):
+
+   | Installed as | Agent command |
+   | --- | --- |
+   | `.deb`, or built from source (`freekerf` on the `PATH`) | `freekerf mcp` |
+   | AppImage | `<dir>/squashfs-root/usr/bin/freekerf mcp` after `--appimage-extract` |
+   | Flatpak | `flatpak run --command=freekerf io.github.freekerf.FreeKerf mcp` |
+   | macOS disk image | `/Applications/FreeKerf.app/Contents/MacOS/freekerf mcp` |
+
+   In a Flatpak every instance has its own `$XDG_RUNTIME_DIR`; the app and the CLI
+   meet in `$XDG_RUNTIME_DIR/app/io.github.freekerf.FreeKerf/` (shared by the app's
+   sandboxes), so the agent's sandbox attaches to the running window
+   (`freekerf_platform::Dirs`). The settings are the sandbox's
+   (`~/.var/app/io.github.freekerf.FreeKerf/config/freekerf`): enable MCP there with
+   `flatpak run --command=freekerf io.github.freekerf.FreeKerf config set automation.mcp.enabled true`.
+
 `freekerf mcp` **attaches** to the running FreeKerf (the desktop app serves the
 endpoint while it runs, and asks the person there), or **starts** a headless one
 (`freekerf serve --headless`, which exits after 60 s without clients; `--idle-exit`)

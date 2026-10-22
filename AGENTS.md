@@ -57,6 +57,8 @@ ui/web/            web front end (Svelte 5 + TypeScript + Vite): src/ipc (Tauri)
 ui/tokens/         fk-tokens.css generated from freekerf/design (commit in design.lock)
 ui/i18n/           Fluent translations: <locale>/freekerf.ftl (en is the reference),
                    <locale>/lasergrbl.ftl generated from LaserGRBL (lasergrbl.toml)
+packaging/         Linux packages: linux/ (desktop entry template, AppStream metainfo, screenshots),
+                   flatpak/ (manifest, offline cargo/npm sources, update-sources.sh, check-sources.py)
 tests/             cross-crate integration tests (crate freekerf-it)
 fuzz/              cargo-fuzz targets (own workspace, nightly; doc/fuzzing.md)
 tools/xtask/       cargo xtask check-layers | gen-docs | gen-ts | check-docs | sync-tokens | resx2ftl
@@ -110,6 +112,14 @@ To check a UI flow by hand, `npm run dev` and open http://localhost:5173/dev.htm
 the real UI on the fake service (`src/dev/main.ts`), which is exposed as
 `window.fkFake` in the browser console. Reproduce the flow there with real clicks and
 keys before changing it: the end-to-end tests (`test:e2e`) usually only run on CI.
+
+**CI and branches** ([ADR 0018](doc/adr/0018-release-train.md)): pull requests go
+to `main`, which runs the quick Linux checks (`ci.yml`). The Windows and macOS
+runners and the app end to end (`native.yml`) run every night on `main`; the
+installers (`release.yml`) run on pull requests from `main` to `stable`, the
+release train, and a push to `stable` with a new version tags it and drafts the
+release. A change to those jobs or to `packaging/` is tried with a manual run of
+the workflow on its branch.
 
 **Windows**: `.gitattributes` keeps every text file LF in the checkout, whatever
 `core.autocrlf` says (binaries are listed there as `binary`). A CRLF checkout makes
@@ -203,6 +213,8 @@ A change is done when its tests and docs are updated in the same PR.
 | an action the UI uses | the fake service (`ui/web/src/dev/fake-service.ts`, `fake-document.ts`): `dev.html` and the UI tests run on it |
 | a new action of tier `laser` | the guard lists in `ui/web/src/produce/fire.test.ts` ("knows the laser actions from the generated catalogue") and `crates/runtime/freekerf-service/tests/service.rs` (`laser_actions_run_only_after_a_confirmed_countdown`) |
 | visible UI behaviour (what opens, where the focus goes, shortcuts) | search `ui/web/tests/e2e/specs` for the old behaviour (when text stopped opening the Object panel, flow 5 of `design-flows.e2e.ts` broke) |
+| `Cargo.lock` or `ui/web/package-lock.json` | `packaging/flatpak/update-sources.sh` (the Flatpak's offline sources; `check-sources.py` there fails in CI when they are stale) |
+| packaging (`tauri.conf.json` bundle, `packaging/`, a smoke script) | `doc/features/desktop-app.md` (Releases) |
 | the design commit (tokens, icons, fonts) | `ui/tokens/design.lock`, `cargo xtask sync-tokens` |
 | a decision | a new ADR in `doc/adr/` |
 | something postponed | `doc/roadmap.md` |

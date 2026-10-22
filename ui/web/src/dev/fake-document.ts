@@ -933,7 +933,7 @@ export class FakeDocument {
       if (p.format !== 'svg')
         throw new ActionFailure('document.import_data', {
           kind: 'failed',
-          message: 'the fake imports SVG only',
+          message: { reason: 'the fake imports SVG only' },
         });
       const text = p.text ?? (p.data ? atob(p.data) : '');
       const shapes = parseSvg(text);

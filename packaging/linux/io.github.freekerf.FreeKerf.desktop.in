@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=FreeKerf
+GenericName=Laser Engraver Control
+Comment=Design jobs and drive laser machines
+Exec={{exec}}
+Icon={{icon}}
+Terminal=false
+Categories=Graphics;Engineering;
+Keywords=laser;engraver;cutter;grbl;gcode;cnc;lasergrbl;
+StartupWMClass={{exec}}
+StartupNotify=true

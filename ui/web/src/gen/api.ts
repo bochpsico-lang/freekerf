@@ -392,6 +392,26 @@ export type Event = {
   LoopCountChanged: number;
 };
 
+/**
+ * What [`ActionError::Failed`] carries: the text, and a cause front ends can
+ * recognise.
+ */
+export type Failure = {
+  /** What it was, for front ends (absent: nothing more specific is known). */
+  cause?: FailureCause | null;
+  /** What went wrong, for people. */
+  reason: string;
+};
+
+/** Failures a front end recognises (`code`), with what it needs to explain them. */
+export type FailureCause = {
+  code: "port_permission_denied";
+  /** Group that owns the device (`dialout`, `uucp`), when known. */
+  group?: string | null;
+  /** The port. */
+  port: string;
+};
+
 /** The file of `document.open` and `document.save`. */
 export type FilePath = {
   /** The file. */
@@ -1291,6 +1311,9 @@ export type Point3 = {
   z: number;
 };
 
+/** Access to a serial port. */
+export type PortAccess = "ok" | "denied";
+
 /** Summary of the loaded program. */
 export type ProgramInfo = {
   /** `[xmin, ymin, xmax, ymax]` where the laser burns. */
@@ -1458,6 +1481,22 @@ export type SelectParams = {
 export type SendParams = {
   /** One line of G-code or a `$` command. */
   line: string;
+};
+
+/** A serial port of `machine.list_ports`. */
+export type SerialPortInfo = {
+  /**
+   * Whether this user may open it (Linux checks without opening; elsewhere
+   * always `ok`, and `machine.connect` says when it is not).
+   */
+  access: PortAccess;
+  /**
+   * Group that owns the device (Unix), when known: the group to join when
+   * access is denied.
+   */
+  group?: string | null;
+  /** Port name or path (`/dev/ttyUSB0`, `COM3`). */
+  path: string;
 };
 
 export type SetRasterParams = {
@@ -1931,7 +1970,7 @@ export type ActionError = {
   message: string;
 } | {
   kind: "failed";
-  message: string;
+  message: Failure;
 };
 
 /** Public description of an action. */
@@ -2414,7 +2453,7 @@ export interface Actions {
   /** Serial ports found on this computer. */
   "machine.list_ports": {
     params: NoParams;
-    result: string[];
+    result: SerialPortInfo[];
     tier: "read";
   };
   /** Sets the override targets; the host steps the board towards them. */
