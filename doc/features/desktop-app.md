@@ -126,8 +126,9 @@ fails the MSI build.
   ```
 
   `packaging/flatpak/check-sources.py` compares them with the lock files, offline
-  (crates by name, version and checksum, npm packages by URL and sha512); the
-  `flatpak-test` job runs it and fails when they differ.
+  (crates by name, version and checksum, npm packages by URL and sha512). It runs
+  in `ci.yml` (`lint`) on every pull request, so a dependency change that forgets
+  them fails there, and again in the `flatpak-test` job of `release.yml`.
   Permissions: `--share=ipc --socket=wayland --socket=fallback-x11 --device=all`
   (serial ports and the GPU) `--filesystem=/run/udev:ro` (port enumeration).
 

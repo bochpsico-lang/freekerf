@@ -3,7 +3,7 @@
 #   cargo-sources.json  from Cargo.lock              (flatpak-cargo-generator)
 #   node-sources.json   from ui/web/package-lock.json (flatpak-node-generator)
 # Run it after any change to either lock file and commit the result; check-sources.py
-# (the flatpak-test job of release.yml) fails when they are stale
+# (ci.yml and the flatpak-test job of release.yml) fails when they are stale
 # (doc/features/desktop-app.md "Releases").
 #
 #   mise exec python@3.13 -- packaging/flatpak/update-sources.sh
