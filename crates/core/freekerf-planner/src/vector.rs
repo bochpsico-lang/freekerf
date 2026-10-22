@@ -11,7 +11,7 @@
 
 use std::f64::consts::PI;
 
-use freekerf_document::{Document, Layer, ObjectKind, SourceFormat, UnsupportedReason};
+use freekerf_document::{Document, Layer, Object, ObjectKind, SourceFormat, UnsupportedReason};
 use freekerf_geometry::{Path, Point, Segment, arc_sweep};
 
 use crate::writer::Writer;
@@ -223,7 +223,7 @@ fn filling(doc: &Document, layer: &Layer, style: VectorStyle) -> Result<Vec<Vec<
     let paths: Vec<&Path> = doc
         .objects_on(layer.id)
         .filter_map(|o| match &o.kind {
-            ObjectKind::Shape { paths } => Some(paths.iter()),
+            ObjectKind::Shape { paths } => Some(paths.iter().filter(move |p| !is_stroke(o, p))),
             _ => None,
         })
         .flatten()
@@ -233,6 +233,13 @@ fn filling(doc: &Document, layer: &Layer, style: VectorStyle) -> Result<Vec<Vec<
         layer.fill.pattern,
         layer.fill.lines_per_mm,
     )
+}
+
+/// An open stroke of a text (single-line fonts): engraved as a line on every
+/// layer, never closed into a filling (LaserGRBL closes every open path it fills;
+/// it has no editable text).
+fn is_stroke(o: &Object, p: &Path) -> bool {
+    o.text.is_some() && !p.closed
 }
 
 /// The G-code lines of the vector objects of `doc` (colour layers).
@@ -281,22 +288,24 @@ pub fn plan_vectors(doc: &Document, options: &PlanOptions) -> Result<Vec<String>
             if let Some(lines) = &filling {
                 e.polylines(lines);
             }
-            if layer.mode.has_outline() {
-                for o in &objects {
-                    match &o.kind {
-                        ObjectKind::Shape { paths } => {
-                            for p in paths {
-                                e.path(p);
-                            }
-                            if style == VectorStyle::Svg {
-                                e.pen_up("end");
-                            }
+            // the outlines, or on a filling layer the strokes of texts
+            let outline = layer.mode.has_outline();
+            for o in &objects {
+                match &o.kind {
+                    ObjectKind::Shape { paths } => {
+                        let mut drawn = false;
+                        for p in paths.iter().filter(|p| outline || is_stroke(o, p)) {
+                            e.path(p);
+                            drawn = true;
                         }
-                        ObjectKind::Unsupported { element, reason } if style == VectorStyle::Svg => {
-                            e.unsupported(element, *reason);
+                        if (outline || drawn) && style == VectorStyle::Svg {
+                            e.pen_up("end");
                         }
-                        _ => {}
                     }
+                    ObjectKind::Unsupported { element, reason } if outline && style == VectorStyle::Svg => {
+                        e.unsupported(element, *reason);
+                    }
+                    _ => {}
                 }
             }
             if style == VectorStyle::Dxf {
@@ -364,6 +373,54 @@ mod tests {
         assert_eq!(lines[5], "G1X10F1000(path)");
         assert!(lines.iter().any(|l| l.starts_with("G3X30Y5I-5J0")));
         assert_eq!(lines.last().unwrap(), "M5 S0");
+    }
+
+    #[test]
+    fn text_strokes_are_lines_on_filling_layers() {
+        use freekerf_document::TextSpec;
+        // a stroke that comes back to its start (an O of a single-line font)
+        let loop_ = Path::polyline(
+            &[
+                Point::new(0.0, 0.0),
+                Point::new(10.0, 0.0),
+                Point::new(10.0, 10.0),
+                Point::new(0.0, 10.0),
+                Point::new(0.0, 0.0),
+            ],
+            false,
+        );
+        let mut d = Document::new();
+        let l = d.layer_for_color(Color::BLACK, 1000, 500);
+        d.layer_mut(l).unwrap().mode = LayerMode::Fill;
+        d.layer_mut(l).unwrap().fill.lines_per_mm = 1.0;
+        let id = d
+            .add_object(
+                l,
+                ObjectKind::Shape {
+                    paths: vec![loop_.clone()],
+                },
+            )
+            .unwrap();
+        // an imported open path is closed and filled, as LaserGRBL does
+        assert!(!layer_filling(&d, &d.layers[0]).unwrap().is_empty());
+        // the same stroke in a text: no filling, engraved once as a line
+        d.object_mut(id).unwrap().text = Some(TextSpec::new("O", 10.0, "Relief SingleLine"));
+        assert!(layer_filling(&d, &d.layers[0]).unwrap().is_empty());
+        let lines = plan_vectors(&d, &PlanOptions::default()).unwrap();
+        let stroke = ["G1X10F1000", "Y10", "X0", "Y0"];
+        assert_eq!(lines.windows(4).filter(|w| *w == stroke).count(), 1, "{lines:#?}");
+        assert_eq!(lines.len(), 10, "nothing else: {lines:#?}");
+        // closed paths of a text (outline fonts) are filled
+        d.object_mut(id).unwrap().kind = ObjectKind::Shape {
+            paths: vec![square(0.0)],
+        };
+        assert!(!layer_filling(&d, &d.layers[0]).unwrap().is_empty());
+        // fill and line: the stroke once
+        d.object_mut(id).unwrap().kind = ObjectKind::Shape { paths: vec![loop_] };
+        d.layer_mut(l).unwrap().mode = LayerMode::FillAndLine;
+        let lines = plan_vectors(&d, &PlanOptions::default()).unwrap();
+        assert_eq!(lines.windows(4).filter(|w| *w == stroke).count(), 1, "{lines:#?}");
+        assert_eq!(lines.len(), 10, "nothing else: {lines:#?}");
     }
 
     #[test]

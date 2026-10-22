@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Camera, type CameraState } from '../canvas/camera';
+import { decodeToolpath } from '../canvas/toolpath';
+import type { PathBatch } from '../canvas/webgl2';
 import { FakeService } from '../dev/fake-service';
 import type { Tool } from '../gen/api';
 import { documentSummary, type DocumentSummary } from '../state/document.svelte';
@@ -12,14 +14,18 @@ async function setup(tool: Tool = 'select') {
   const service = new FakeService();
   const read = async () => documentSummary(await service.dispatch('session.snapshot', {}));
   let summary: DocumentSummary = await read();
+  let geometry: PathBatch | null = null;
   const refresh = async () => {
     summary = await read();
+    geometry = decodeToolpath(await service.documentGeometry());
   };
+  await refresh();
   const cam: CameraState = Camera.fitted({ x: 0, y: 0, width: 200, height: 100 }, 800, 400, 0);
   const host = {
     doc: () => summary,
     tool: () => tool,
     camera: () => cam,
+    geometry: () => geometry,
     coarse: () => false,
     service,
     run: async (f: () => Promise<unknown>) => {
@@ -62,6 +68,19 @@ describe('DesignEditor', () => {
     await service.dispatch('document.update_layer', { id: s.layers[0]!.id, visible: false });
     await refresh();
     expect(editor.hitTest(25, 15)).toBeNull();
+  });
+
+  it('picks by the lines first, then the smallest object around the point', async () => {
+    const { editor, add } = await setup();
+    const inner = await add(40, 20, 20, 10);
+    const frame = await add(0, 0, 100, 50); // drawn later, on top
+    expect(editor.hitTest(50, 25)).toBe(String(inner)); // inside both: the smaller
+    expect(editor.hitTest(40.5, 25)).toBe(String(inner)); // on its line, under the frame's bounds
+    expect(editor.hitTest(10, 25)).toBe(String(frame)); // inside the frame only
+    expect(editor.hitTest(0.5, 25)).toBe(String(frame)); // on the frame's line
+    // two lines at the point: the topmost
+    const twin = await add(40, 20, 20, 10);
+    expect(editor.hitTest(40.5, 25)).toBe(String(twin));
   });
 
   it('click, shift-click and marquee selection', async () => {

@@ -95,7 +95,8 @@ the canvas, Shift+Enter starts a new line ([design-mode.md](design-mode.md)).
 ## Limits
 
 - One style per text (no bold word inside a sentence yet: [roadmap](../roadmap.md)).
-- Weld and stencil are for outline fonts; a single-line font has no area.
+- Weld and stencil are for outline fonts; a single-line font has no area. On a
+  filling layer its strokes are engraved as lines, not filled ([planner.md](planner.md)).
 - Variable fonts use their default instance; colour fonts their outlines.
 - A text on a path is laid out with each letter upright on the path at its
   middle (letters do not bend).

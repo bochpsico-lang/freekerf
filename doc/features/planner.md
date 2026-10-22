@@ -10,7 +10,9 @@ file is the same, line for line, as LaserGRBL's (`conformance` importer goldens)
    layers, then cut layers; user order inside each group; `ignore` layers skipped.
 2. For each layer and each of its passes: a comment `(Layer #RRGGBB Mode pass i/n)`,
    the layer's feed and power, the **filling** (when the mode has one), then the
-   **outlines** of its objects (when the mode has them), in drawing order.
+   **outlines** of its objects (when the mode has them), in drawing order. On a
+   filling layer without outlines (`Fill`), the strokes of texts in single-line
+   fonts are still engraved, as lines.
 
 ## Fillings
 
@@ -20,6 +22,12 @@ joined, and the hatch pattern of the layer (`freekerf-geometry::hatch`: lines,
 grids, crosses, squares, zig-zag, Hilbert, inset) is generated with one line of
 margin and clipped with the even-odd rule (nested shapes are holes). Lines are
 ordered nearest-neighbour from the origin, in blocks of 2048.
+
+The open strokes of texts (single-line fonts: a text keeps every stroke open,
+also an O that comes back to its start) are left out of the filling and engraved
+as lines; closing them would fill the inside of an S or an e. Imported open paths
+are still closed and filled, as LaserGRBL does (it has no editable text). Closed
+paths of a text (outline fonts, an outline around single-line strokes) are filled.
 
 ## G-code writer
 

@@ -25,8 +25,9 @@
 //! `power` is the index of the object's layer in the layer list, the command index
 //! is the index of the object in drawing order, the command count is the number of
 //! objects; objects on hidden layers are left out, images are drawn as their frame,
-//! and filling layers add the hatch lines their job engraves (command index: the
-//! layer's first object).
+//! and filling layers add the hatch lines their job engraves (command index:
+//! [`NO_OBJECT`], they belong to no object; the canvas picks objects by their
+//! segments).
 
 use freekerf_document::{Document, ObjectKind};
 use freekerf_gcode::arc::ArcHelper;
@@ -143,6 +144,10 @@ pub fn encode(program: &Program, options: &AnalysisOptions) -> Vec<u8> {
     encode_segments(&segments(program, options), program.len())
 }
 
+/// Command index of the document segments that belong to no object (the hatch of
+/// filling layers).
+pub const NO_OBJECT: u32 = u32::MAX;
+
 /// The drawable segments of a document (see the module documentation).
 #[must_use]
 #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)] // mm fit f32; indexes fit u32
@@ -191,9 +196,9 @@ pub fn document_segments(doc: &Document) -> Vec<Segment> {
         if !layer.visible || !layer.mode.has_fill() {
             continue;
         }
-        let Some(first) = doc.objects.iter().position(|o| o.layer == layer.id) else {
+        if !doc.objects.iter().any(|o| o.layer == layer.id) {
             continue;
-        };
+        }
         // a filling that cannot be computed is only missing from the drawing; the
         // job reports the error
         for line in freekerf_planner::vector::layer_filling(doc, layer).unwrap_or_default() {
@@ -202,7 +207,7 @@ pub fn document_segments(doc: &Document) -> Vec<Segment> {
                     from: f(w[0]),
                     to: f(w[1]),
                     power: index as f32,
-                    command: first as u32,
+                    command: NO_OBJECT,
                 });
             }
         }
@@ -348,7 +353,7 @@ mod tests {
         assert!(segs.len() > 4, "{}", segs.len());
         let b = d.objects[0].bounds();
         for s in &segs[4..] {
-            assert!(s.power == 0.0 && s.command == 0);
+            assert!(s.power == 0.0 && s.command == NO_OBJECT);
             for [x, y] in [s.from, s.to] {
                 assert!(f64::from(x) >= b.min_x - 1e-3 && f64::from(x) <= b.max_x + 1e-3);
                 assert!(f64::from(y) >= b.min_y - 1e-3 && f64::from(y) <= b.max_y + 1e-3);

@@ -497,6 +497,11 @@ pub fn layout(spec: &TextSpec, fonts: &Fonts) -> Result<Vec<Path>, TextError> {
 
     if single {
         out.extend(decorations);
+        // strokes, also those that come back to their start (an O): the laser draws
+        // them once, a filling layer engraves them as lines (freekerf-planner)
+        for p in &mut out {
+            p.closed = false;
+        }
         if let Some(d) = spec.outline_mm {
             let strokes: Vec<Vec<Point>> = out.iter().map(|p| p.to_polyline(POLYGON_TOLERANCE_MM)).collect();
             let around =
@@ -635,6 +640,11 @@ mod tests {
     fn styles_of_single_line_fonts() {
         let fonts = Fonts::builtin();
         let plain = layout(&spec("H", DEFAULT_FONT), &fonts).unwrap();
+        // strokes stay open, also those that close (a filling layer engraves them)
+        for family in ["Hershey Sans", "EMS Tech", DEFAULT_FONT, LEGACY_FONT] {
+            let o = layout(&spec("Oo08", family), &fonts).unwrap();
+            assert!(!o.is_empty() && o.iter().all(|p| !p.closed), "{family}");
+        }
         let mut s = spec("H", DEFAULT_FONT);
         s.bold = true;
         assert_eq!(layout(&s, &fonts).unwrap().len(), plain.len() * 2);

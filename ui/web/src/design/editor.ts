@@ -7,6 +7,8 @@
 import { Camera, type CameraState, type Rect } from '../canvas/camera';
 import type { DragMods, Handle } from '../canvas/interaction';
 import type { OverlayScene } from '../canvas/overlay';
+import { SEGMENT_BYTES } from '../canvas/toolpath';
+import type { PathBatch } from '../canvas/webgl2';
 import type { ObjectSummary, Tool, TransformOp } from '../gen/api';
 import type { AppService } from '../service';
 import type { DocumentSummary } from '../state/document.svelte';
@@ -31,6 +33,11 @@ export interface EditorHost {
   doc(): DocumentSummary | null;
   tool(): Tool;
   camera(): CameraState | null;
+  /**
+   * The drawn geometry (`documentGeometry`: a segment's command index is its
+   * object's index), to pick objects by their lines; without it, by their bounds.
+   */
+  geometry?(): PathBatch | null;
   /** Coarse pointer (touch): bigger handles. */
   coarse(): boolean;
   service: AppService;
@@ -89,17 +96,35 @@ export class DesignEditor {
     };
   }
 
-  /** The topmost object at a world point (bounds plus a few pixels). */
+  /**
+   * The object at a world point: the topmost one with a line within a few pixels;
+   * else, among those whose bounds hold the point, the smallest (a text inside a
+   * frame, a text on a circle's path, a closed shape clicked inside).
+   */
   hitTest = (wx: number, wy: number): string | null => {
     const cam = this.host.camera();
     const tol = cam ? PICK_PX / cam.scale : 0;
-    const objects = this.pickable();
-    for (let i = objects.length - 1; i >= 0; i--) {
-      const o = objects[i]!;
+    const d = this.host.doc();
+    if (!d) return null;
+    const visible = new Set(d.layers.filter((l) => l.visible).map((l) => l.id));
+    // drawing order index -> object, for those whose bounds (plus the tolerance) hold the point
+    const under = new Map<number, ObjectSummary>();
+    d.objects.forEach((o, i) => {
+      if (!o.bounds || !visible.has(o.layer)) return;
+      const [x0, y0, x1, y1] = o.bounds;
+      if (wx >= x0 - tol && wx <= x1 + tol && wy >= y0 - tol && wy <= y1 + tol) under.set(i, o);
+    });
+    if (!under.size) return null;
+    const near = linesNear(this.host.geometry?.() ?? null, under, wx, wy, tol);
+    if (near !== null) return String(under.get(near)!.id);
+    let best: ObjectSummary | null = null;
+    let bestArea = Infinity;
+    for (const o of [...under.values()].reverse()) {
       const [x0, y0, x1, y1] = o.bounds!;
-      if (wx >= x0 - tol && wx <= x1 + tol && wy >= y0 - tol && wy <= y1 + tol) return String(o.id);
+      const area = (x1 - x0) * (y1 - y0);
+      if (area < bestArea) [best, bestArea] = [o, area];
     }
-    return null;
+    return best ? String(best.id) : null;
   };
 
   select = (id: string | null, additive: boolean, keepIfSelected = false): void => {
@@ -231,6 +256,43 @@ export class DesignEditor {
     const cam = this.host.camera();
     return cam ? Camera.toWorld(cam, sx, sy) : null;
   }
+}
+
+/** Where a segment's object index is, in its record. */
+const COMMAND_AT = 20;
+
+/** The topmost of `objects` (by drawing order index) with a segment within `tol` of the point. */
+function linesNear(
+  batch: PathBatch | null,
+  objects: Map<number, unknown>,
+  x: number,
+  y: number,
+  tol: number,
+): number | null {
+  if (!batch) return null;
+  const v = batch.segments;
+  let top: number | null = null;
+  for (let i = 0; i < batch.segmentCount; i++) {
+    const o = i * SEGMENT_BYTES;
+    const index = v.getUint32(o + COMMAND_AT, true);
+    if ((top !== null && index <= top) || !objects.has(index)) continue;
+    const [x0, y0, x1, y1] = [0, 4, 8, 12].map((k) => v.getFloat32(o + k, true)) as [
+      number,
+      number,
+      number,
+      number,
+    ];
+    if (distanceToSegment(x, y, x0, y0, x1, y1) <= tol) top = index;
+  }
+  return top;
+}
+
+function distanceToSegment(px: number, py: number, x0: number, y0: number, x1: number, y1: number): number {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 > 0 ? Math.max(0, Math.min(1, ((px - x0) * dx + (py - y0) * dy) / len2)) : 0;
+  return Math.hypot(px - (x0 + t * dx), py - (y0 + t * dy));
 }
 
 function isIdentity(op: TransformOp): boolean {

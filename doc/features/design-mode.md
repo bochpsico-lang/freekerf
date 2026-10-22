@@ -38,7 +38,7 @@ in the document geometry).
 
 | Gesture | Effect |
 | --- | --- |
-| Click / tap an object | select it (topmost on a visible layer, bounds + 4 px) |
+| Click / tap an object | select it, on a visible layer: the topmost whose lines pass within 4 px; else the smallest whose bounds hold the point (a text inside a frame or on a circle's path, a closed shape clicked inside). The lines come from the document geometry (hatch lines belong to no object) |
 | Shift/Ctrl + click | toggle it in the selection |
 | Click on empty space | clear the selection |
 | Drag on empty space | window (left→right: inside) or crossing (right→left: touching) selection |

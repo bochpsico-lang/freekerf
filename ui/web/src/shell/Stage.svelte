@@ -32,6 +32,7 @@
         doc: () => doc.summary,
         tool: () => view.tool,
         camera: () => cam,
+        geometry: () => doc.paths,
         coarse: () => env.input === 'touch',
         service: doc.service,
         run,
