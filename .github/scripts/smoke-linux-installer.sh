@@ -20,17 +20,21 @@ fail() {
   exit 1
 }
 
-# xvfb-run and what a desktop session usually has (fonts, Mesa for WebKit's EGL)
+# xvfb-run and what any desktop has and AppImages leave out on purpose (their
+# excludelist: fontconfig, FreeType, HarfBuzz, X11/XCB, Mesa's GL/EGL/GBM)
 install_x() {
   if command -v xvfb-run >/dev/null && command -v pgrep >/dev/null; then return; fi
   log "installing Xvfb"
   if command -v apt-get >/dev/null; then
     apt-get update -qq
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-      xvfb xauth procps fonts-dejavu-core libgl1-mesa-dri ca-certificates >/dev/null
+      xvfb xauth procps ca-certificates fonts-dejavu-core fontconfig libfontconfig1 \
+      libfreetype6 libharfbuzz0b libx11-6 libx11-xcb1 libxcb1 libegl1 libgl1 libgl1-mesa-dri \
+      libgbm1 libdrm2 >/dev/null
   elif command -v dnf >/dev/null; then
     dnf install -y -q xorg-x11-server-Xvfb /usr/bin/xvfb-run xauth procps-ng util-linux \
-      dejavu-sans-fonts mesa-dri-drivers mesa-libEGL mesa-libgbm >/dev/null
+      dejavu-sans-fonts fontconfig freetype harfbuzz libX11 libX11-xcb libxcb \
+      mesa-dri-drivers mesa-libEGL mesa-libGL mesa-libgbm libdrm >/dev/null
   else
     fail "no apt-get or dnf to install Xvfb"
   fi
