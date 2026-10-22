@@ -190,8 +190,10 @@ must exist whenever the desktop crate builds with it. `bundle.macOS` in
 
 - **First start**: the app is not notarized (no Apple Developer ID yet, see the
   roadmap). Drag `FreeKerf.app` to Applications and open it; macOS refuses it the
-  first time. Open *System Settings → Privacy & Security*, choose *Open Anyway* for
-  FreeKerf and confirm. Or, in a terminal:
+  first time (*"FreeKerf" Not Opened*: choose *Done*). Open *System Settings →
+  Privacy & Security*, choose *Open Anyway* next to "FreeKerf" was blocked, choose
+  *Open Anyway* again and enter an administrator's name and password (macOS 26).
+  Later starts open normally, and so does the bundled CLI. Or, in a terminal:
   `xattr -dr com.apple.quarantine /Applications/FreeKerf.app`.
 - **Serial ports** are `/dev/cu.*` and need no group membership.
 - **MCP agents** run `/Applications/FreeKerf.app/Contents/MacOS/freekerf mcp`
