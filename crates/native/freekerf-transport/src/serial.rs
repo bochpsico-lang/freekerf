@@ -50,6 +50,12 @@ pub struct PortInfo {
 /// The ports are never opened: opening one toggles DTR, which resets many boards.
 #[must_use]
 pub fn available_ports() -> Vec<PortInfo> {
+    // serialport (built without libudev) scans /sys/class/tty and panics when it is
+    // missing (a chroot or a container without /sys): no ports there
+    #[cfg(target_os = "linux")]
+    if !Path::new("/sys/class/tty").is_dir() {
+        return Vec::new();
+    }
     serialport::available_ports()
         .map(|v| {
             v.into_iter()

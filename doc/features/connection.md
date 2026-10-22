@@ -54,8 +54,9 @@ says so before and when they try:
   command to copy: `sudo usermod -aG <group> $USER` (`dialout` when the group is not
   known). Being in the group takes effect at the next login.
 
-In a Flatpak the sandbox has `--device=all` and reads `/run/udev` to enumerate
-ports. The kernel still checks the user's real groups, so `access` is right; but
+In a Flatpak the sandbox has `--device=all` (the ports) and `/run/udev`;
+`serialport` is built without libudev and lists ports from `/sys/class/tty` (no
+ports, instead of its panic, where `/sys` is missing). The kernel still checks the user's real groups, so `access` is right; but
 the device's group is outside the sandbox's user namespace and shows as the
 overflow gid 65534 (`nogroup`), which is reported as unknown: the warning then
 says `dialout`.

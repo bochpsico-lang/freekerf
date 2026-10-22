@@ -130,7 +130,8 @@ fails the MSI build.
   in `ci.yml` (`lint`) on every pull request, so a dependency change that forgets
   them fails there, and again in the `flatpak-test` job of `release.yml`.
   Permissions: `--share=ipc --socket=wayland --socket=fallback-x11 --device=all`
-  (serial ports and the GPU) `--filesystem=/run/udev:ro` (port enumeration).
+  (serial ports and the GPU) `--filesystem=/run/udev:ro` (udev's port database; the port list itself comes
+  from `/sys/class/tty`).
 
 ### Building them locally
 

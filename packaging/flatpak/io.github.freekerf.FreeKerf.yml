@@ -19,7 +19,8 @@ finish-args:
   - --socket=fallback-x11
   # serial ports (/dev/ttyUSB*, /dev/ttyACM*) and the GPU (WebKit)
   - --device=all
-  # serialport enumerates the ports through udev
+  # udev's port database, for tools that read it; serialport itself (built without
+  # libudev) scans /sys/class/tty, which every sandbox has
   - --filesystem=/run/udev:ro
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node24/bin

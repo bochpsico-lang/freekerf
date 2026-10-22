@@ -20,8 +20,9 @@ fail() {
   exit 1
 }
 
-# xvfb-run and what any desktop has and AppImages leave out on purpose (their
-# excludelist: fontconfig, FreeType, HarfBuzz, X11/XCB, Mesa's GL/EGL/GBM)
+# xvfb-run and the libraries the AppImage takes from the system, as any desktop has
+# them (the NEEDED entries of its ELF files that it does not ship: fontconfig,
+# FreeType, HarfBuzz, FriBidi, expat, X11/XCB, Wayland, Mesa's GL/EGL/GBM, gmp...)
 install_x() {
   if command -v xvfb-run >/dev/null && command -v pgrep >/dev/null; then return; fi
   log "installing Xvfb"
@@ -29,12 +30,14 @@ install_x() {
     apt-get update -qq
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
       xvfb xauth procps ca-certificates fonts-dejavu-core fontconfig libfontconfig1 \
-      libfreetype6 libharfbuzz0b libx11-6 libx11-xcb1 libxcb1 libegl1 libgl1 libgl1-mesa-dri \
-      libgbm1 libdrm2 >/dev/null
+      libfreetype6 libharfbuzz0b libfribidi0 libexpat1 libx11-6 libx11-xcb1 libxcb1 \
+      libwayland-client0 libegl1 libgl1 libgles2 libgl1-mesa-dri libgbm1 libdrm2 libgmp10 \
+      libgpg-error0 libcom-err2 zlib1g >/dev/null
   elif command -v dnf >/dev/null; then
     dnf install -y -q xorg-x11-server-Xvfb /usr/bin/xvfb-run xauth procps-ng util-linux \
-      dejavu-sans-fonts fontconfig freetype harfbuzz libX11 libX11-xcb libxcb \
-      mesa-dri-drivers mesa-libEGL mesa-libGL mesa-libgbm libdrm >/dev/null
+      dejavu-sans-fonts fontconfig freetype harfbuzz fribidi expat libX11 libX11-xcb libxcb \
+      libwayland-client mesa-dri-drivers mesa-libEGL mesa-libGL libglvnd-gles mesa-libgbm libdrm gmp \
+      libgpg-error libcom_err zlib-ng-compat >/dev/null
   else
     fail "no apt-get or dnf to install Xvfb"
   fi
