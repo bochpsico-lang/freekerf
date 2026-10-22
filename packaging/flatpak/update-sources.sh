@@ -2,8 +2,8 @@
 # Regenerates the offline sources of the Flatpak build from the lock files:
 #   cargo-sources.json  from Cargo.lock              (flatpak-cargo-generator)
 #   node-sources.json   from ui/web/package-lock.json (flatpak-node-generator)
-# Run it after any change to either lock file and commit the result; the Flatpak
-# job fails when they are stale (doc/features/desktop-app.md "Releases").
+# Run it after any change to either lock file and commit the result; the flatpak-test
+# job of release.yml fails when they are stale (doc/features/desktop-app.md "Releases").
 #
 #   mise exec python@3.13 -- packaging/flatpak/update-sources.sh
 set -euo pipefail

@@ -2,7 +2,7 @@
 # Smoke test of a Linux package (release.yml): it installs, the app starts on a
 # fresh FREEKERF_HOME under Xvfb and is still running after 15 s, the bundled
 # `freekerf` CLI answers, and it uninstalls. Runs as root in a clean container
-# (Debian/Ubuntu or Fedora) or, for the Flatpak, in the flatpak-builder one.
+# (Debian/Ubuntu or Fedora) or, for the Flatpak, on the runner with sudo.
 #
 #   smoke-linux-installer.sh deb      <file.deb>       # apt install, run, apt remove
 #   smoke-linux-installer.sh appimage <file.AppImage>  # --appimage-extract-and-run
@@ -78,8 +78,9 @@ deb)
   still_up_then_stop
   log "apt remove $pkg"
   apt-get remove -y -qq "$pkg" >/dev/null
-  ! command -v freekerf-desktop >/dev/null || fail "freekerf-desktop still installed"
-  ! command -v freekerf >/dev/null || fail "freekerf still installed"
+  # the files, not `command -v`: bash remembers where it found them
+  test ! -e /usr/bin/freekerf-desktop || fail "freekerf-desktop still installed"
+  test ! -e /usr/bin/freekerf || fail "freekerf still installed"
   ;;
 
 appimage)

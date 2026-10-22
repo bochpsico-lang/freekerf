@@ -202,7 +202,7 @@ A change is done when its tests and docs are updated in the same PR.
 | an action the UI uses | the fake service (`ui/web/src/dev/fake-service.ts`, `fake-document.ts`): `dev.html` and the UI tests run on it |
 | a new action of tier `laser` | the guard lists in `ui/web/src/produce/fire.test.ts` ("knows the laser actions from the generated catalogue") and `crates/runtime/freekerf-service/tests/service.rs` (`laser_actions_run_only_after_a_confirmed_countdown`) |
 | visible UI behaviour (what opens, where the focus goes, shortcuts) | search `ui/web/tests/e2e/specs` for the old behaviour (when text stopped opening the Object panel, flow 5 of `design-flows.e2e.ts` broke) |
-| `Cargo.lock` or `ui/web/package-lock.json` | `packaging/flatpak/update-sources.sh` (the Flatpak's offline sources; the `flatpak` job of `release.yml` fails when they are stale) |
+| `Cargo.lock` or `ui/web/package-lock.json` | `packaging/flatpak/update-sources.sh` (the Flatpak's offline sources; the `flatpak-test` job of `release.yml` fails when they are stale) |
 | packaging (`tauri.conf.json` bundle, `packaging/`, a smoke script) | `doc/features/desktop-app.md` (Releases) |
 | the design commit (tokens, icons, fonts) | `ui/tokens/design.lock`, `cargo xtask sync-tokens` |
 | a decision | a new ADR in `doc/adr/` |

@@ -84,7 +84,7 @@ smoke-tests each one. Nothing is signed yet (roadmap).
 | MSI (WiX, every user, Program Files) and NSIS `-setup.exe` (current user, `%LOCALAPPDATA%`, no administrator rights) | `windows` | `windows-latest` | `.github/scripts/smoke-windows-installer.ps1`: silent install, the app starts on a fresh `FREEKERF_HOME` and stays up 15 s, silent uninstall |
 | `.deb` (Debian, Ubuntu; package `free-kerf`, which Tauri derives from the product name; `/usr/bin/freekerf-desktop` and the CLI `/usr/bin/freekerf`) | `linux` | `ubuntu-22.04` (its glibc is the oldest supported) | `.github/scripts/smoke-linux-installer.sh deb` in a clean `ubuntu:24.04` container: `apt install`, `freekerf --version`, the app up 15 s under Xvfb, `apt remove` |
 | AppImage (any distribution with glibc ≥ 2.35; the CLI is inside) | `linux` | `ubuntu-22.04` | `smoke-linux-installer.sh appimage` with `--appimage-extract-and-run` in `ubuntu:24.04`, and in `fedora:latest` (reported, not blocking) |
-| Flatpak bundle (`io.github.freekerf.FreeKerf`, GNOME runtime; the CLI is inside) | `flatpak` | the `ghcr.io/flathub-infra/flatpak-github-actions:gnome-51` container | `smoke-linux-installer.sh flatpak`: bundle install, the app up 15 s, `freekerf mcp` in a second sandbox attaches to it, uninstall |
+| Flatpak bundle (`io.github.freekerf.FreeKerf`, GNOME runtime; the CLI is inside) | `flatpak` (build), `flatpak-test` | the `ghcr.io/flathub-infra/flatpak-github-actions:gnome-51` container (the freedesktop SDK image: no package manager, no Xvfb), then `ubuntu-24.04` | `smoke-linux-installer.sh flatpak` on the runner: bundle install, the app up 15 s, `freekerf mcp` in a second sandbox attaches to it, uninstall |
 
 The WebView2 runtime (Windows) is installed by the installers when it is missing
 (bootstrapper, needs the internet); WebKitGTK comes from the distribution (`.deb`
@@ -125,7 +125,7 @@ fails the MSI build.
   mise exec python@3.13 -- packaging/flatpak/update-sources.sh   # then commit the two .json
   ```
 
-  The `flatpak` job runs it again and fails when the committed files differ.
+  The `flatpak-test` job runs it again and fails when the committed files differ.
   Permissions: `--share=ipc --socket=wayland --socket=fallback-x11 --device=all`
   (serial ports and the GPU) `--filesystem=/run/udev:ro` (port enumeration).
 

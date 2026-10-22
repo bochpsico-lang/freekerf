@@ -156,6 +156,8 @@ jobs:
           if-no-files-found: error
 
   flatpak:
+    # the build only: the container is the freedesktop SDK image (no package
+    # manager, no Xvfb); flatpak-test installs and runs the bundle
     runs-on: ubuntu-latest
     container:
       # keep the tag in step with runtime-version in the manifest
@@ -163,24 +165,40 @@ jobs:
       options: --privileged
     steps:
       - uses: actions/checkout@v4
-      - name: the offline sources match the lock files (packaging/flatpak/update-sources.sh)
-        run: |
-          dnf install -y -q python3 git >/dev/null
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          packaging/flatpak/update-sources.sh
-          git diff --stat --exit-code -- packaging/flatpak/
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: FreeKerf.flatpak
           manifest-path: packaging/flatpak/io.github.freekerf.FreeKerf.yml
           cache-key: flatpak-builder-${{ hashFiles('packaging/flatpak/*.json') }}
           upload-artifact: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-bundle
+          path: FreeKerf.flatpak
+          if-no-files-found: error
+
+  flatpak-test:
+    needs: [flatpak]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: the offline sources match the lock files (packaging/flatpak/update-sources.sh)
+        run: |
+          packaging/flatpak/update-sources.sh
+          git diff --stat --exit-code -- packaging/flatpak/
+      - uses: actions/download-artifact@v4
+        with:
+          name: flatpak-bundle
+      - name: Flatpak and Xvfb
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends flatpak xvfb xauth >/dev/null
       - name: the bundle installs, the app starts and stays up, the CLI attaches over MCP, it uninstalls
-        run: .github/scripts/smoke-linux-installer.sh flatpak FreeKerf.flatpak
+        run: sudo .github/scripts/smoke-linux-installer.sh flatpak FreeKerf.flatpak
       - name: checksums
         run: |
           mkdir dist
-          version=$(python3 -c "import json; print(json.load(open('apps/desktop/src-tauri/tauri.conf.json'))['version'])")
+          version=$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)
           cp FreeKerf.flatpak "dist/FreeKerf_${version}_x86_64.flatpak"
           (cd dist && sha256sum -- * > SHA256SUMS-flatpak.txt && cat SHA256SUMS-flatpak.txt)
       - uses: actions/upload-artifact@v4
@@ -192,7 +210,7 @@ jobs:
   publish:
     # a draft: a maintainer writes the notes from CHANGELOG.md and publishes it
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, linux, flatpak]
+    needs: [windows, linux, flatpak-test]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -200,6 +218,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: freekerf-*
           merge-multiple: true
       - name: draft release with the installers
         env:
