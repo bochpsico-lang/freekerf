@@ -5,6 +5,7 @@
 mode-design = Design
 mode-produce = Produce
 mode-narrowNote = Editing is available on screens from 820 px wide. Here you control and watch the machine.
+mode-locked = A job is running: the Design mode opens again when it ends or is stopped.
 
 ## estop
 estop = STOP
@@ -182,6 +183,7 @@ machine-jobOrigin-current = Current position
 machine-jobOrigin-user = User origin
 machine-anchor = Anchor point
 machine-start = Start
+machine-job-stale = The design changed after this job was loaded: it will burn the old version.
 machine-pause = Pause
 machine-resume = Resume
 machine-stop = Stop job
@@ -204,6 +206,7 @@ job-design-go = Make the job from the design
 job-design-busy = Making the job…
 job-banner-none = No job loaded: the design is not in the job yet.
 job-banner-stale = The design changed since the job was made.
+job-banner-stale-file = The design changed since { $name } was loaded.
 job-banner-make = Make from the design
 job-banner-update = Update from the design
 machine-elapsed = Elapsed
@@ -236,6 +239,10 @@ preflight-fire = Fire laser
 preflight-wait = Fire in { $s } s
 preflight-cancel = Cancel
 preflight-note = You can pause at any time with Esc or stop everything with STOP.
+preflight-stale = The design changed after this job was made: it is not what the design shows now.
+preflight-stale-file = The design changed after { $name } was loaded.
+preflight-stale-accept = Burn this out-of-date job anyway
+preflight-stale-accept-file = Burn { $name } anyway
 
 ## alarm
 alarm-title = Alarm { $n }

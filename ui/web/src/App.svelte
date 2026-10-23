@@ -98,6 +98,14 @@
 
   $effect(() => setLocale(settings.ui.language));
 
+  // the narrow layout shows Produce: the view says so too (its panels, laser requests)
+  $effect(() => {
+    if (env.layout === 'narrow' && view.state && view.mode === 'design')
+      void run(() => service.dispatch('view.set_mode', { mode: 'produce' }));
+  });
+
+  const toProduce = () => run(() => service.dispatch('view.set_mode', { mode: 'produce' }));
+
   // the first run opens the welcome by itself (once; closing it records it)
   let welcomeOffered = false;
   $effect(() => {
@@ -132,15 +140,21 @@
         if (status === 'Hold' || status === 'Door') void run(() => service.dispatch('machine.resume', {}));
         else if (machine.visual === 'run') void service.dispatch('machine.feed_hold', {});
         return;
+      // a job starts (and is framed) only in front of its preview: Design goes there first
       case 'start':
-        if (machine.visual === 'idle' && machine.state?.program)
+        if (mode === 'design') void toProduce();
+        else if (machine.visual === 'idle' && machine.state?.program)
           void laser({ action: 'job.run', params: {} });
         return;
       case 'frame':
-        if (machine.visual === 'idle') void run(() => service.dispatch('job.frame', {}));
+        if (mode === 'design') void toProduce();
+        else if (machine.visual === 'idle') void run(() => service.dispatch('job.frame', {}));
         return;
       case 'mode-design':
-        if (env.layout !== 'narrow') void run(() => service.dispatch('view.set_mode', { mode: 'design' }));
+        if (view.state?.produce_locked)
+          void run(() => service.dispatch('view.toast', { level: 'info', message: 'mode-locked' }));
+        else if (env.layout !== 'narrow')
+          void run(() => service.dispatch('view.set_mode', { mode: 'design' }));
         return;
       case 'mode-produce':
         void run(() => service.dispatch('view.set_mode', { mode: 'produce' }));

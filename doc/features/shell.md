@@ -17,9 +17,10 @@ scripts, agents and tests read and drive the same screen.
 
 | Field | Meaning | Actions |
 | --- | --- | --- |
-| `mode` | `design` (default) or `produce` (Produce opens the Machine panel) | `view.set_mode` |
+| `mode` | `design` (default) or `produce` (Produce opens the Machine panel; Design leaves the machine and console panels for the inspector) | `view.set_mode` |
+| `produce_locked` | a job runs or is paused: `view.set_mode design` is refused (set by the service) | — |
 | `tool` | Design mode tool: `select`, `rect`, `ellipse`, `text` | `view.set_tool` |
-| `panel`, `drawer_open` | active dock panel; drawer open in the medium layout | `view.open_panel {name}`, `view.close_panel {name}` |
+| `panel`, `drawer_open` | active dock panel (`layers` and `object` only in Design, `machine` and `console` only in Produce: opening one switches to its mode); drawer open in the medium layout | `view.open_panel {name}`, `view.close_panel {name}` |
 | `dialogs` | open dialogs, bottom to top (closing the fire confirmation drops its request) | `view.open_dialog {name}`, `view.close_dialog {name?}` |
 | `toasts` | at most 3 messages (i18n id + args) | `view.toast`, `view.dismiss_toast` |
 | `viewport` | `center` `[x, y]` (mm) and `zoom` (CSS px per mm) | `view.set_viewport` |
@@ -58,9 +59,9 @@ someone else is applied to the canvas.
 | Keys | Command |
 | --- | --- |
 | Shift+Esc | STOP (everywhere) |
-| F5 / F6 / F7 | Start (opens the fire confirmation) / pause–resume / frame |
+| F5 / F6 / F7 | Start (opens the fire confirmation) / pause–resume / frame; in the Design mode F5 and F7 only switch to Produce |
 | Esc | pause a running job; otherwise close the dialog on top |
-| Ctrl+1 / Ctrl+2 | Design / Produce |
+| Ctrl+1 / Ctrl+2 | Design (not while a job runs) / Produce |
 | + / − · F · Ctrl+0 | zoom · fit the table |
 | F1 or ? | keyboard shortcuts |
 

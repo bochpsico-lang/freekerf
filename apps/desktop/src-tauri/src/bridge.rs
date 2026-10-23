@@ -129,9 +129,10 @@ impl Bridge {
     /// (`Service::confirm_fire`). The only way the window runs a `laser` action.
     ///
     /// # Errors
-    /// No such request, countdown not over, or the action's error.
-    pub fn confirm_fire(&self, id: u64) -> Result<Value, ActionError> {
-        self.service.confirm_fire(id)
+    /// No such request, countdown not over, an out-of-date job not accepted, or
+    /// the action's error.
+    pub fn confirm_fire(&self, id: u64, accept_stale: bool) -> Result<Value, ActionError> {
+        self.service.confirm_fire(id, accept_stale)
     }
 
     /// Every action spec.
@@ -312,7 +313,7 @@ mod tests {
                 serde_json::json!({"action": "machine.send", "params": {"line": "M3"}}),
             )
             .unwrap();
-        let e = b.confirm_fire(r["id"].as_u64().unwrap()).unwrap_err();
+        let e = b.confirm_fire(r["id"].as_u64().unwrap(), false).unwrap_err();
         assert!(matches!(e, ActionError::Refused(_)), "{e:?}");
     }
 

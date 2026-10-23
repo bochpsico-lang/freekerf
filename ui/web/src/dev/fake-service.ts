@@ -9,6 +9,7 @@ import type {
   AutomationStatus,
   CallerKind,
   GrantEntry,
+  JobSource,
   GrantScope,
   LogEntry,
   EventMessage,
@@ -93,7 +94,7 @@ export class FakeService implements AppService {
   view: ViewState = {
     mode: 'design',
     tool: 'select',
-    panel: 'machine',
+    panel: 'object',
     drawer_open: false,
     dialogs: [],
     toasts: [],
@@ -101,6 +102,7 @@ export class FakeService implements AppService {
     fit_request: 0,
     focus: null,
     fire_request: null,
+    produce_locked: false,
   };
   settings: Settings = {
     version: 1,
@@ -160,6 +162,7 @@ export class FakeService implements AppService {
         drawing_range: [0, 0, 50, 50],
         quadrant: 'Q1',
         from_document: null,
+        document_revision: this.document.revisionOfDocument,
       };
       this.emit({ event: 'program_loaded' });
       return this.state.program;
@@ -181,11 +184,8 @@ export class FakeService implements AppService {
         estimated_ms: n * 250,
         drawing_range: [0, 0, 50, 50],
         quadrant: 'Q1',
-        from_document: {
-          document_revision: this.document.revisionOfDocument,
-          start: start ?? 'absolute',
-          anchor: anchor ?? 'bottom_left',
-        },
+        from_document: { start: start ?? 'absolute', anchor: anchor ?? 'bottom_left' },
+        document_revision: this.document.revisionOfDocument,
       };
       this.emit({ event: 'program_loaded' });
       return this.state.program;
@@ -196,11 +196,16 @@ export class FakeService implements AppService {
       this.automationLog.filter((e) => e.seq > ((p as Params<'automation.log'>)?.after ?? 0)),
     'automation.grants': () => structuredClone(this.grants),
     'session.snapshot': () => this.document.snapshot(structuredClone(this.view), this.revision),
-    'view.set_mode': (p) =>
-      this.changeView((v) => {
-        v.mode = (p as Params<'view.set_mode'>).mode;
-        if (v.mode === 'produce') v.panel = 'machine';
-      }),
+    'view.set_mode': (p) => {
+      const mode = (p as Params<'view.set_mode'>).mode;
+      if (mode === 'design' && this.view.produce_locked)
+        throw new ActionFailure('view.set_mode', { kind: 'refused', message: 'a job is running' });
+      return this.changeView((v) => {
+        v.mode = mode;
+        if (mode === 'produce') v.panel = 'machine';
+        else if (v.panel === 'machine' || v.panel === 'console') v.panel = 'object';
+      });
+    },
     'view.set_tool': (p) =>
       this.changeView((v) => {
         v.tool = (p as Params<'view.set_tool'>).tool;
@@ -208,6 +213,8 @@ export class FakeService implements AppService {
     'view.open_panel': (p) =>
       this.changeView((v) => {
         v.panel = (p as Params<'view.open_panel'>).name;
+        if (v.panel === 'machine' || v.panel === 'console') v.mode = 'produce';
+        else if (v.mode === 'produce') v.mode = 'design';
         v.drawer_open = true;
       }),
     'view.close_panel': (p) =>
@@ -277,7 +284,7 @@ export class FakeService implements AppService {
     'machine.resume': () => null,
     'machine.system_command': () => null,
     'job.frame': () => null,
-    'job.abort': () => null,
+    'job.abort': () => this.endJob(),
     'fire.request': (p) => {
       const { action, params } = p as Params<'fire.request'>;
       if (ACTION_TIERS[action as ActionName] !== 'laser') {
@@ -291,11 +298,16 @@ export class FakeService implements AppService {
         action,
         params: params ?? {},
         requested_by: 'desktop',
-        summary: { program: this.state.program?.name ?? null, lines: this.state.program?.lines ?? null },
+        summary: {
+          program: this.state.program?.name ?? null,
+          lines: this.state.program?.lines ?? null,
+          stale: action === 'job.run' ? this.staleJob() : null,
+        },
         countdown_ms: 3000,
       };
       this.fireAt = this.now;
       this.changeView((v) => {
+        v.mode = 'produce';
         v.fire_request = request;
         v.dialogs = [...v.dialogs.filter((d) => d !== 'fire_confirmation'), 'fire_confirmation'];
       });
@@ -312,6 +324,7 @@ export class FakeService implements AppService {
       return null;
     },
     'machine.stop': () => {
+      this.endJob();
       if (this.state.machine.connected) this.setStatus('Idle', true);
       return null;
     },
@@ -349,16 +362,56 @@ export class FakeService implements AppService {
   /** Laser actions the fake ran after a confirmation (tests). */
   readonly fired: { action: string; params: unknown }[] = [];
 
-  async confirmFire(id: number): Promise<unknown> {
+  async confirmFire(id: number, options?: { acceptStale?: boolean }): Promise<unknown> {
     const r = this.view.fire_request;
     if (!r || r.id !== id)
       throw new ActionFailure('fire', { kind: 'refused', message: 'no pending laser request with this id' });
+    const stale = r.action === 'job.run' ? this.staleJob() : null;
+    if (stale && stale !== r.summary.stale) {
+      this.clearFire();
+      throw new ActionFailure('fire', { kind: 'refused', message: 'the design changed: ask again' });
+    }
+    if (stale && !options?.acceptStale)
+      throw new ActionFailure('fire', { kind: 'refused', message: 'the job is out of date' });
     if (this.now - this.fireAt < r.countdown_ms) {
       throw new ActionFailure('fire', { kind: 'refused', message: 'wait before confirming' });
     }
     this.clearFire();
     this.fired.push({ action: r.action, params: r.params });
+    if (r.action === 'job.run' && this.state.machine.connected) this.startJob();
     return null;
+  }
+
+  /** The loaded job when the design changed after it was loaded: where it came from. */
+  private staleJob(): JobSource | null {
+    const p = this.state.program;
+    if (!p || !this.document.objectCount || p.document_revision === this.document.revisionOfDocument)
+      return null;
+    return p.from_document ? 'design' : 'file';
+  }
+
+  /** A job "runs" until STOP or abort: in program, the view kept in Produce. */
+  startJob(): void {
+    this.state.machine.in_program = true;
+    this.setStatus('Run', true);
+    this.emit({ event: 'host', data: { JobStarted: { target: this.state.program?.lines ?? 0 } } });
+    this.changeView((v) => {
+      v.produce_locked = true;
+      v.mode = 'produce';
+    });
+  }
+
+  private endJob(): null {
+    if (!this.state.machine.in_program) return null;
+    this.state.machine.in_program = false;
+    this.setStatus('Idle', true);
+    this.emit({
+      event: 'host',
+      data: { JobEnded: { lines: this.state.program?.lines ?? 0, errors: 0, time_ms: 0 } },
+    });
+    return this.changeView((v) => {
+      v.produce_locked = false;
+    });
   }
 
   private clearFire(): null {

@@ -420,9 +420,10 @@ fn document_session_actions_and_events() {
         .unwrap();
     // the job records the document's revision and how it was placed
     let revision = s.dispatch(&user, "session.snapshot", Value::Null).unwrap()["document_revision"].clone();
+    assert_eq!(centred["document_revision"], revision);
     assert_eq!(
         centred["from_document"],
-        json!({"document_revision": revision, "start": "user_origin", "anchor": "center"})
+        json!({"start": "user_origin", "anchor": "center"})
     );
     assert_eq!(
         s.dispatch(&user, "state.get", Value::Null).unwrap()["program"]["from_document"]["anchor"],
@@ -654,15 +655,18 @@ fn laser_actions_run_only_after_a_confirmed_countdown() {
     assert_eq!(view["fire_request"]["id"], id);
     assert_eq!(view["dialogs"], json!(["fire_confirmation"]));
     // too early, wrong id: refused, nothing runs
-    assert!(matches!(s.confirm_fire(id), Err(ActionError::Refused(_))));
+    assert!(matches!(s.confirm_fire(id, false), Err(ActionError::Refused(_))));
     clock.advance(2999);
-    assert!(matches!(s.confirm_fire(id), Err(ActionError::Refused(_))));
-    assert!(matches!(s.confirm_fire(id + 1), Err(ActionError::Refused(_))));
+    assert!(matches!(s.confirm_fire(id, false), Err(ActionError::Refused(_))));
+    assert!(matches!(
+        s.confirm_fire(id + 1, false),
+        Err(ActionError::Refused(_))
+    ));
     assert_eq!(call(&s, "state.get", json!({}))["machine"]["in_program"], false);
     // after the countdown the person's confirmation runs it, once
     clock.advance(1);
     let events = s.subscribe();
-    s.confirm_fire(id).unwrap();
+    s.confirm_fire(id, false).unwrap();
     let end = Instant::now() + Duration::from_secs(10);
     loop {
         assert!(Instant::now() < end, "the job did not start");
@@ -672,7 +676,7 @@ fn laser_actions_run_only_after_a_confirmed_countdown() {
             break;
         }
     }
-    assert!(matches!(s.confirm_fire(id), Err(ActionError::Refused(_))));
+    assert!(matches!(s.confirm_fire(id, false), Err(ActionError::Refused(_))));
     let view = call(&s, "view.get", json!({}));
     assert!(view["fire_request"].is_null());
     assert_eq!(view["dialogs"], json!([]));
@@ -694,7 +698,7 @@ fn laser_actions_run_only_after_a_confirmed_countdown() {
     s.dispatch(&reader, "fire.cancel", json!({})).unwrap();
     clock.advance(10_000);
     assert!(matches!(
-        s.confirm_fire(req["id"].as_u64().unwrap()),
+        s.confirm_fire(req["id"].as_u64().unwrap(), false),
         Err(ActionError::Refused(_))
     ));
     // closing its dialog cancels it too
@@ -708,10 +712,99 @@ fn laser_actions_run_only_after_a_confirmed_countdown() {
     call(&s, "view.close_dialog", json!({}));
     clock.advance(10_000);
     assert!(matches!(
-        s.confirm_fire(req["id"].as_u64().unwrap()),
+        s.confirm_fire(req["id"].as_u64().unwrap(), false),
         Err(ActionError::Refused(_))
     ));
     assert!(call(&s, "view.get", json!({}))["fire_request"].is_null());
+}
+
+fn wait_view(s: &Service, pred: impl Fn(&Value) -> bool, secs: u64) -> Value {
+    let end = Instant::now() + Duration::from_secs(secs);
+    loop {
+        let v = call(s, "view.get", Value::Null);
+        if pred(&v) {
+            return v;
+        }
+        assert!(Instant::now() < end, "view not reached: {v}");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn a_job_is_fired_from_produce_and_an_out_of_date_one_only_when_accepted() {
+    let s = connected();
+    let clock = freekerf_testkit::SimClock::new(10_000);
+    s.set_fire_clock(Arc::new(clock.clone()));
+    let window = Caller::new(CallerKind::User, "desktop", Tier::Machine);
+    let ask = || {
+        s.dispatch(
+            &window,
+            "fire.request",
+            json!({"action": "job.run", "params": {}}),
+        )
+        .unwrap()
+    };
+    let rect = json!({"shape": "rect", "x": 0, "y": 0, "width": 2, "height": 2});
+    // a file with an empty design is never out of date; asking shows Produce
+    let moves: String = (0..60).map(|i| format!("G1 X{} F600\n", (i % 2) * 2)).collect();
+    call(&s, "job.load_text", json!({"name": "long.nc", "gcode": moves}));
+    assert_eq!(call(&s, "view.get", Value::Null)["mode"], "design");
+    let req = ask();
+    assert!(req["summary"]["stale"].is_null());
+    let view = call(&s, "view.get", Value::Null);
+    assert_eq!(
+        (&view["mode"], &view["panel"]),
+        (&json!("produce"), &json!("machine"))
+    );
+    call(&s, "fire.cancel", json!({}));
+    // the design changed after the file was loaded: out of date
+    call(&s, "view.set_mode", json!({"mode": "design"}));
+    call(&s, "document.add_shape", rect.clone());
+    let req = ask();
+    assert_eq!(req["summary"]["stale"], "file");
+    let id = req["id"].as_u64().unwrap();
+    clock.advance(10_000);
+    let e = s.confirm_fire(id, false).unwrap_err();
+    assert!(matches!(e, ActionError::Refused(_)), "{e:?}");
+    // still pending: the person can accept it
+    assert_eq!(call(&s, "view.get", Value::Null)["fire_request"]["id"], id);
+    s.confirm_fire(id, true).unwrap();
+    // while it runs or is paused the view stays in Produce
+    wait_state(&s, |st| st["machine"]["status"] == "Run", 10);
+    call(&s, "machine.feed_hold", Value::Null);
+    wait_state(&s, |st| st["machine"]["status"] == "Hold", 10);
+    wait_view(&s, |v| v["produce_locked"] == true, 10);
+    let e = s
+        .dispatch(&user(), "view.set_mode", json!({"mode": "design"}))
+        .unwrap_err();
+    assert!(matches!(e, ActionError::Refused(_)), "{e:?}");
+    call(&s, "machine.stop", Value::Null);
+    wait_state(&s, |st| st["machine"]["in_program"] == false, 20);
+    wait_view(&s, |v| v["produce_locked"] == false, 20);
+    call(&s, "view.set_mode", json!({"mode": "design"}));
+    // planned from the design: up to date, then out of date after an edit
+    call(&s, "job.from_document", json!({}));
+    assert!(ask()["summary"]["stale"].is_null());
+    call(&s, "fire.cancel", json!({}));
+    call(&s, "document.add_shape", rect.clone());
+    assert_eq!(ask()["summary"]["stale"], "design");
+    call(&s, "fire.cancel", json!({}));
+    // out of date after the request: dropped, asked again
+    call(&s, "job.from_document", json!({}));
+    let id = ask()["id"].as_u64().unwrap();
+    call(&s, "document.add_shape", rect);
+    clock.advance(10_000);
+    assert!(matches!(s.confirm_fire(id, true), Err(ActionError::Refused(_))));
+    assert!(call(&s, "view.get", Value::Null)["fire_request"].is_null());
+    // resuming is not checked (it continues the job that was cut)
+    let req = s
+        .dispatch(
+            &window,
+            "fire.request",
+            json!({"action": "job.resume", "params": {}}),
+        )
+        .unwrap();
+    assert!(req["summary"]["stale"].is_null());
 }
 
 #[test]

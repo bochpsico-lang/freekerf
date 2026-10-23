@@ -25,7 +25,7 @@ for the Design mode screens until M2 lands.
 | `dispatch_background(action, params)` | the same for the slow actions only (`document.raster_preview`, `document.import_data`, `job.from_document`: `BACKGROUND_ACTIONS` in the bridge and in `ui/web/src/ipc/tauri.ts`), on a worker thread: a synchronous command runs on the main thread and blocks the window until it returns. The other actions keep `dispatch`, which runs them in the order the window sends them |
 | `catalog()` | the action specs (name, tier, parameter and result schemas) |
 | `subscribe(events)` | streams service events (`EventMessage` JSON) on a Tauri channel |
-| `confirm_fire(id)` | the Fire laser button: runs the pending laser request after its countdown ([fire-confirmation.md](fire-confirmation.md)) |
+| `confirm_fire(id, acceptStale?)` | the Fire laser button: runs the pending laser request after its countdown; `acceptStale` when the person accepted an out-of-date job ([fire-confirmation.md](fire-confirmation.md)) |
 | `preview()` | the tool path of the loaded program, raw bytes ([canvas.md](canvas.md)) |
 | `subscribe_head(frames)` | head frames, raw 24 bytes, up to 60 Hz ([canvas.md](canvas.md)) |
 | `document_geometry()` | the document's drawable geometry, raw bytes ([canvas.md](canvas.md)) |

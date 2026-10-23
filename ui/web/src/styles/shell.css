@@ -865,9 +865,6 @@ textarea {
   border-left: 0;
   border-top: 1px solid var(--fk-color-border);
 }
-[data-layout='narrow'] .dock-tabs > [data-panel='object'] {
-  display: none;
-}
 [data-layout='narrow'] .mode-switch,
 [data-layout='narrow'] .file,
 [data-layout='narrow'] #btnConnectTop .lbl,
@@ -1703,6 +1700,34 @@ select {
   border: 1px solid var(--fk-color-border);
   font-size: var(--fk-font-size-lg);
 }
+.job-stale {
+  display: flex;
+  align-items: center;
+  gap: var(--fk-space-1);
+  margin: 0;
+  color: var(--fk-color-warning);
+  font-size: var(--fk-font-size-sm);
+}
+.pre-stale {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--fk-space-2);
+  padding: var(--fk-space-3);
+  border-radius: var(--fk-radius-md);
+  border: 2px solid var(--fk-color-warning);
+  background: color-mix(in srgb, var(--fk-color-warning) 12%, var(--fk-color-surface-1));
+}
+.pre-stale-text {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--fk-space-2);
+  margin: 0;
+}
+.pre-stale-text .ico {
+  flex: none;
+  color: var(--fk-color-warning);
+}
 .preflight #btnFire {
   min-width: 220px;
   justify-content: center;
@@ -2022,9 +2047,6 @@ kbd {
 }
 [data-mode='produce'][data-layout='medium'] .dockrail,
 [data-mode='produce'][data-layout='medium'] .dock-close {
-  display: none;
-}
-[data-mode='produce'] .dock-tabs > [data-panel='object'] {
   display: none;
 }
 .bottombar .estop {

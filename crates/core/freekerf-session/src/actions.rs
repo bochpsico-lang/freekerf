@@ -17,7 +17,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::session::{Mode, Session, Snapshot, ViewState, Viewport};
-use crate::view::{Dialog, Panel, ToastLevel, Tool, ViewCommand};
+use crate::view::{Dialog, Panel, ToastLevel, Tool, ViewCommand, ViewError};
 use crate::{ActionError, NoParams, Registry, RegistryError, Tier};
 
 /// A registry context that holds a session.
@@ -39,13 +39,15 @@ fn failed(e: impl std::fmt::Display) -> ActionError {
 /// Applies a view command to the session's view; returns a new toast's id.
 ///
 /// # Errors
-/// An invalid viewport or an empty toast.
+/// An invalid viewport or an empty toast; refused: the Design mode while a job
+/// runs.
 pub fn view_cmd<C: SessionHost>(c: &C, cmd: ViewCommand) -> Result<Option<u64>, ActionError> {
     let mut s = lock(c);
     let mut v = s.view().clone();
-    let r = v
-        .apply(cmd)
-        .map_err(|e| ActionError::InvalidParams(e.to_string()))?;
+    let r = v.apply(cmd).map_err(|e| match e {
+        ViewError::ModeLocked => ActionError::Refused(e.to_string()),
+        _ => ActionError::InvalidParams(e.to_string()),
+    })?;
     s.change_view(|view| *view = v);
     Ok(r)
 }
@@ -2345,7 +2347,7 @@ pub fn register_session_actions<C: SessionHost>(r: &mut Registry<C>) -> Result<(
     )?;
     r.register(
         "view.set_mode",
-        "Switches between design and produce (produce shows the machine panel).",
+        "Switches between design and produce (produce shows the machine panel). Refused for design while a job runs or is paused.",
         Tier::Ui,
         |c: &C, p: ModeParams| view_unit(c, ViewCommand::SetMode(p.mode)),
     )?;
@@ -2357,7 +2359,7 @@ pub fn register_session_actions<C: SessionHost>(r: &mut Registry<C>) -> Result<(
     )?;
     r.register(
         "view.open_panel",
-        "Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the drawer in the medium layout).",
+        "Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the drawer in the medium layout). It switches to the panel's mode: Design for the layers and the inspector (refused while a job runs), Produce for the machine and the console.",
         Tier::Ui,
         |c: &C, p: PanelParams| view_unit(c, ViewCommand::OpenPanel(p.name)),
     )?;
@@ -3487,8 +3489,11 @@ mod tests {
         let d = |name: &str, p: Value| r.dispatch(&h, &user, name, p);
         d("view.set_mode", json!({"mode": "design"})).unwrap();
         d("view.set_tool", json!({"tool": "rect"})).unwrap();
+        // the console belongs to the Produce mode
         d("view.open_panel", json!({"name": "console"})).unwrap();
+        assert_eq!(d("view.get", Value::Null).unwrap()["mode"], "produce");
         d("view.close_panel", json!({"name": "console"})).unwrap();
+        d("view.set_mode", json!({"mode": "design"})).unwrap();
         d("view.open_panel", json!({"name": "layers"})).unwrap();
         assert!(d("view.open_panel", json!({"name": "nope"})).is_err());
         d("view.set_viewport", json!({"center": [10.0, 20.0], "zoom": 4.0})).unwrap();

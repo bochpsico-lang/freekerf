@@ -52,7 +52,7 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `document.translate` | edit | Moves objects (default: the selection) by `dx`, `dy` mm. One undo step. |
 | `document.update_layer` | edit | Changes a layer's name, mode, speed, power, passes, visibility, filling or laser mode (M3/M4). One undo step. |
 | `fire.cancel` | safety | Cancels the pending laser request (the one given, or any). Always allowed. |
-| `fire.request` | machine | Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request. |
+| `fire.request` | machine | Asks to run a laser action: it switches to the Produce mode and opens the fire confirmation (checklist and countdown); the action runs only when a person confirms on screen. Returns the pending request. |
 | `fonts.list` | read | The font families a text can use: the built-in single-line fonts first, then the installed ones. |
 | `fonts.preview` | read | A sample of a font family as SVG path data (10 mm high, Y down), for font pickers. |
 | `history.redo` | edit | Redoes the last undone change. |
@@ -99,8 +99,8 @@ Every action can be dispatched by name with JSON parameters (`host --stdio`, lat
 | `view.focus` | ui | Records which element has the keyboard focus. |
 | `view.get` | read | The view: mode, tool, panel, dialogs, toasts, viewport, focus, the pending laser request. |
 | `view.open_dialog` | ui | Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable). |
-| `view.open_panel` | ui | Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the drawer in the medium layout). |
-| `view.set_mode` | ui | Switches between design and produce (produce shows the machine panel). |
+| `view.open_panel` | ui | Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the drawer in the medium layout). It switches to the panel's mode: Design for the layers and the inspector (refused while a job runs), Produce for the machine and the console. |
+| `view.set_mode` | ui | Switches between design and produce (produce shows the machine panel). Refused for design while a job runs or is paused. |
 | `view.set_tool` | ui | Chooses the Design mode tool (select, rectangle, ellipse, text). |
 | `view.set_viewport` | ui | Centres the view on a point (mm) at a zoom (CSS pixels per mm). |
 | `view.toast` | ui | Shows a short message (at most 3 at once); returns its id. |
@@ -555,7 +555,7 @@ Cancels the pending laser request (the one given, or any). Always allowed.
 
 ### `fire.request`
 
-Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request.
+Asks to run a laser action: it switches to the Produce mode and opens the fire confirmation (checklist and countdown); the action runs only when a person confirms on screen. Returns the pending request.
 
 | Parameter | Required | Description |
 | --- | --- | --- |
@@ -908,7 +908,7 @@ Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable
 
 ### `view.open_panel`
 
-Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the drawer in the medium layout).
+Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the drawer in the medium layout). It switches to the panel's mode: Design for the layers and the inspector (refused while a job runs), Produce for the machine and the console.
 
 | Parameter | Required | Description |
 | --- | --- | --- |
@@ -916,7 +916,7 @@ Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the d
 
 ### `view.set_mode`
 
-Switches between design and produce (produce shows the machine panel).
+Switches between design and produce (produce shows the machine panel). Refused for design while a job runs or is paused.
 
 | Parameter | Required | Description |
 | --- | --- | --- |

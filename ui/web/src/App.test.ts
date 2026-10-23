@@ -98,6 +98,53 @@ describe('App shell', () => {
     await fireEvent.keyDown(window, { key: 'F1' });
     await screen.findByTestId('dialog-shortcuts');
   });
+
+  it('the machine and the console are Produce tabs, the layers and the inspector Design ones', async () => {
+    const { service } = await mountApp();
+    const tabs = () =>
+      [...screen.getByTestId('dock').querySelectorAll<HTMLElement>('[role="tab"]')].map(
+        (b) => b.dataset.panel,
+      );
+    await waitFor(() => expect(tabs()).toEqual(['layers', 'object']));
+    await service.dispatch('view.set_mode', { mode: 'produce' });
+    await waitFor(() => expect(tabs()).toEqual(['machine', 'console']));
+  });
+
+  it('F5 and F7 in Design go to Produce and start nothing', async () => {
+    const service = new FakeService();
+    await service.dispatch('machine.connect', { emulator: true });
+    await service.dispatch('job.load_text', { name: 'part.nc', gcode: 'G1 X1' });
+    const { props } = await mountApp(service);
+    await props.machine.refresh();
+    for (const key of ['F5', 'F7']) {
+      await service.dispatch('view.set_mode', { mode: 'design' });
+      await waitFor(() => expect(document.documentElement.dataset.mode).toBe('design'));
+      await fireEvent.keyDown(window, { key });
+      await waitFor(() => expect(service.view.mode).toBe('produce'));
+    }
+    const asked = service.calls.map((c) => c.action);
+    expect(asked).not.toContain('fire.request');
+    expect(asked).not.toContain('job.frame');
+    // in Produce, F5 asks for the fire confirmation
+    await waitFor(() => expect(document.documentElement.dataset.mode).toBe('produce'));
+    await fireEvent.keyDown(window, { key: 'F5' });
+    await screen.findByTestId('dialog-fire_confirmation');
+  });
+
+  it('a running job keeps the Produce mode', async () => {
+    const service = new FakeService();
+    await service.dispatch('machine.connect', { emulator: true });
+    const { props } = await mountApp(service);
+    service.startJob();
+    await props.view.refresh();
+    const design = screen.getByTestId('mode-design') as HTMLButtonElement;
+    await waitFor(() => expect(design.disabled).toBe(true));
+    await fireEvent.keyDown(window, { key: '1', ctrlKey: true });
+    await waitFor(() => expect(screen.getByTestId('toasts').textContent).toContain('A job is running'));
+    expect(service.view.mode).toBe('produce');
+    await service.dispatch('job.abort', {});
+    await waitFor(() => expect(design.disabled).toBe(false));
+  });
 });
 
 describe('layouts', () => {

@@ -2,7 +2,9 @@
   // "Ready to burn?" (design/ux.md "Segurança" 3): what will run, the bench
   // checklist (a reminder, not a lock), and "Fire laser" enabled only after the
   // countdown. The app checks the countdown again when the button is pressed
-  // (`confirm_fire`), so a hurried click or a script cannot skip it.
+  // (`confirm_fire`), so a hurried click or a script cannot skip it. A job the
+  // design changed after (`summary.stale`) runs only once the person ticks that
+  // they burn it as it is (checked again by the app), or it is updated instead.
   import { onDestroy } from 'svelte';
 
   import { app } from '../context';
@@ -10,11 +12,15 @@
   import Icon from '../lib/Icon.svelte';
   import { formatDuration } from '../lib/format';
   import DialogFrame from '../shell/DialogFrame.svelte';
+  import { designJob } from './design-job.svelte';
 
-  const { view, service, run } = app();
+  const { view, service, run, machine } = app();
   const request = $derived(view.state?.fire_request ?? null);
+  const stale = $derived(request?.summary.stale ?? null);
 
   let left = $state(0);
+  /** The person accepted burning the out-of-date job. */
+  let acceptStale = $state(false);
   let timer: ReturnType<typeof setInterval> | null = null;
   let shownId = -1;
 
@@ -22,6 +28,7 @@
     const r = request;
     if (!r || r.id === shownId) return;
     shownId = r.id;
+    acceptStale = false;
     left = Math.ceil(r.countdown_ms / 1000);
     if (timer) clearInterval(timer);
     timer = setInterval(() => {
@@ -51,12 +58,40 @@
   const cancel = () => run(() => service.dispatch('fire.cancel', { id: request?.id ?? null }));
   const fire = () => {
     const r = request;
-    if (r && left === 0) void run(() => service.confirmFire(r.id));
+    if (r && left === 0 && (!stale || acceptStale))
+      void run(() => service.confirmFire(r.id, { acceptStale: !!stale && acceptStale }));
+  };
+  /** Drops the request and plans the design again: the person looks at it first. */
+  const update = async () => {
+    const program = machine.state?.program ?? null;
+    await cancel();
+    await designJob.remake(service, run, program);
   };
 </script>
 
 <DialogFrame title={t('preflight-title')} testid="dialog-fire_confirmation" closable={false} onclose={cancel}>
   <p class="pre-sum mono" data-testid="fire-summary">{summary || request?.action || '—'}</p>
+  {#if stale}
+    <div class="pre-stale" role="alert" data-testid="fire-stale" data-source={stale}>
+      <p class="pre-stale-text">
+        <Icon name="warn" /><strong
+          >{stale === 'file'
+            ? t('preflight-stale-file', { name: request?.summary.program ?? '' })
+            : t('preflight-stale')}</strong
+        >
+      </p>
+      <button class="btn" data-testid="fire-update" disabled={designJob.busy} onclick={update}>
+        <Icon name="output" /><span>{stale === 'file' ? t('job-banner-make') : t('job-banner-update')}</span>
+      </button>
+      <label class="check"
+        ><input type="checkbox" data-testid="fire-accept-stale" bind:checked={acceptStale} /><span
+          >{stale === 'file'
+            ? t('preflight-stale-accept-file', { name: request?.summary.program ?? '' })
+            : t('preflight-stale-accept')}</span
+        ></label
+      >
+    </div>
+  {/if}
   <ul class="checklist">
     {#each ['preflight-c1', 'preflight-c2', 'preflight-c3', 'preflight-c4'] as c (c)}
       <li><label class="check"><input type="checkbox" /><span>{t(c)}</span></label></li>
@@ -69,7 +104,7 @@
       class="btn primary big"
       id="btnFire"
       data-testid="fire"
-      disabled={!request || left > 0}
+      disabled={!request || left > 0 || (!!stale && !acceptStale)}
       onclick={fire}
     >
       <Icon name="laser" /><span>{left > 0 ? t('preflight-wait', { s: left }) : t('preflight-fire')}</span>

@@ -5,6 +5,7 @@
 mode-design = Entwerfen
 mode-produce = Fertigen
 mode-narrowNote = Die Bearbeitung ist ab einer Bildschirmbreite von 820 px verfügbar. Hier steuern und überwachen Sie die Maschine.
+mode-locked = Ein Auftrag läuft: Der Entwurfsmodus ist wieder verfügbar, wenn er endet oder angehalten wird.
 
 ## estop
 estop = STOPP
@@ -182,6 +183,7 @@ machine-jobOrigin-current = Aktuelle Position
 machine-jobOrigin-user = Benutzerdefinierter Nullpunkt
 machine-anchor = Ankerpunkt
 machine-start = Starten
+machine-job-stale = Der Entwurf hat sich nach dem Laden dieses Auftrags geändert: Es wird die alte Version gelasert.
 machine-pause = Pausieren
 machine-resume = Fortsetzen
 machine-stop = Auftrag abbrechen
@@ -204,6 +206,7 @@ job-design-go = Auftrag aus dem Entwurf erstellen
 job-design-busy = Auftrag wird erstellt…
 job-banner-none = Kein Auftrag geladen: der Entwurf ist noch nicht im Auftrag.
 job-banner-stale = Der Entwurf hat sich geändert, seit der Auftrag erstellt wurde.
+job-banner-stale-file = Der Entwurf hat sich geändert, seit { $name } geladen wurde.
 job-banner-make = Aus dem Entwurf erstellen
 job-banner-update = Aus dem Entwurf aktualisieren
 machine-elapsed = Verstrichen
@@ -236,6 +239,10 @@ preflight-fire = Laser starten
 preflight-wait = Start möglich in { $s } s
 preflight-cancel = Abbrechen
 preflight-note = Sie können jederzeit mit Esc pausieren oder mit STOPP alles anhalten.
+preflight-stale = Der Entwurf hat sich geändert, nachdem dieser Auftrag erstellt wurde: Er entspricht nicht mehr dem Entwurf.
+preflight-stale-file = Der Entwurf hat sich geändert, seit { $name } geladen wurde.
+preflight-stale-accept = Diesen veralteten Auftrag trotzdem lasern
+preflight-stale-accept-file = { $name } trotzdem lasern
 
 ## alarm
 alarm-title = Alarm { $n }

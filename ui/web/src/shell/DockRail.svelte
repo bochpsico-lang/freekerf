@@ -1,5 +1,6 @@
 <script lang="ts">
-  // Medium layout: icons that open the panels as drawers.
+  // Medium layout, Design mode: icons that open its panels as drawers (the machine
+  // and the console belong to Produce, where the dock is always open).
   import { app } from '../context';
   import type { Panel } from '../gen/api';
   import type { IconName } from '../gen/icons';
@@ -10,8 +11,6 @@
   const panels: [Panel, IconName][] = [
     ['layers', 'layers'],
     ['object', 'sliders'],
-    ['machine', 'machine'],
-    ['console', 'console'],
   ];
 
   function toggle(p: Panel) {

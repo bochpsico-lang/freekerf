@@ -42,7 +42,9 @@ pub enum Tool {
     Text,
 }
 
-/// Panels of the dock (wide layout) or the drawers (medium layout).
+/// Panels of the dock (wide layout) or the drawers (medium layout). The layers and
+/// the inspector exist only in the Design mode, the machine and the console only
+/// in Produce.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Panel {
@@ -145,6 +147,10 @@ pub struct ViewState {
     /// The laser action waiting for the person's confirmation, if any (the fire
     /// confirmation dialog is open while it is set).
     pub fire_request: Option<FireRequest>,
+    /// A job is running or paused: the view stays in the Produce mode
+    /// (`view.set_mode` to design is refused). Set by the service.
+    #[serde(default)]
+    pub produce_locked: bool,
     /// Next toast id.
     #[serde(skip)]
     next_toast: u64,
@@ -155,7 +161,7 @@ impl Default for ViewState {
         Self {
             mode: Mode::Design,
             tool: Tool::Select,
-            panel: Panel::Machine,
+            panel: Panel::Object,
             drawer_open: false,
             dialogs: Vec::new(),
             toasts: Vec::new(),
@@ -163,6 +169,7 @@ impl Default for ViewState {
             fit_request: 0,
             focus: None,
             fire_request: None,
+            produce_locked: false,
             next_toast: 1,
         }
     }
@@ -171,11 +178,13 @@ impl Default for ViewState {
 /// A change of the view state.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ViewCommand {
-    /// Switches the mode; Produce opens the machine panel.
+    /// Switches the mode; Produce opens the machine panel, Design leaves the
+    /// machine and console panels for the inspector.
     SetMode(Mode),
     /// Chooses the Design mode tool.
     SetTool(Tool),
-    /// Shows a panel (and opens the drawer).
+    /// Shows a panel (and opens the drawer) and switches to its mode: Design for
+    /// the layers and the inspector, Produce for the machine and the console.
     OpenPanel(Panel),
     /// Closes the drawer when it shows this panel.
     ClosePanel(Panel),
@@ -204,6 +213,9 @@ pub enum ViewCommand {
     /// Shows (opens the fire confirmation dialog) or clears (closes it) the pending
     /// laser request. Set by the service, not an action of its own.
     SetFireRequest(Option<FireRequest>),
+    /// Keeps the view in the Produce mode while a job runs (`true` switches to it).
+    /// Set by the service, not an action of its own.
+    LockProduce(bool),
 }
 
 /// A command that cannot be applied.
@@ -215,6 +227,9 @@ pub enum ViewError {
     /// Empty toast message.
     #[error("empty toast message")]
     EmptyToast,
+    /// The Design mode while a job runs or is paused.
+    #[error("a job is running: the view stays in the Produce mode until it ends")]
+    ModeLocked,
 }
 
 impl ViewState {
@@ -225,13 +240,28 @@ impl ViewState {
     pub fn apply(&mut self, cmd: ViewCommand) -> Result<Option<u64>, ViewError> {
         match cmd {
             ViewCommand::SetMode(m) => {
+                if m == Mode::Design && self.produce_locked {
+                    return Err(ViewError::ModeLocked);
+                }
                 self.mode = m;
-                if m == Mode::Produce {
-                    self.panel = Panel::Machine;
+                match m {
+                    Mode::Produce => self.panel = Panel::Machine,
+                    Mode::Design if matches!(self.panel, Panel::Machine | Panel::Console) => {
+                        self.panel = Panel::Object;
+                    }
+                    Mode::Design => {}
                 }
             }
             ViewCommand::SetTool(t) => self.tool = t,
             ViewCommand::OpenPanel(p) => {
+                if matches!(p, Panel::Machine | Panel::Console) {
+                    self.mode = Mode::Produce;
+                } else if self.mode == Mode::Produce {
+                    if self.produce_locked {
+                        return Err(ViewError::ModeLocked);
+                    }
+                    self.mode = Mode::Design;
+                }
                 self.panel = p;
                 self.drawer_open = true;
             }
@@ -285,6 +315,13 @@ impl ViewState {
                 }
                 self.fire_request = r;
             }
+            ViewCommand::LockProduce(on) => {
+                self.produce_locked = on;
+                if on && self.mode != Mode::Produce {
+                    self.mode = Mode::Produce;
+                    self.panel = Panel::Machine;
+                }
+            }
         }
         Ok(None)
     }
@@ -303,7 +340,7 @@ mod tests {
     #[test]
     fn modes_and_panels() {
         let mut v = ViewState::default();
-        assert_eq!((v.mode, v.panel), (Mode::Design, Panel::Machine));
+        assert_eq!((v.mode, v.panel), (Mode::Design, Panel::Object));
         v.apply(ViewCommand::OpenPanel(Panel::Layers)).unwrap();
         assert_eq!(
             (v.mode, v.panel, v.drawer_open),
@@ -319,6 +356,43 @@ mod tests {
         assert_eq!(v.tool, Tool::Ellipse);
         v.apply(ViewCommand::SetMode(Mode::Produce)).unwrap();
         assert_eq!(v.panel, Panel::Machine);
+        // the machine and the console belong to the Produce mode
+        v.apply(ViewCommand::OpenPanel(Panel::Console)).unwrap();
+        v.apply(ViewCommand::SetMode(Mode::Design)).unwrap();
+        assert_eq!((v.mode, v.panel), (Mode::Design, Panel::Object));
+        v.apply(ViewCommand::OpenPanel(Panel::Machine)).unwrap();
+        assert_eq!((v.mode, v.panel), (Mode::Produce, Panel::Machine));
+        // the layers belong to the Design mode
+        v.apply(ViewCommand::OpenPanel(Panel::Layers)).unwrap();
+        assert_eq!((v.mode, v.panel), (Mode::Design, Panel::Layers));
+        v.apply(ViewCommand::SetMode(Mode::Design)).unwrap();
+        assert_eq!(v.panel, Panel::Layers);
+    }
+
+    #[test]
+    fn a_running_job_keeps_the_produce_mode() {
+        let mut v = ViewState::default();
+        v.apply(ViewCommand::LockProduce(true)).unwrap();
+        assert_eq!((v.mode, v.panel), (Mode::Produce, Panel::Machine));
+        assert_eq!(
+            v.apply(ViewCommand::SetMode(Mode::Design)),
+            Err(ViewError::ModeLocked)
+        );
+        assert_eq!(
+            v.apply(ViewCommand::OpenPanel(Panel::Object)),
+            Err(ViewError::ModeLocked)
+        );
+        assert_eq!(v.mode, Mode::Produce);
+        v.apply(ViewCommand::OpenPanel(Panel::Console)).unwrap();
+        v.apply(ViewCommand::SetMode(Mode::Produce)).unwrap();
+        assert_eq!(v.mode, Mode::Produce);
+        // locking again does not move the panel
+        v.apply(ViewCommand::OpenPanel(Panel::Console)).unwrap();
+        v.apply(ViewCommand::LockProduce(true)).unwrap();
+        assert_eq!(v.panel, Panel::Console);
+        v.apply(ViewCommand::LockProduce(false)).unwrap();
+        v.apply(ViewCommand::SetMode(Mode::Design)).unwrap();
+        assert_eq!(v.mode, Mode::Design);
     }
 
     #[test]
@@ -432,7 +506,8 @@ mod tests {
     fn serializes_for_the_ui() {
         let v = serde_json::to_value(ViewState::default()).unwrap();
         assert_eq!(v["mode"], "design");
-        assert_eq!(v["panel"], "machine");
+        assert_eq!(v["panel"], "object");
+        assert_eq!(v["produce_locked"], false);
         assert!(v["viewport"].is_null());
     }
 }

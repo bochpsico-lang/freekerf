@@ -34,13 +34,28 @@ class DesignJob {
       this.#busy = false;
     }
   }
+
+  /**
+   * Plans the design again in place of an out-of-date job: placed as that job
+   * was when it came from the design, else (a G-code file) as the panel says.
+   */
+  remake(
+    service: AppService,
+    run: (action: () => Promise<unknown>) => Promise<void>,
+    program: ProgramInfo | null,
+  ): Promise<void> {
+    const from = program?.from_document;
+    return this.make(service, run, from ? { start: from.start, anchor: from.anchor } : undefined);
+  }
 }
 
 export const designJob = new DesignJob();
 
 /**
  * What the Produce banner offers for the design: `none` (no job: make it),
- * `stale` (the job came from an older design: update it) or nothing.
+ * `stale` (the design changed after the job was made or its G-code file loaded:
+ * update it, or make it from the design) or nothing. The service checks the same
+ * before running a job (`summary.stale` of the fire confirmation).
  */
 export function designJobOffer(
   objects: number,
@@ -49,8 +64,5 @@ export function designJobOffer(
 ): 'none' | 'stale' | null {
   if (!objects) return null;
   if (!program) return 'none';
-  const from = program.from_document;
-  return from && documentRevision !== undefined && from.document_revision !== documentRevision
-    ? 'stale'
-    : null;
+  return documentRevision !== undefined && program.document_revision !== documentRevision ? 'stale' : null;
 }

@@ -288,11 +288,11 @@ interface AppFire {
    */
   cancel(params?: { id?: number | null }): null;
   /**
-   * Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request.
+   * Asks to run a laser action: it switches to the Produce mode and opens the fire confirmation (checklist and countdown); the action runs only when a person confirms on screen. Returns the pending request.
    *
    * Action `fire.request`, tier `machine`.
    */
-  request(params: { action: string; params?: unknown }): { action: string; countdown_ms: number; id: number; params: unknown; requested_by: string; summary: { bounds?: number[] | null; code?: string | null; estimated_ms?: number | null; lines?: number | null; program?: string | null } };
+  request(params: { action: string; params?: unknown }): { action: string; countdown_ms: number; id: number; params: unknown; requested_by: string; summary: { bounds?: number[] | null; code?: string | null; estimated_ms?: number | null; lines?: number | null; program?: string | null; stale?: "design" | "file" | null } };
 }
 
 interface AppFonts {
@@ -343,25 +343,25 @@ interface AppJob {
    *
    * Action `job.from_document`, tier `edit`.
    */
-  fromDocument(params?: { anchor?: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; start?: "absolute" | "current_position" | "user_origin" }): { drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; document_revision: number; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string };
+  fromDocument(params?: { anchor?: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; start?: "absolute" | "current_position" | "user_origin" }): { document_revision: number; drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string };
   /**
    * The loaded program (name, lines, estimated time, range).
    *
    * Action `job.info`, tier `read`.
    */
-  info(params?: Record<string, unknown>): { drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; document_revision: number; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string } | null;
+  info(params?: Record<string, unknown>): { document_revision: number; drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string } | null;
   /**
    * Loads and analyzes a G-code file.
    *
    * Action `job.load`, tier `edit`.
    */
-  load(params: { path: string }): { drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; document_revision: number; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string };
+  load(params: { path: string }): { document_revision: number; drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string };
   /**
    * Loads and analyzes G-code given as text.
    *
    * Action `job.load_text`, tier `edit`.
    */
-  loadText(params: { gcode: string; name: string }): { drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; document_revision: number; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string };
+  loadText(params: { gcode: string; name: string }): { document_revision: number; drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string };
   /**
    * Runs the loaded program from a position, rebuilding position, power and modes first. Fires the laser.
    *
@@ -526,7 +526,7 @@ interface AppSession {
    *
    * Action `session.snapshot`, tier `read`.
    */
-  snapshot(params?: Record<string, unknown>): { clipboard: number; current_layer?: number | null; dirty: boolean; document: { bounds?: number[] | null; layers: ({ color: string; fill: { lines_per_mm: number; pattern: "horizontal" | "vertical" | "diagonal" | "reverse_diagonal" | "grid" | "diagonal_grid" | "cross" | "diagonal_cross" | "squares" | "zig_zag" | "hilbert" | "inset" }; id: number; laser_mode: "machine" | "constant" | "dynamic"; mode: "line" | "fill" | "fill_and_line" | "cut" | "ignore"; name: string; objects: number; passes: number; power: number; speed_mm_min: number; visible: boolean })[]; objects: ({ bounds?: number[] | null; id: number; image?: { dithering: unknown; lines_per_mm: number; tool: unknown } | null; kind: string; layer: number; name: string; text?: { align?: unknown; arc_radius_mm?: number | null; bold?: boolean; font?: string; height_mm: number; italic?: boolean; letter_spacing_mm?: number; line_spacing?: number; outline_mm?: number | null; path?: unknown; stencil_mm?: number | null; strikethrough?: boolean; text: string; underline?: boolean; weld?: boolean; width_scale?: number } | null; transform: number[] })[] }; document_revision: number; redo: string[]; revision: number; selection: number[]; undo: string[]; view: { dialogs: ("settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "material_test" | "about")[]; drawer_open: boolean; fire_request?: { action: string; countdown_ms: number; id: number; params: unknown; requested_by: string; summary: { bounds?: number[] | null; code?: string | null; estimated_ms?: number | null; lines?: number | null; program?: string | null } } | null; fit_request: number; focus?: string | null; mode: "design" | "produce"; panel: "layers" | "object" | "machine" | "console"; toasts: ({ args?: Record<string, unknown>; id: number; level: "info" | "ok" | "warning" | "error"; message: string })[]; tool: "select" | "rect" | "ellipse" | "text"; viewport?: { center: number[]; zoom: number } | null } };
+  snapshot(params?: Record<string, unknown>): { clipboard: number; current_layer?: number | null; dirty: boolean; document: { bounds?: number[] | null; layers: ({ color: string; fill: { lines_per_mm: number; pattern: "horizontal" | "vertical" | "diagonal" | "reverse_diagonal" | "grid" | "diagonal_grid" | "cross" | "diagonal_cross" | "squares" | "zig_zag" | "hilbert" | "inset" }; id: number; laser_mode: "machine" | "constant" | "dynamic"; mode: "line" | "fill" | "fill_and_line" | "cut" | "ignore"; name: string; objects: number; passes: number; power: number; speed_mm_min: number; visible: boolean })[]; objects: ({ bounds?: number[] | null; id: number; image?: { dithering: unknown; lines_per_mm: number; tool: unknown } | null; kind: string; layer: number; name: string; text?: { align?: unknown; arc_radius_mm?: number | null; bold?: boolean; font?: string; height_mm: number; italic?: boolean; letter_spacing_mm?: number; line_spacing?: number; outline_mm?: number | null; path?: unknown; stencil_mm?: number | null; strikethrough?: boolean; text: string; underline?: boolean; weld?: boolean; width_scale?: number } | null; transform: number[] })[] }; document_revision: number; redo: string[]; revision: number; selection: number[]; undo: string[]; view: { dialogs: ("settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "material_test" | "about")[]; drawer_open: boolean; fire_request?: { action: string; countdown_ms: number; id: number; params: unknown; requested_by: string; summary: { bounds?: number[] | null; code?: string | null; estimated_ms?: number | null; lines?: number | null; program?: string | null; stale?: unknown | null } } | null; fit_request: number; focus?: string | null; mode: "design" | "produce"; panel: "layers" | "object" | "machine" | "console"; produce_locked?: boolean; toasts: ({ args?: Record<string, unknown>; id: number; level: "info" | "ok" | "warning" | "error"; message: string })[]; tool: "select" | "rect" | "ellipse" | "text"; viewport?: { center: number[]; zoom: number } | null } };
 }
 
 interface AppSettings {
@@ -550,7 +550,7 @@ interface AppState {
    *
    * Action `state.get`, tier `read`.
    */
-  get(params?: Record<string, unknown>): { firmware_version?: string | null; issues: ("Unknown" | "ManualReset" | "ManualDisconnect" | "ManualAbort" | "StopResponding" | "UnexpectedReset" | "UnexpectedDisconnect" | "MachineAlarm")[]; machine: { buffer_size: number; connected: boolean; detected_ip?: string | null; failed_connections: number; feed: number; firmware: "Grbl" | "Smoothie" | "Marlin" | "VigoWork"; grbl_blocks: number; grbl_buffer: number; in_program: boolean; job_errors: number; job_executed: number; job_sent: number; job_target: number; job_time_ms: number; jog_enabled: boolean; last_issue: "Unknown" | "ManualReset" | "ManualDisconnect" | "ManualAbort" | "StopResponding" | "UnexpectedReset" | "UnexpectedDisconnect" | "MachineAlarm"; loop_count: number; machine_position: { x: number; y: number; z: number }; override_targets: number[]; overrides: number[]; pending: number; power: number; program_estimated_ms: number; program_lines: number; projected_ms: number; queued: number; ready: boolean; status: "Disconnected" | "Connecting" | "Idle" | "Run" | "Hold" | "Door" | "Home" | "Alarm" | "Check" | "Jog" | "Queue" | "Cooling" | "AutoHold" | "Tool"; used_buffer: number; version?: { build?: string | null; hal: boolean; major: number; minor: number; vendor_info?: string | null; vendor_version?: string | null } | null; work_offset: { x: number; y: number; z: number }; work_position: { x: number; y: number; z: number } }; program?: { drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; document_revision: number; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string } | null; resume?: { executed: number; homing: boolean; issue: "Unknown" | "ManualReset" | "ManualDisconnect" | "ManualAbort" | "StopResponding" | "UnexpectedReset" | "UnexpectedDisconnect" | "MachineAlarm"; sent: number; set_wco: boolean; target: number } | null };
+  get(params?: Record<string, unknown>): { firmware_version?: string | null; issues: ("Unknown" | "ManualReset" | "ManualDisconnect" | "ManualAbort" | "StopResponding" | "UnexpectedReset" | "UnexpectedDisconnect" | "MachineAlarm")[]; machine: { buffer_size: number; connected: boolean; detected_ip?: string | null; failed_connections: number; feed: number; firmware: "Grbl" | "Smoothie" | "Marlin" | "VigoWork"; grbl_blocks: number; grbl_buffer: number; in_program: boolean; job_errors: number; job_executed: number; job_sent: number; job_target: number; job_time_ms: number; jog_enabled: boolean; last_issue: "Unknown" | "ManualReset" | "ManualDisconnect" | "ManualAbort" | "StopResponding" | "UnexpectedReset" | "UnexpectedDisconnect" | "MachineAlarm"; loop_count: number; machine_position: { x: number; y: number; z: number }; override_targets: number[]; overrides: number[]; pending: number; power: number; program_estimated_ms: number; program_lines: number; projected_ms: number; queued: number; ready: boolean; status: "Disconnected" | "Connecting" | "Idle" | "Run" | "Hold" | "Door" | "Home" | "Alarm" | "Check" | "Jog" | "Queue" | "Cooling" | "AutoHold" | "Tool"; used_buffer: number; version?: { build?: string | null; hal: boolean; major: number; minor: number; vendor_info?: string | null; vendor_version?: string | null } | null; work_offset: { x: number; y: number; z: number }; work_position: { x: number; y: number; z: number } }; program?: { document_revision: number; drawing_range?: number[] | null; estimated_ms: number; from_document?: { anchor: "bottom_left" | "bottom" | "bottom_right" | "left" | "center" | "right" | "top_left" | "top" | "top_right"; start: "absolute" | "current_position" | "user_origin" } | null; lines: number; name: string; quadrant: string } | null; resume?: { executed: number; homing: boolean; issue: "Unknown" | "ManualReset" | "ManualDisconnect" | "ManualAbort" | "StopResponding" | "UnexpectedReset" | "UnexpectedDisconnect" | "MachineAlarm"; sent: number; set_wco: boolean; target: number } | null };
 }
 
 interface AppView {
@@ -589,7 +589,7 @@ interface AppView {
    *
    * Action `view.get`, tier `read`.
    */
-  get(params?: Record<string, unknown>): { dialogs: ("settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "material_test" | "about")[]; drawer_open: boolean; fire_request?: { action: string; countdown_ms: number; id: number; params: unknown; requested_by: string; summary: { bounds?: number[] | null; code?: string | null; estimated_ms?: number | null; lines?: number | null; program?: string | null } } | null; fit_request: number; focus?: string | null; mode: "design" | "produce"; panel: "layers" | "object" | "machine" | "console"; toasts: ({ args?: Record<string, unknown>; id: number; level: "info" | "ok" | "warning" | "error"; message: string })[]; tool: "select" | "rect" | "ellipse" | "text"; viewport?: { center: number[]; zoom: number } | null };
+  get(params?: Record<string, unknown>): { dialogs: ("settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "material_test" | "about")[]; drawer_open: boolean; fire_request?: { action: string; countdown_ms: number; id: number; params: unknown; requested_by: string; summary: { bounds?: number[] | null; code?: string | null; estimated_ms?: number | null; lines?: number | null; program?: string | null; stale?: "design" | "file" | null } } | null; fit_request: number; focus?: string | null; mode: "design" | "produce"; panel: "layers" | "object" | "machine" | "console"; produce_locked?: boolean; toasts: ({ args?: Record<string, unknown>; id: number; level: "info" | "ok" | "warning" | "error"; message: string })[]; tool: "select" | "rect" | "ellipse" | "text"; viewport?: { center: number[]; zoom: number } | null };
   /**
    * Opens a dialog on top of the others (dialogs are not modal: STOP stays reachable).
    *
@@ -597,13 +597,13 @@ interface AppView {
    */
   openDialog(params: { name: "settings" | "shortcuts" | "fire_confirmation" | "recover" | "welcome" | "import" | "raster" | "material_test" | "about" }): { changed: boolean };
   /**
-   * Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the drawer in the medium layout).
+   * Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the drawer in the medium layout). It switches to the panel's mode: Design for the layers and the inspector (refused while a job runs), Produce for the machine and the console.
    *
    * Action `view.open_panel`, tier `ui`.
    */
   openPanel(params: { name: "layers" | "object" | "machine" | "console" }): { changed: boolean };
   /**
-   * Switches between design and produce (produce shows the machine panel).
+   * Switches between design and produce (produce shows the machine panel). Refused for design while a job runs or is paused.
    *
    * Action `view.set_mode`, tier `ui`.
    */
