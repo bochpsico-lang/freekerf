@@ -340,6 +340,11 @@ export class FakeDocument {
   get revisionOfDocument(): number {
     return this.documentRevision;
   }
+
+  /** Objects in the document (a job is out of date only when the design has some). */
+  get objectCount(): number {
+    return this.doc.objects.length;
+  }
   readonly calls: { action: string; params: unknown }[] = [];
   /** What `migrate.detect` finds (tests change it). */
   migration = { found: true, path: '/home/user/.wine/drive_c/users/user/AppData/Roaming/LaserGRBL' };

@@ -31,6 +31,20 @@ pub struct FireSummary {
     pub bounds: Option<[f64; 4]>,
     /// For single lines and custom code: the text that will be sent.
     pub code: Option<String>,
+    /// `job.run` only: the design changed after the job was loaded, and where the
+    /// job came from. The person must accept running it as it is.
+    #[serde(default)]
+    pub stale: Option<JobSource>,
+}
+
+/// Where a loaded job came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum JobSource {
+    /// Planned from the design (`job.from_document`).
+    Design,
+    /// A G-code file or text.
+    File,
 }
 
 /// A laser action waiting for the person's confirmation.

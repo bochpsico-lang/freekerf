@@ -5,6 +5,7 @@
 mode-design = Projetar
 mode-produce = Produzir
 mode-narrowNote = A edição fica disponível em telas a partir de 820 px. Aqui você controla e acompanha a máquina.
+mode-locked = Há um trabalho em andamento: o modo Design volta quando ele terminar ou for parado.
 
 ## estop
 estop = PARAR
@@ -182,6 +183,7 @@ machine-jobOrigin-current = Posição atual
 machine-jobOrigin-user = Origem do usuário
 machine-anchor = Ponto de ancoragem
 machine-start = Iniciar
+machine-job-stale = O projeto mudou depois que este trabalho foi carregado: será gravada a versão antiga.
 machine-pause = Pausar
 machine-resume = Continuar
 machine-stop = Parar trabalho
@@ -204,6 +206,7 @@ job-design-go = Gerar o trabalho do projeto
 job-design-busy = Gerando o trabalho…
 job-banner-none = Nenhum trabalho carregado: o projeto ainda não está no trabalho.
 job-banner-stale = O projeto mudou desde que o trabalho foi gerado.
+job-banner-stale-file = O projeto mudou depois que { $name } foi carregado.
 job-banner-make = Gerar a partir do projeto
 job-banner-update = Atualizar a partir do projeto
 machine-elapsed = Decorrido
@@ -236,6 +239,10 @@ preflight-fire = Disparar laser
 preflight-wait = Disparar em { $s } s
 preflight-cancel = Cancelar
 preflight-note = Você pode pausar a qualquer momento com Esc ou parar tudo com PARAR.
+preflight-stale = O projeto mudou depois que este trabalho foi gerado: ele não é o que o projeto mostra agora.
+preflight-stale-file = O projeto mudou depois que { $name } foi carregado.
+preflight-stale-accept = Gravar este trabalho desatualizado mesmo assim
+preflight-stale-accept-file = Gravar { $name } mesmo assim
 
 ## alarm
 alarm-title = Alarme { $n }

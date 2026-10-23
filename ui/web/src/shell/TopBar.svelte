@@ -9,6 +9,8 @@
   const agents = $derived(automation.status.agents.length);
   const script = $derived(automation.status.scripts[0] ?? null);
   const connected = $derived(machine.visual !== 'offline');
+  // a job runs or is paused: the view stays in Produce
+  const locked = $derived(!!view.state?.produce_locked);
 </script>
 
 <header class="topbar">
@@ -38,6 +40,8 @@
         role="tab"
         aria-selected={view.mode === 'design'}
         data-testid="mode-design"
+        disabled={locked}
+        title={locked ? t('mode-locked') : undefined}
         onclick={() => run(() => service.dispatch('view.set_mode', { mode: 'design' }))}
       >
         <Icon name="pen" /><span>{t('mode-design')}</span>

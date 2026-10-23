@@ -37,6 +37,8 @@ async function openInGerman(page: Page, width: number) {
 for (const width of WIDTHS) {
   test(`German fits the shell at ${width} px`, async ({ page }) => {
     await openInGerman(page, width);
+    // the machine panel is in the Produce mode (the narrow layout shows only that)
+    if (width >= 820) await page.getByTestId('mode-produce').click();
     await page.getByTestId('connect').click();
     await expect(page.getByTestId('state-chip')).toContainText('Betriebsbereit');
     expect(await clipped(page)).toEqual([]);

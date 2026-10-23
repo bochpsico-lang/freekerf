@@ -56,9 +56,9 @@ export class TauriService implements AppService {
     return () => this.listeners.delete(listener);
   }
 
-  async confirmFire(id: number): Promise<unknown> {
+  async confirmFire(id: number, options?: { acceptStale?: boolean }): Promise<unknown> {
     try {
-      return await invoke('confirm_fire', { id });
+      return await invoke('confirm_fire', { id, acceptStale: options?.acceptStale ?? false });
     } catch (e) {
       if (isActionError(e)) throw new ActionFailure('fire', e);
       throw e;

@@ -4,6 +4,23 @@ The Produce mode of the desktop app drives the machine: connect, jog, frame, run
 watch and recover a job (`design/ux.md`, flows 3 and 7). It uses only the M1
 service. Code: `ui/web/src/produce/`.
 
+It is the only place a job starts from ([ADR 0020](../adr/0020-jobs-start-in-produce.md)):
+
+- The machine and console panels exist only here, and the layers and the
+  inspector only in Design (the Produce canvas shows the job, not the document:
+  changing a layer here would put the job out of date). Opening a panel switches
+  to its mode (`view.open_panel`, the top bar's Connect); opening a Design panel
+  is refused while a job runs.
+- F5 (Start) and F7 (Frame) in the Design mode switch to Produce and start nothing:
+  the person sees the job's preview, then presses them again.
+- `fire.request` switches the view to Produce (see
+  [fire-confirmation.md](fire-confirmation.md)), so a script cannot have a job
+  confirmed from the Design mode either.
+- While a job runs or is paused (`in_program`) the view stays in Produce
+  (`view.produce_locked`, set by the service from the machine's events):
+  `view.set_mode design` is refused, the Design tab is disabled and Ctrl+1 says
+  why. It opens again when the job ends, is aborted or STOP is pressed.
+
 ## Machine panel
 
 | Group | Controls | Actions |
@@ -19,10 +36,14 @@ service. Code: `ui/web/src/produce/`.
 - **The job and the design**: over the canvas, when the design has objects, a
   banner offers *Make from the design* when no job is loaded (placed by the
   panel's job start and anchor), or *Update from the design* when the job was
-  made from an older design (placed as it was: the job records the document
-  revision, start and anchor it was made from, `ProgramInfo.from_document`). A
-  G-code file loaded as such gets no banner; neither does a running job or a board
-  in alarm. Any change counts, an undo too.
+  made from an older design (placed as it was: the job records the start and
+  anchor it was made from, `ProgramInfo.from_document`, and the document revision,
+  `ProgramInfo.document_revision`). A G-code file gets the banner only when the
+  design changed after it was loaded ("The design changed since *name* was
+  loaded", *Make from the design*, placed by the panel). No banner while a job runs
+  or the board is in alarm. Any change counts, an undo too. The machine panel says
+  it under Start too, and the fire confirmation asks before burning an out-of-date
+  job ([fire-confirmation.md](fire-confirmation.md)).
 - **Continuous jog is a dead-man control**: the head moves while the button is
   held; releasing it, leaving it, losing the pointer capture or the window focus
   sends `machine.jog_stop` (always allowed). Step mode moves one step per press.
@@ -73,12 +94,16 @@ Dropping a file on the window is not wired yet (Tauri intercepts drops; listed i
 ## Tests
 
 `ui/web/src/produce/produce.test.ts` (open a file, the job from the design with
-its start and anchor, the banner to make or update it, step jog, dead-man continuous
+its start and anchor, the banner to make or update it, also for a file the design
+changed after, step jog, dead-man continuous
 jog, home/unlock/origin/frame/overrides, Start and console G-code never dispatch a
 laser action, alarm banner and recovery), `job.test.ts` (progress, recovery
 options), `state/console.test.ts`; Rust:
 `service.rs::produce_mode_helpers_frame_info_and_system_commands` (emulator),
 `service.rs::document_session_actions_and_events` (job start and anchor, the
 revision the job records),
+`service.rs::a_job_is_fired_from_produce_and_an_out_of_date_one_only_when_accepted`
+(the Produce lock), `freekerf-session::view` (`a_running_job_keeps_the_produce_mode`),
+`src/App.test.ts` (the dock tabs by mode, F5/F7 in Design, the locked Design tab),
 `freekerf-planner/src/origin.rs` (anchors),
 `freekerf-settings::custom_buttons`. End to end against the emulator: PR 9.

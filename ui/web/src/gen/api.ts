@@ -471,6 +471,11 @@ export type FireSummary = {
   lines?: number | null;
   /** Program name, if a program is involved. */
   program?: string | null;
+  /**
+   * `job.run` only: the design changed after the job was loaded, and where the
+   * job came from. The person must accept running it as it is.
+   */
+  stale?: JobSource | null;
 };
 
 /** Firmware family. */
@@ -555,11 +560,6 @@ export type FrameParams = {
 export type FromDocument = {
   /** Which point of its box goes to the start point. */
   anchor: Anchor;
-  /**
-   * The document's revision then (`session.snapshot`'s `document_revision`):
-   * another one now means the job is out of date.
-   */
-  document_revision: number;
   /** Where it starts. */
   start: JobStart;
 };
@@ -844,6 +844,9 @@ export type JobSettings = {
   /** Between passes. */
   passes?: string;
 };
+
+/** Where a loaded job came from. */
+export type JobSource = "design" | "file";
 
 /** Where a job made from the document starts (design/ux.md flow 3). */
 export type JobStart = "absolute" | "current_position" | "user_origin";
@@ -1257,7 +1260,11 @@ export type OverrideParams = {
   rapid: number;
 };
 
-/** Panels of the dock (wide layout) or the drawers (medium layout). */
+/**
+ * Panels of the dock (wide layout) or the drawers (medium layout). The layers and
+ * the inspector exist only in the Design mode, the machine and the console only
+ * in Produce.
+ */
 export type Panel = "layers" | "object" | "machine" | "console";
 
 export type PanelParams = {
@@ -1329,13 +1336,19 @@ export type PortAccess = "ok" | "denied";
 
 /** Summary of the loaded program. */
 export type ProgramInfo = {
+  /**
+   * The document's revision when the job was planned or loaded
+   * (`session.snapshot`'s `document_revision`): another one now, with objects
+   * in the design, means the job is out of date.
+   */
+  document_revision: number;
   /** `[xmin, ymin, xmax, ymax]` where the laser burns. */
   drawing_range?: [number, number, number, number] | null;
   /** Estimated time, ms. */
   estimated_ms: number;
   /**
-   * Planned from the document (`job.from_document`): from which revision and
-   * placed how; `None` for G-code loaded as such.
+   * Planned from the document (`job.from_document`): placed how; `None` for
+   * G-code loaded as such.
    */
   from_document?: FromDocument | null;
   /** Commands. */
@@ -1940,6 +1953,11 @@ export type ViewState = {
   mode: Mode;
   /** Active panel of the dock. */
   panel: Panel;
+  /**
+   * A job is running or paused: the view stays in the Produce mode
+   * (`view.set_mode` to design is refused). Set by the service.
+   */
+  produce_locked?: boolean;
   /** Toasts, oldest first (at most [`MAX_TOASTS`]). */
   toasts: Toast[];
   /** Active tool of the Design mode. */
@@ -2336,7 +2354,7 @@ export interface Actions {
     result: null;
     tier: "safety";
   };
-  /** Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request. */
+  /** Asks to run a laser action: it switches to the Produce mode and opens the fire confirmation (checklist and countdown); the action runs only when a person confirms on screen. Returns the pending request. */
   "fire.request": {
     params: FireRequestParams;
     result: FireRequest;
@@ -2618,13 +2636,13 @@ export interface Actions {
     result: Changed;
     tier: "ui";
   };
-  /** Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the drawer in the medium layout). */
+  /** Shows a panel of the dock (`layers`, `object`, `machine`, `console`; opens the drawer in the medium layout). It switches to the panel's mode: Design for the layers and the inspector (refused while a job runs), Produce for the machine and the console. */
   "view.open_panel": {
     params: PanelParams;
     result: Changed;
     tier: "ui";
   };
-  /** Switches between design and produce (produce shows the machine panel). */
+  /** Switches between design and produce (produce shows the machine panel). Refused for design while a job runs or is paused. */
   "view.set_mode": {
     params: ModeParams;
     result: Changed;

@@ -21,7 +21,7 @@ use freekerf_protocol::{
     ConsoleRow, Event, FirmwareKind, Host, HostError, HostSnapshot, Issue, JogDirection, ResumeSuggestion,
 };
 use freekerf_session::actions::SessionHost;
-use freekerf_session::fire::{FireGate, FireRequest, FireSummary};
+use freekerf_session::fire::{FireGate, FireRequest, FireSummary, JobSource};
 use freekerf_session::session::{Change, Session, SessionEvent};
 use freekerf_session::view::ViewCommand;
 use freekerf_session::{NoParams, Registry};
@@ -265,6 +265,8 @@ struct Loaded {
     program: Program,
     /// The document it was planned from (`job.from_document`).
     from_document: Option<FromDocument>,
+    /// The document's revision when it was planned or loaded.
+    document_revision: u64,
     /// Tool path buffer ([`preview`]), built on the first request.
     preview: Option<Arc<Vec<u8>>>,
 }
@@ -488,11 +490,15 @@ impl Service {
     /// (PLAN §9.5). Not an action of the registry on purpose: scripts and agents can
     /// ask for a laser action (`fire.request`) but never confirm one. Only a front
     /// end with a person in front of it calls this (the desktop window's
-    /// "Fire laser" button).
+    /// "Fire laser" button). `accept_stale`: the person accepted running a job the
+    /// design changed after ([`FireSummary::stale`]); without it such a `job.run`
+    /// is refused and stays pending.
     ///
     /// # Errors
-    /// No such request, countdown not over, or the action's own error.
-    pub fn confirm_fire(&self, id: u64) -> Result<Value, ActionError> {
+    /// No such request, countdown not over, an out-of-date job not accepted (or
+    /// one that went out of date after the request: it is dropped), or the
+    /// action's own error.
+    pub fn confirm_fire(&self, id: u64, accept_stale: bool) -> Result<Value, ActionError> {
         // the request must still be on screen: closing the dialog drops it
         let shown = lock(&self.inner.session)
             .view()
@@ -504,6 +510,28 @@ impl Service {
             return Err(ActionError::Refused(
                 "no pending laser request with this id".into(),
             ));
+        }
+        let asked = lock(&self.inner.fire)
+            .pending()
+            .filter(|r| r.action == "job.run")
+            .map(|r| r.summary.stale);
+        if let Some(shown) = asked
+            && let Some(stale) = self.inner.stale_job()
+        {
+            if shown != Some(stale) {
+                // the dialog did not say it: ask again
+                lock(&self.inner.fire).cancel(Some(id));
+                self.inner.view(ViewCommand::SetFireRequest(None))?;
+                return Err(ActionError::Refused(
+                    "the design changed after this request: ask again".into(),
+                ));
+            }
+            if !accept_stale {
+                return Err(ActionError::Refused(
+                    "the design changed after this job was loaded: accept running it as it is, or update it"
+                        .into(),
+                ));
+            }
         }
         let now = lock(&self.inner.fire_clock).now_ms();
         let request = lock(&self.inner.fire)
@@ -559,6 +587,9 @@ fn start_collector(inner: &Arc<Inner>) {
                     }
                     _ => {}
                 }
+                if let Some(inner) = weak.upgrade() {
+                    inner.lock_produce_while_in_job();
+                }
                 lock(&subscribers).retain(|s| s.send(ServiceEvent::Machine(e.clone())).is_ok());
             }
         });
@@ -607,6 +638,32 @@ impl Inner {
         }
     }
 
+    /// Keeps the view in the Produce mode while a job runs or is paused.
+    fn lock_produce_while_in_job(&self) {
+        let in_job = self.machine.snapshot().in_program;
+        if lock(&self.session).view().produce_locked == in_job {
+            return;
+        }
+        if let Err(e) = self.view(ViewCommand::LockProduce(in_job)) {
+            tracing::error!("cannot lock the Produce mode: {e}");
+        }
+    }
+
+    /// The loaded job when the design changed after it was planned or loaded
+    /// (and the design has objects): where it came from.
+    fn stale_job(&self) -> Option<JobSource> {
+        let (revision, source) = lock(&self.loaded).as_ref().map(|l| {
+            let source = if l.from_document.is_some() {
+                JobSource::Design
+            } else {
+                JobSource::File
+            };
+            (l.document_revision, source)
+        })?;
+        let session = lock(&self.session);
+        (!session.document().objects.is_empty() && session.document_revision() != revision).then_some(source)
+    }
+
     /// What the fire confirmation shows for a request.
     fn fire_summary(&self, action: &str, params: &Value) -> FireSummary {
         let code = params
@@ -624,6 +681,11 @@ impl Inner {
             estimated_ms: program.as_ref().map(|p| p.estimated_ms),
             bounds: program.and_then(|p| p.drawing_range),
             code,
+            stale: if action == "job.run" {
+                self.stale_job()
+            } else {
+                None
+            },
         }
     }
 
@@ -1065,17 +1127,18 @@ pub struct ProgramInfo {
     pub drawing_range: Option<[f64; 4]>,
     /// Quadrant of the drawing.
     pub quadrant: String,
-    /// Planned from the document (`job.from_document`): from which revision and
-    /// placed how; `None` for G-code loaded as such.
+    /// Planned from the document (`job.from_document`): placed how; `None` for
+    /// G-code loaded as such.
     pub from_document: Option<FromDocument>,
+    /// The document's revision when the job was planned or loaded
+    /// (`session.snapshot`'s `document_revision`): another one now, with objects
+    /// in the design, means the job is out of date.
+    pub document_revision: u64,
 }
 
 /// The document a job was planned from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct FromDocument {
-    /// The document's revision then (`session.snapshot`'s `document_revision`):
-    /// another one now means the job is out of date.
-    pub document_revision: u64,
     /// Where it starts.
     pub start: JobStart,
     /// Which point of its box goes to the start point.
@@ -1106,6 +1169,7 @@ fn program_info(l: &Loaded) -> ProgramInfo {
         drawing_range: r.drawing_range,
         quadrant: r.quadrant,
         from_document: l.from_document,
+        document_revision: l.document_revision,
     }
 }
 
@@ -1530,11 +1594,10 @@ fn build_registry() -> Registry<Inner> {
             let job = freekerf_planner::plan_with(&doc, &s.planner_options(), Some(&tracer))
                 .map_err(|e| ActionError::failed(e.to_string()))?;
             let from = FromDocument {
-                document_revision: revision,
                 start: p.start,
                 anchor: p.anchor,
             };
-            load_program(s, "document".into(), job.lines.join("\n").as_bytes(), Some(from))
+            load_program(s, "document".into(), job.lines.join("\n").as_bytes(), Some(from), revision)
         },
     ));
     add(r.register(
@@ -1547,14 +1610,18 @@ fn build_registry() -> Registry<Inner> {
             let name = Path::new(&p.path)
                 .file_name()
                 .map_or_else(|| p.path.clone(), |n| n.to_string_lossy().into_owned());
-            load_program(s, name, &bytes, None)
+            let revision = lock(&s.session).document_revision();
+            load_program(s, name, &bytes, None, revision)
         },
     ));
     add(r.register(
         "job.load_text",
         "Loads and analyzes G-code given as text.",
         Tier::Edit,
-        |s: &Inner, p: LoadTextParams| load_program(s, p.name, p.gcode.as_bytes(), None),
+        |s: &Inner, p: LoadTextParams| {
+            let revision = lock(&s.session).document_revision();
+            load_program(s, p.name, p.gcode.as_bytes(), None, revision)
+        },
     ));
     add(r.register(
         "job.info",
@@ -1635,7 +1702,7 @@ fn register_fire(r: &mut Registry<Inner>) {
     };
     add(r.register(
         "fire.request",
-        "Asks to run a laser action: it opens the fire confirmation (checklist and countdown) and runs only when a person confirms on screen. Returns the pending request.",
+        "Asks to run a laser action: it switches to the Produce mode and opens the fire confirmation (checklist and countdown); the action runs only when a person confirms on screen. Returns the pending request.",
         Tier::Machine,
         move |s: &Inner, p: FireRequestParams| {
             if !laser.contains(&p.action) {
@@ -1649,6 +1716,8 @@ fn register_fire(r: &mut Registry<Inner>) {
             let countdown_ms = lock(&s.settings).safety.fire_countdown_s.saturating_mul(1000);
             let now = lock(&s.fire_clock).now_ms();
             let request = lock(&s.fire).request(&p.action, p.params, "desktop", summary, countdown_ms, now);
+            // a laser action is confirmed in front of the preview and the machine
+            s.view(ViewCommand::SetMode(freekerf_session::session::Mode::Produce))?;
             s.view(ViewCommand::SetFireRequest(Some(request.clone())))?;
             Ok(request)
         },
@@ -1728,6 +1797,7 @@ fn load_program(
     name: String,
     bytes: &[u8],
     from_document: Option<FromDocument>,
+    document_revision: u64,
 ) -> Result<ProgramInfo, ActionError> {
     let program = Program::parse_bytes(bytes, &s.analysis_options());
     let copy = program.clone();
@@ -1736,6 +1806,7 @@ fn load_program(
         name,
         program,
         from_document,
+        document_revision,
         preview: None,
     };
     let info = program_info(&loaded);

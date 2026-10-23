@@ -9,7 +9,7 @@
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
   import { formatDuration, formatLength } from '../lib/format';
-  import { designJob } from './design-job.svelte';
+  import { designJob, designJobOffer } from './design-job.svelte';
   import { JOG_STEPS, progress } from './job';
   import JogPad from './JogPad.svelte';
   import PortPermissionWarning from './PortPermissionWarning.svelte';
@@ -44,6 +44,10 @@
   const paused = $derived(machine.visual === 'hold');
   const program = $derived(machine.state?.program ?? null);
   const job = $derived(progress(m));
+  // the design changed after the job was made or loaded (the fire confirmation asks)
+  const stale = $derived(
+    designJobOffer(doc.summary?.objects.length ?? 0, doc.summary?.document_revision, program) === 'stale',
+  );
   const units = $derived(settings.ui.units);
   // the 60 Hz head stream, else the last state read
   const head = $derived(preview.head ?? m?.work_position ?? null);
@@ -229,6 +233,11 @@
         <dd>{job ? `${job.executed}/${job.target}` : '—'}</dd>
       </div>
     </dl>
+    {#if stale && !m?.in_program}
+      <p class="job-stale" data-testid="job-stale">
+        <Icon name="warn" /><span>{t('machine-job-stale')}</span>
+      </p>
+    {/if}
     <div class="job-actions">
       <button
         class="btn primary big"

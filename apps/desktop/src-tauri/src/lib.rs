@@ -119,11 +119,16 @@ pub mod commands {
     /// countdown is over (PLAN §9.5). Scripts and agents have no equivalent.
     ///
     /// # Errors
-    /// No such request, too early, or the action's error.
+    /// No such request, too early, an out-of-date job not accepted
+    /// (`accept_stale`), or the action's error.
     #[tauri::command]
     #[allow(clippy::needless_pass_by_value)]
-    pub fn confirm_fire(bridge: tauri::State<'_, Bridge>, id: u64) -> Result<Value, ActionError> {
-        bridge.confirm_fire(id)
+    pub fn confirm_fire(
+        bridge: tauri::State<'_, Bridge>,
+        id: u64,
+        accept_stale: Option<bool>,
+    ) -> Result<Value, ActionError> {
+        bridge.confirm_fire(id, accept_stale.unwrap_or(false))
     }
 
     /// The tool path of the loaded program as raw bytes (empty when none is loaded).

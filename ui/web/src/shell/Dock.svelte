@@ -1,6 +1,8 @@
 <script lang="ts">
   // The dock (wide layout), drawer (medium) or bottom area (narrow) with the panels.
-  // Panel contents arrive with their PRs; Machine is the Produce mode panel.
+  // Panel contents arrive with their PRs. The tabs follow the mode: the layers and
+  // the inspector in Design, the machine and the console in Produce (the view moves
+  // the panel when the mode changes); every panel stays mounted, hidden.
   // Wide layout: its left edge is dragged to change its width and, in Design mode,
   // the separator under Layers to change their height (`ui.dock_*`, dock-size.ts).
   import type { Snippet } from 'svelte';
@@ -29,6 +31,9 @@
     ['machine', 'machine'],
     ['console', 'console'],
   ];
+  // the narrow layout is machine-only (App.svelte)
+  const produce = $derived(env.layout === 'narrow' || view.mode === 'produce');
+  const shownTabs = $derived(tabs.filter(([p]) => (p === 'machine' || p === 'console') === produce));
   const open = $derived(env.layout !== 'medium' || view.mode === 'produce' || !!view.state?.drawer_open);
 
   type Kind = 'width' | 'layers';
@@ -124,7 +129,7 @@
     ></div>
   {/if}
   <div class="dock-tabs" role="tablist">
-    {#each tabs as [p, icon] (p)}
+    {#each shownTabs as [p, icon] (p)}
       <button
         role="tab"
         data-panel={p}

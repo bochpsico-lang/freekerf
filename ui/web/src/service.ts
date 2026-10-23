@@ -60,8 +60,10 @@ export interface AppService {
    * The person pressed "Fire laser": runs the pending laser request `id` if its
    * countdown is over. The only way the window runs a `laser` action (PLAN §9.5);
    * not an action of the registry, so scripts and agents cannot confirm.
+   * `acceptStale`: the person accepted running a job the design changed after
+   * (`summary.stale`); without it such a request is refused and stays pending.
    */
-  confirmFire(id: number): Promise<unknown>;
+  confirmFire(id: number, options?: { acceptStale?: boolean }): Promise<unknown>;
   /**
    * The document's drawable geometry, raw (format "FKTP" with `power` = layer
    * index and `command` = object index; doc/features/canvas.md).

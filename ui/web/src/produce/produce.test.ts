@@ -87,6 +87,17 @@ describe('Produce mode', () => {
     await Promise.all([props.doc.refresh(), props.machine.refresh()]);
     await waitFor(() => expect(screen.getByTestId('program-name').textContent).toContain('part.nc'));
     expect(screen.queryByTestId('job-banner')).toBeNull();
+    // the design changes after the file was loaded: make the job from the design
+    await service.dispatch('document.add_shape', { shape: 'rect', x: 50, y: 0, width: 5, height: 5 });
+    await props.doc.refresh();
+    const stale = await screen.findByTestId('job-banner');
+    expect(stale.dataset.offer).toBe('stale');
+    expect(stale.textContent).toContain('part.nc');
+    service.lastJobPlacement = null;
+    await fireEvent.click(screen.getByTestId('job-banner-go'));
+    await waitFor(() =>
+      expect(service.lastJobPlacement).toEqual({ start: designJob.start, anchor: designJob.anchor }),
+    );
   });
 
   it('jogs one step per press with the selected step', async () => {
