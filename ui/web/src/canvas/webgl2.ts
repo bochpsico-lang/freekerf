@@ -221,11 +221,27 @@ export function bucketSegments(
 interface Tile {
   texture: WebGLTexture;
   rect: Rect;
+  /** Its pixels in the image: x, y (rows top to bottom), width, height. */
+  px: [number, number, number, number];
 }
 
 interface ImageEntry {
+  /** The image's pixels: an image with the same array keeps its textures. */
+  pixels: Uint8Array;
   tiles: Tile[];
   layer: number;
+}
+
+/** Where the pixels `px` of `img` lie on the table (image rows go down, Y goes up). */
+export function tileRect(img: RasterImage, [x, y, w, h]: Tile['px']): Rect {
+  const mmX = img.rect.width / img.width;
+  const mmY = img.rect.height / img.height;
+  return {
+    x: img.rect.x + x * mmX,
+    y: img.rect.y + img.rect.height - (y + h) * mmY,
+    width: w * mmX,
+    height: h * mmY,
+  };
 }
 
 function compile(gl: WebGL2RenderingContext, vs: string, fs: string): WebGLProgram {
@@ -358,19 +374,27 @@ export class WebGL2Renderer {
     this.paths = this.upload(p.segments, p.segmentCount, 1, 0, this.paths);
   }
 
-  /** Replaces the raster images (split in tiles of at most {@link TILE} pixels). */
+  /**
+   * Replaces the raster images (split in tiles of at most {@link TILE} pixels). An
+   * image whose pixel array was already shown keeps its textures (moved: only the
+   * places change).
+   */
   setImages(images: RasterImage[]): void {
     this.contentVersion++;
-    const gl = this.gl;
-    for (const e of this.images) for (const t of e.tiles) gl.deleteTexture(t.texture);
-    this.images = images.map((img) => ({ tiles: this.tiles(img), layer: img.layer }));
+    const old = this.images;
+    this.images = images.map((img) => {
+      const i = old.findIndex((e) => e.pixels === img.pixels && e.tiles.length > 0);
+      if (i < 0) return { pixels: img.pixels, tiles: this.tiles(img), layer: img.layer };
+      const [kept] = old.splice(i, 1);
+      const tiles = kept!.tiles.map((t) => ({ ...t, rect: tileRect(img, t.px) }));
+      return { pixels: img.pixels, tiles, layer: img.layer };
+    });
+    for (const e of old) for (const t of e.tiles) this.gl.deleteTexture(t.texture);
   }
 
   private tiles(img: RasterImage): Tile[] {
     const gl = this.gl;
     const out: Tile[] = [];
-    const mmX = img.rect.width / img.width;
-    const mmY = img.rect.height / img.height;
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.pixelStorei(gl.UNPACK_ROW_LENGTH, img.width);
     for (let ty = 0; ty < img.height; ty += TILE) {
@@ -387,16 +411,8 @@ export class WebGL2Renderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        // image rows go top to bottom; the table's Y goes up
-        out.push({
-          texture,
-          rect: {
-            x: img.rect.x + tx * mmX,
-            y: img.rect.y + img.rect.height - (ty + h) * mmY,
-            width: w * mmX,
-            height: h * mmY,
-          },
-        });
+        const px: Tile['px'] = [tx, ty, w, h];
+        out.push({ texture, px, rect: tileRect(img, px) });
       }
     }
     for (const p of [gl.UNPACK_ROW_LENGTH, gl.UNPACK_SKIP_PIXELS, gl.UNPACK_SKIP_ROWS]) gl.pixelStorei(p, 0);

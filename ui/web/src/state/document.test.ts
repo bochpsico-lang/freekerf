@@ -28,6 +28,50 @@ describe('DocumentProjection', () => {
     expect(doc.error).toBe('');
   });
 
+  it('shows the images as engraved, read again only when their size or settings change', async () => {
+    const service = new FakeService();
+    const decode = vi.fn(async () => ({ width: 2, height: 1, pixels: new Uint8Array([0, 255]) }));
+    const doc = new DocumentProjection(service, decode);
+    await doc.refresh();
+    const { objects, layers } = await service.dispatch('document.import_data', {
+      format: 'image',
+      data: '',
+      name: 'photo.png',
+    });
+    const id = objects[0]!;
+    await vi.waitFor(() => expect(doc.images).toHaveLength(1));
+    expect(doc.images[0]).toMatchObject({
+      width: 2,
+      height: 1,
+      rect: { x: 0, y: 0, width: 40, height: 30 },
+      layer: doc.layers.findIndex((l) => l.id === layers[0]),
+    });
+    const previews = () => service.calls.filter((c) => c.action === 'document.raster_preview').length;
+    expect(previews()).toBe(1);
+    // moved: the same pixels in another place
+    await service.dispatch('document.translate', { ids: [id], dx: 5, dy: 0 });
+    await vi.waitFor(() => expect(doc.images[0]!.rect.x).toBe(5));
+    expect(previews()).toBe(1);
+    // new settings: a new preview
+    const settings = await service.dispatch('document.raster_settings', { id });
+    await service.dispatch('document.set_raster', { id, settings: { ...settings, lines_per_mm: 5 } });
+    await vi.waitFor(() => expect(previews()).toBe(2));
+    // a hidden layer hides its image
+    await service.dispatch('document.update_layer', { id: layers[0]!, visible: false });
+    await vi.waitFor(() => expect(doc.images).toEqual([]));
+  });
+
+  it('keeps the outline of an image whose preview fails', async () => {
+    const service = new FakeService();
+    const doc = new DocumentProjection(service, () => Promise.reject(new Error('no canvas')));
+    await doc.refresh();
+    await service.dispatch('document.import_data', { format: 'image', data: '', name: 'photo.png' });
+    await vi.waitFor(() => expect(doc.objects).toHaveLength(1));
+    await vi.waitFor(() => expect(doc.paths?.segmentCount).toBe(4));
+    expect(doc.images).toEqual([]);
+    expect(doc.error).toBe('');
+  });
+
   it('reports a failed read', async () => {
     const service = new FakeService();
     vi.spyOn(service, 'documentGeometry').mockRejectedValue(new Error('gone'));

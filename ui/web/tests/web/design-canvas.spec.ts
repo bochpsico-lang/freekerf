@@ -96,3 +96,47 @@ test('the palette moves the selection to another layer', async ({ page }) => {
     .toBe('#E8622C');
   await expect(page.getByTestId('layer-list').locator('.layer')).toHaveCount(2);
 });
+
+test('an imported image shows on the canvas as it will be engraved', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await page.goto('/dev.html');
+  await page.getByTestId('mode-design').click();
+  await expect(page.locator('html')).toHaveAttribute('data-mode', 'design');
+  // a black 200 × 150 mm PNG (the fake places it at 10 px/mm) moved to the orange layer
+  await page.evaluate(async () => {
+    const c = document.createElement('canvas');
+    c.width = 2000;
+    c.height = 1500;
+    c.getContext('2d')!.fillRect(0, 0, c.width, c.height);
+    const url = c.toDataURL('image/png');
+    const fake = (window as unknown as Win).fkFake;
+    const r = await fake.dispatch('document.import_data', {
+      format: 'image',
+      data: url.slice(url.indexOf(',') + 1),
+      name: 'black.png',
+    });
+    const { layer } = await fake.dispatch('document.layer_for_color', { color: '#E8622C' });
+    await fake.dispatch('document.move_to_layer', { ids: r.objects, layer });
+  });
+  const canvas = page.getByTestId('canvas');
+  // the share of the canvas that is the layer's orange: the filled image, not only its frame
+  const orange = async () => {
+    const png = (await canvas.screenshot()).toString('base64');
+    return page.evaluate(async (b64) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
+      const g = c.getContext('2d')!;
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4)
+        if (d[i]! > 200 && d[i + 1]! > 70 && d[i + 1]! < 130 && d[i + 2]! < 80) n++;
+      return n / (d.length / 4);
+    }, png);
+  };
+  await expect.poll(orange, { timeout: 10_000 }).toBeGreaterThan(0.05);
+});

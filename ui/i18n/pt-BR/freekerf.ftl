@@ -481,6 +481,7 @@ raster-dir-horizontal = Horizontal
 raster-dir-vertical = Vertical
 raster-dir-diagonal = Diagonal
 raster-preview = Prévia da gravação
+raster-computing = calculando…
 raster-apply = Aplicar
 obj-image-open = Gravação da imagem…
 

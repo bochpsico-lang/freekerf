@@ -43,6 +43,14 @@ describe('TauriService', () => {
     expect(ipc.calls).toEqual([['dispatch', { action: 'job.info', params: {} }]]);
   });
 
+  it('runs the slow actions through the background command', async () => {
+    invoke.mockResolvedValue({ png: '', width: 1, height: 1 });
+    await new TauriService().dispatch('document.raster_preview', { id: 3 });
+    expect(ipc.calls).toEqual([
+      ['dispatch_background', { action: 'document.raster_preview', params: { id: 3 } }],
+    ]);
+  });
+
   it('turns action errors into ActionFailure', async () => {
     invoke.mockImplementation(() =>
       Promise.reject({ kind: 'permission_denied', message: { action: 'job.run', needed: 'laser' } }),

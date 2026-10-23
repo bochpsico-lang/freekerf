@@ -1,6 +1,6 @@
 // Component tests of the Design mode on the fake document (src/dev/fake-document.ts).
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import App from '../App.svelte';
 import { FakeService } from '../dev/fake-service';
@@ -364,6 +364,51 @@ describe('Design mode', () => {
     expect((await service.dispatch('session.snapshot', {})).undo.at(-1)).toBe('image settings');
   });
 
+  it('raster dialog: a preview that comes back after a newer one is dropped', async () => {
+    const { service } = await mountDesign();
+    const { objects } = await service.dispatch('document.import_data', {
+      format: 'image',
+      data: '',
+      name: 'p.png',
+    });
+    await service.dispatch('document.select', { ids: objects });
+    await service.dispatch('view.open_dialog', { name: 'raster' });
+    const dialog = await screen.findByTestId('dialog-raster');
+    await waitFor(() => expect(dialog.textContent).toContain('120 × 90 px'));
+    await waitFor(() => expect(within(dialog).queryByTestId('raster-busy')).toBeNull());
+    // the preview at 5 lines/mm is slow: it comes back after the one at 2
+    let release = () => {};
+    const dispatch = service.dispatch.bind(service);
+    vi.spyOn(service, 'dispatch').mockImplementation(async (action, params) => {
+      const r = await dispatch(action, params);
+      const p = params as { settings?: { lines_per_mm: number } };
+      if (action === 'document.raster_preview' && p.settings?.lines_per_mm === 5)
+        await new Promise<void>((done) => (release = done));
+      return r;
+    });
+    const lines = within(dialog).getByTestId('raster-lines') as HTMLInputElement;
+    lines.value = '5';
+    await fireEvent.change(lines);
+    expect(within(dialog).getByTestId('raster-busy')).toBeTruthy();
+    await waitFor(
+      () =>
+        expect(
+          service.calls.some(
+            (c) =>
+              c.action === 'document.raster_preview' &&
+              (c.params as { settings?: { lines_per_mm: number } }).settings?.lines_per_mm === 5,
+          ),
+        ).toBe(true),
+      { timeout: 2000 },
+    );
+    lines.value = '2';
+    await fireEvent.change(lines);
+    await waitFor(() => expect(dialog.textContent).toContain('80 × 60 px'), { timeout: 2000 });
+    release();
+    await waitFor(() => expect(within(dialog).queryByTestId('raster-busy')).toBeNull());
+    expect(dialog.textContent).toContain('80 × 60 px');
+  });
+
   it('raster dialog without an image says so', async () => {
     const { service } = await mountDesign();
     await service.dispatch('view.open_dialog', { name: 'raster' });
@@ -423,6 +468,22 @@ describe('Design mode', () => {
       colors: 'unify',
     });
     await waitFor(() => expect(service.view.toasts.at(-1)!.message).toContain('Imported 1 objects'));
+  });
+
+  it('import dialog: an image is selected and its raster dialog opens', async () => {
+    const { service, summary } = await mountDesign();
+    await service.dispatch('view.open_dialog', { name: 'import' });
+    const dialog = await screen.findByTestId('dialog-import');
+    const bytes = new Uint8Array([1, 2, 3]);
+    const file = new File([bytes], 'photo.jpg', { type: 'image/jpeg' });
+    if (!file.arrayBuffer) Object.assign(file, { arrayBuffer: async () => bytes.buffer });
+    await fireEvent.change(within(dialog).getByTestId('import-file'), { target: { files: [file] } });
+    await fireEvent.click(within(dialog).getByTestId('import-go'));
+    const raster = await screen.findByTestId('dialog-raster');
+    expect(screen.queryByTestId('dialog-import')).toBeNull();
+    const s = await summary();
+    expect(s.selection).toEqual([s.objects[0]!.id]);
+    await within(raster).findByTestId('raster-preview');
   });
 
   it('welcome: migration from LaserGRBL, read-only, with a report', async () => {
