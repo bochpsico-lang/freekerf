@@ -121,22 +121,10 @@ describe('Design mode on the real document', () => {
     await browser.waitUntil(async () => (await snapshot()).document.objects.some((o) => o.kind === 'image'), {
       timeout: 10_000,
     });
+    // the import selects the image and opens its raster dialog
     const image = (await snapshot()).document.objects.find((o) => o.kind === 'image')!;
-    await browser.execute(
-      async (ids) => {
-        const w = window as unknown as {
-          __TAURI_INTERNALS__: { invoke: (cmd: string, args: unknown) => Promise<unknown> };
-        };
-        await w.__TAURI_INTERNALS__.invoke('dispatch', { action: 'document.select', params: { ids } });
-        await w.__TAURI_INTERNALS__.invoke('dispatch', {
-          action: 'view.open_panel',
-          params: { name: 'object' },
-        });
-      },
-      [image.id],
-    );
-    await byTestId('obj-image-open').click();
     await expect(byTestId('raster-preview')).toBeDisplayed({ wait: 10_000 });
+    expect((await snapshot()).selection).toEqual([image.id]);
     await $('[data-tool-mode="dithering"]').click();
     await byTestId('raster-apply').click();
     await browser.waitUntil(

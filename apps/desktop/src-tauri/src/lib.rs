@@ -23,6 +23,7 @@ pub fn run() {
         .manage(bench.clone())
         .invoke_handler(tauri::generate_handler![
             commands::dispatch,
+            commands::dispatch_background,
             commands::catalog,
             commands::subscribe,
             commands::confirm_fire,
@@ -78,6 +79,26 @@ pub mod commands {
         params: Value,
     ) -> Result<Value, ActionError> {
         bridge.dispatch(&action, params)
+    }
+
+    /// Runs a slow action ([`crate::bridge::BACKGROUND_ACTIONS`]) on a worker
+    /// thread: a synchronous command runs on the main thread and blocks the window
+    /// until it returns.
+    ///
+    /// # Errors
+    /// Not a background action, or the action's error.
+    #[tauri::command]
+    pub async fn dispatch_background(
+        app: tauri::AppHandle,
+        action: String,
+        params: Value,
+    ) -> Result<Value, ActionError> {
+        use tauri::Manager;
+        tauri::async_runtime::spawn_blocking(move || {
+            app.state::<Bridge>().dispatch_background(&action, params)
+        })
+        .await
+        .map_err(|e| ActionError::failed(e.to_string()))?
     }
 
     /// The action catalogue (names, tiers, parameter schemas).

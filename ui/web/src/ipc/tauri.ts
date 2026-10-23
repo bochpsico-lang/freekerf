@@ -6,6 +6,18 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import type { ActionError, ActionName, ActionSpec, CallerKind, EventMessage, GrantScope } from '../gen/api';
 import { ActionFailure, type AppService, type Params, type Result } from '../service';
 
+/**
+ * Actions slow enough to run off the window's main thread (`dispatch_background`,
+ * the same list as `BACKGROUND_ACTIONS` in the desktop crate's bridge): a
+ * synchronous command blocks the whole window until it returns. The others keep
+ * the ordered `dispatch`.
+ */
+export const BACKGROUND_ACTIONS: readonly ActionName[] = [
+  'document.raster_preview',
+  'document.import_data',
+  'job.from_document',
+];
+
 function isActionError(e: unknown): e is ActionError {
   return typeof e === 'object' && e !== null && 'kind' in e;
 }
@@ -19,7 +31,8 @@ export class TauriService implements AppService {
 
   async dispatch<A extends ActionName>(action: A, params: Params<A>): Promise<Result<A>> {
     try {
-      return await invoke<Result<A>>('dispatch', { action, params });
+      const command = BACKGROUND_ACTIONS.includes(action) ? 'dispatch_background' : 'dispatch';
+      return await invoke<Result<A>>(command, { action, params });
     } catch (e) {
       if (isActionError(e)) throw new ActionFailure(action, e);
       throw e;

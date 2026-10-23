@@ -1627,9 +1627,15 @@ select {
   background: #0009;
   backdrop-filter: blur(2px);
 }
-.dlg[open] {
+/* header and footer stay in view; only the body scrolls (a tall raster preview
+   pushed Apply out of the dialog) */
+.dlg {
   display: flex;
   flex-direction: column;
+}
+.dlg > header,
+.dlg > footer {
+  flex: none;
 }
 .dlg > header {
   display: flex;
@@ -1652,6 +1658,7 @@ select {
 }
 .dlg-body {
   padding: var(--fk-space-4);
+  min-height: 0;
   overflow: auto;
   display: flex;
   flex-direction: column;

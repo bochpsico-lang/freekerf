@@ -1,12 +1,13 @@
 <script lang="ts">
   // Import (design/ux.md flow 3): a file and what to do with its colours
-  // (`document.import_data`, ./import.ts); the report comes back as a toast.
+  // (`document.import_data`, ./import.ts); the report comes back as a toast. An
+  // image is selected and its raster dialog opens: how it is engraved comes next.
   import { app } from '../context';
   import type { ImportColors } from '../gen/api';
   import { t } from '../i18n/index.svelte';
   import Icon from '../lib/Icon.svelte';
   import DialogFrame from '../shell/DialogFrame.svelte';
-  import { importFile } from './import';
+  import { importFile, importFormat } from './import';
 
   let { onclose }: { onclose: () => void } = $props();
   const { service, run } = app();
@@ -23,6 +24,10 @@
         level: r.unsupported ? 'warning' : 'ok',
         message: t('import-done', { objects: r.objects.length, layers: r.layers.length }),
       });
+      if (importFormat(f.name) === 'image' && r.objects.length === 1) {
+        await service.dispatch('document.select', { ids: r.objects });
+        await service.dispatch('view.open_dialog', { name: 'raster' });
+      }
     });
   }
 </script>

@@ -41,6 +41,21 @@ interface FakeObject {
   origin?: [number, number];
   /** Images: the raster dialog's settings (the frame is the outline). */
   raster?: RasterSettings;
+  /** Images imported from a PNG: the file, base64 (the fake's preview). */
+  png?: string;
+}
+
+/** Width and height of a PNG given as base64 (its IHDR), none for other files. */
+export function pngSize(base64: string): [number, number] | null {
+  const head = atob(base64.slice(0, 32));
+  if (head.length < 24 || !head.startsWith('\x89PNG')) return null;
+  const u32 = (i: number) =>
+    ((head.charCodeAt(i) << 24) |
+      (head.charCodeAt(i + 1) << 16) |
+      (head.charCodeAt(i + 2) << 8) |
+      head.charCodeAt(i + 3)) >>>
+    0;
+  return [u32(16), u32(20)];
 }
 
 /** The Rust defaults of `RasterSettings`. */
@@ -912,7 +927,9 @@ export class FakeDocument {
     },
     'document.import_data': (p) => {
       if (p.format === 'image') {
-        // a 40 × 30 mm image on a layer of its own
+        // on a layer of its own: a PNG at 10 px/mm (its pixels are the preview), other files 40 × 30 mm
+        const png = p.data ? pngSize(p.data) : null;
+        const [w, h] = png ? [png[0] / 10, png[1] / 10] : [40, 30];
         const before = this.doc.layers.map((l) => l.id);
         const id = this.edit('import', (d) => {
           const layer = Math.max(0, ...d.layers.map((l) => l.id)) + 1;
@@ -923,9 +940,10 @@ export class FakeDocument {
             layer,
             name: p.name ?? '',
             kind: 'image',
-            paths: [rectPath(0, 0, 40, 30)],
+            paths: [rectPath(0, 0, w, h)],
             transform: IDENTITY,
             raster: defaultRaster(),
+            ...(png ? { png: p.data! } : {}),
           });
           return oid;
         });
@@ -982,10 +1000,11 @@ export class FakeDocument {
       const o = this.image(p.id, 'document.raster_preview');
       const s = p.settings ?? o.raster!;
       if (!(s.lines_per_mm > 0)) throw invalid('document.raster_preview', 'lines_per_mm must be positive');
+      const [x0, y0, x1, y1] = this.bounds(o)!;
       return {
-        png: WHITE_PNG,
-        width: Math.round(40 * s.lines_per_mm),
-        height: Math.round(30 * s.lines_per_mm),
+        png: o.png ?? WHITE_PNG,
+        width: Math.round((x1 - x0) * s.lines_per_mm),
+        height: Math.round((y1 - y0) * s.lines_per_mm),
       };
     },
     'document.material_test': (p) => {

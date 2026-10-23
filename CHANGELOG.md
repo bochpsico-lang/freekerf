@@ -12,6 +12,18 @@ All notable changes to FreeKerf are documented here. The format follows
   when none is loaded, or to update it when the design changed since it was made
   (placed as before); the job records the document revision it was planned from
   (`ProgramInfo.from_document`).
+- Design mode: images show on the canvas as they will be engraved (a preview of
+  at most 1000 px; the job keeps the full resolution), and importing an image
+  selects it and opens its raster dialog.
+
+### Fixed
+
+- Desktop app: image previews, imports and making the job run off the window's
+  main thread (`dispatch_background`), so the window no longer freezes while they
+  compute; the raster dialog waits 500 ms after the last change and drops a late
+  preview.
+- Dialogs keep their header and buttons in view and scroll their body: a tall
+  image pushed Apply out of the raster dialog.
 
 ## [0.1.2] - 2026-10-22
 
