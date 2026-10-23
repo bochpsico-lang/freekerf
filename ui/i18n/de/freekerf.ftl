@@ -481,6 +481,7 @@ raster-dir-horizontal = Horizontal
 raster-dir-vertical = Vertikal
 raster-dir-diagonal = Diagonal
 raster-preview = Vorschau der Gravur
+raster-computing = berechnet…
 raster-apply = Anwenden
 obj-image-open = Bildgravur…
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { encodeToolpath, decodeToolpath, segmentAt, type SegmentRecord } from './toolpath';
-import { bucketSegments } from './webgl2';
+import { bucketSegments, tileRect } from './webgl2';
 
 describe('bucketSegments', () => {
   it('groups segments by cell without losing any', () => {
@@ -62,5 +62,21 @@ describe('gridLines', () => {
       minor: [],
       major: [],
     });
+  });
+});
+
+describe('tileRect', () => {
+  it('places a tile of image pixels on the table, rows going down', () => {
+    const img = {
+      width: 4,
+      height: 2,
+      pixels: new Uint8Array(8),
+      rect: { x: 10, y: 20, width: 8, height: 4 },
+      layer: 0,
+    };
+    // the bottom-right quarter: x 2..4, rows 1..2
+    expect(tileRect(img, [2, 1, 2, 1])).toEqual({ x: 14, y: 20, width: 4, height: 2 });
+    // moved: the same tile follows the image
+    expect(tileRect({ ...img, rect: { ...img.rect, x: 0 } }, [2, 1, 2, 1]).x).toBe(4);
   });
 });

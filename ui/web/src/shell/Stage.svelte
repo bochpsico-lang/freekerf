@@ -163,6 +163,7 @@
     {mode}
     toolpath={design ? null : preview.toolpath}
     paths={design ? (doc?.paths ?? null) : null}
+    images={design ? (doc?.images ?? null) : null}
     layerColors={design ? (doc?.layerColors ?? null) : null}
     {selection}
     design={design && editor

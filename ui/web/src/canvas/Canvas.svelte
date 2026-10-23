@@ -7,7 +7,7 @@
   import type { OverlayScene } from './overlay';
   import type { HeadFrame, Toolpath } from './toolpath';
   import { CanvasView, NoWebGL2Error, type CanvasViewEvents } from './view';
-  import type { PathBatch, Rgba } from './webgl2';
+  import type { PathBatch, RasterImage, Rgba } from './webgl2';
 
   let {
     mode = 'produce',
@@ -18,6 +18,7 @@
     units = 'mm',
     oncamera,
     paths = null,
+    images = null,
     layerColors = null,
     selection = null,
     design = {},
@@ -32,6 +33,8 @@
     oncamera?: (c: CameraState) => void;
     /** Design mode: the document geometry, its layer colours and the selection. */
     paths?: PathBatch | null;
+    /** Design mode: the images as they will be engraved. */
+    images?: RasterImage[] | null;
     layerColors?: Rgba[] | null;
     selection?: OverlayScene['selection'];
     /** Design mode: hit tests, selection and editing gestures. */
@@ -72,6 +75,7 @@
   $effect(() => view?.setToolpath(toolpath));
   $effect(() => view?.setProgress(executed));
   $effect(() => view?.setPaths(paths));
+  $effect(() => view?.setImages(images ?? []));
   $effect(() => view?.setLayerColors(layerColors));
   $effect(() => view?.setSelection(selection));
   $effect(() => view?.setUnits(units));

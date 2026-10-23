@@ -27,7 +27,7 @@
   ];
   const DIRECTIONS: LineDirection[] = ['horizontal', 'vertical', 'diagonal'];
   /** Wait this long after the last change before computing the preview, ms. */
-  const PREVIEW_DELAY_MS = 250;
+  const PREVIEW_DELAY_MS = 500;
 
   const target = $derived(
     doc.selected.length === 1 && doc.selected[0]!.kind === 'image' ? doc.selected[0]! : null,
@@ -35,6 +35,10 @@
   let settings: RasterSettings | null = $state(null);
   let png = $state('');
   let size = $state('');
+  /** A preview is being computed (or waits for the pause after a change). */
+  let busy = $state(false);
+  /** The latest preview asked: an older one that comes back later is dropped. */
+  let asked = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
@@ -49,15 +53,26 @@
   async function preview() {
     const id = target?.id;
     if (id === undefined || !settings) return;
-    const p = await service.dispatch('document.raster_preview', { id, settings: $state.snapshot(settings) });
-    png = `data:image/png;base64,${p.png}`;
-    size = `${p.width} × ${p.height} px`;
+    const n = ++asked;
+    busy = true;
+    try {
+      const p = await service.dispatch('document.raster_preview', {
+        id,
+        settings: $state.snapshot(settings),
+      });
+      if (n !== asked) return;
+      png = `data:image/png;base64,${p.png}`;
+      size = `${p.width} × ${p.height} px`;
+    } finally {
+      if (n === asked) busy = false;
+    }
   }
 
   /** Changes a setting and recomputes the preview after a pause. */
   function change(f: (s: RasterSettings) => void) {
     if (!settings) return;
     f(settings);
+    busy = true;
     clearTimeout(timer);
     timer = setTimeout(() => void run(preview), PREVIEW_DELAY_MS);
   }
@@ -184,7 +199,9 @@
       </div>
       <figure class="preview">
         {#if png}<img src={png} alt={t('raster-preview')} data-testid="raster-preview" />{/if}
-        <figcaption class="hint mono">{size}</figcaption>
+        <figcaption class="hint mono" aria-live="polite">
+          {size}{#if busy}<span data-testid="raster-busy"> · {t('raster-computing')}</span>{/if}
+        </figcaption>
       </figure>
     </div>
   {/if}
@@ -213,8 +230,12 @@
     gap: var(--fk-space-2);
     align-content: start;
   }
+  /* a tall image fits the dialog instead of growing it */
   .preview img {
-    width: 100%;
+    justify-self: center;
+    max-width: 100%;
+    max-height: 60dvh;
+    object-fit: contain;
     image-rendering: pixelated;
     background: #fff;
     border: 1px solid var(--fk-color-border);

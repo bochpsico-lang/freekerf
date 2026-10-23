@@ -11,6 +11,15 @@ use freekerf_service::remote::{ServeOptions, endpoint, serve};
 use freekerf_service::{ActionError, ActionSpec, Caller, CallerKind, Service, Stores, Tier};
 use serde_json::Value;
 
+/// Actions slow enough (image processing, planning) to run off the window's main
+/// thread, where a synchronous command blocks the whole window. Every other action
+/// keeps the ordered `dispatch`: the window sends quick ones without waiting.
+pub const BACKGROUND_ACTIONS: &[&str] = &[
+    "document.raster_preview",
+    "document.import_data",
+    "job.from_document",
+];
+
 /// The service plus the caller the window acts as.
 #[derive(Debug, Clone)]
 pub struct Bridge {
@@ -100,6 +109,20 @@ impl Bridge {
     /// See [`ActionError`].
     pub fn dispatch(&self, action: &str, params: Value) -> Result<Value, ActionError> {
         self.service.dispatch(&self.caller, action, params)
+    }
+
+    /// Runs one of [`BACKGROUND_ACTIONS`] (the `dispatch_background` command, off
+    /// the window's main thread).
+    ///
+    /// # Errors
+    /// [`ActionError::Refused`] for any other action, else see [`ActionError`].
+    pub fn dispatch_background(&self, action: &str, params: Value) -> Result<Value, ActionError> {
+        if !BACKGROUND_ACTIONS.contains(&action) {
+            return Err(ActionError::Refused(format!(
+                "`{action}` does not run in the background"
+            )));
+        }
+        self.dispatch(action, params)
     }
 
     /// Runs the pending laser request after the person pressed "Fire laser"
@@ -192,6 +215,24 @@ mod tests {
         let state = b.dispatch("state.get", serde_json::json!({})).unwrap();
         assert_eq!(state["machine"]["connected"], false);
         assert!(b.catalog().iter().any(|s| s.name == "machine.stop"));
+    }
+
+    #[test]
+    fn only_slow_actions_run_in_the_background() {
+        let b = bridge();
+        let names: Vec<String> = b.catalog().into_iter().map(|s| s.name).collect();
+        for a in BACKGROUND_ACTIONS {
+            assert!(names.iter().any(|n| n == a), "{a} is not an action");
+        }
+        assert!(matches!(
+            b.dispatch_background("state.get", serde_json::json!({})),
+            Err(ActionError::Refused(_))
+        ));
+        // the same registry and checks as `dispatch`
+        assert!(matches!(
+            b.dispatch_background("document.raster_preview", serde_json::json!({"id": 99})),
+            Err(e) if !matches!(e, ActionError::Refused(_))
+        ));
     }
 
     #[test]

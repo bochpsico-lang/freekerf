@@ -1,13 +1,16 @@
 // The Design mode document, as the UI reads it: the session snapshot's document
-// part (layers, objects, selection, current layer, undo/redo) and the drawable
-// geometry (raw, "FKTP"). Read-only: it changes through `document.*` actions and
-// comes back as a session event.
+// part (layers, objects, selection, current layer, undo/redo), the drawable
+// geometry (raw, "FKTP") and the images as they will be engraved
+// (`document.raster_preview`). Read-only: it changes through `document.*` actions
+// and comes back as a session event.
 
+import { decodeGreyPng, type GreyImage } from '../canvas/raster';
 import { parseColor } from '../canvas/theme';
 import { decodeToolpath } from '../canvas/toolpath';
-import type { Rgba, PathBatch } from '../canvas/webgl2';
+import type { PathBatch, RasterImage, Rgba } from '../canvas/webgl2';
 import type { EventMessage, LayerSummary, ObjectSummary, Snapshot } from '../gen/api';
 import type { AppService } from '../service';
+import { ImagePreviews } from './images';
 
 /** A layer as the Design mode shows it. */
 export type Layer = LayerSummary;
@@ -53,8 +56,14 @@ export class DocumentProjection {
   #geometryRevision = -1;
   #pending: Promise<void> | null = null;
   #again = false;
+  #images: RasterImage[] = $state.raw([]);
+  #previews: ImagePreviews;
 
-  constructor(readonly service: AppService) {
+  constructor(
+    readonly service: AppService,
+    decode: (png: string) => Promise<GreyImage> = decodeGreyPng,
+  ) {
+    this.#previews = new ImagePreviews(service, decode);
     service.subscribe((e: EventMessage) => {
       if (e.event === 'session' && e.change !== 'view') void this.refresh();
     });
@@ -87,6 +96,11 @@ export class DocumentProjection {
     return this.#paths;
   }
 
+  /** The image objects as they will be engraved, on their bounds (`layer` = layer index). */
+  get images(): RasterImage[] {
+    return this.#images;
+  }
+
   /** Layer colours by layer index (for the canvas). */
   get layerColors(): Rgba[] {
     return this.layers.map((l) => parseColor(l.color));
@@ -111,6 +125,10 @@ export class DocumentProjection {
             const t = decodeToolpath(await this.service.documentGeometry());
             this.#paths = { segments: t.segments, segmentCount: t.segmentCount };
             this.#geometryRevision = s.document_revision;
+            // after the geometry, in the background: previews can take a while
+            void this.#previews.read(s).then((images) => {
+              if (images) this.#images = images;
+            });
           }
           this.#summary = s;
           this.#error = '';

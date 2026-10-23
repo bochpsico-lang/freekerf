@@ -481,6 +481,7 @@ raster-dir-horizontal = Horizontal
 raster-dir-vertical = Vertical
 raster-dir-diagonal = Diagonal
 raster-preview = Preview of the engraving
+raster-computing = computing…
 raster-apply = Apply
 obj-image-open = Image engraving…
 

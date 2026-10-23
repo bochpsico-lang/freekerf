@@ -22,6 +22,7 @@ for the Design mode screens until M2 lands.
 | Tauri command | Does |
 | --- | --- |
 | `dispatch(action, params)` | runs an action of the registry ([actions.md](actions.md)) and returns its JSON result or an `ActionError` |
+| `dispatch_background(action, params)` | the same for the slow actions only (`document.raster_preview`, `document.import_data`, `job.from_document`: `BACKGROUND_ACTIONS` in the bridge and in `ui/web/src/ipc/tauri.ts`), on a worker thread: a synchronous command runs on the main thread and blocks the window until it returns. The other actions keep `dispatch`, which runs them in the order the window sends them |
 | `catalog()` | the action specs (name, tier, parameter and result schemas) |
 | `subscribe(events)` | streams service events (`EventMessage` JSON) on a Tauri channel |
 | `confirm_fire(id)` | the Fire laser button: runs the pending laser request after its countdown ([fire-confirmation.md](fire-confirmation.md)) |
